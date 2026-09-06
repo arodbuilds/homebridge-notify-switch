@@ -23,4 +23,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `CLAUDE.md` with the project conventions.
 - Logging that masks phone numbers and email addresses at info level and never logs credentials or message bodies unless `debug` is on.
 - `config.schema.json` covering the full configuration with password fields for secrets and provider fields shown only for the selected type.
+- Custom settings UI (`customUi` in `config.schema.json`, built with `@homebridge/plugin-ui-utils`) with Providers, Recipient Groups and Switches sections, platform settings, and the in-app copy from the specification. Plain HTML, CSS and TypeScript bundled with esbuild; libphonenumber-js is the only third party code in the bundle. The schema form remains complete as the fallback.
+- Settings UI phone entry: country dropdown with flag, name and dial code defaulting to `defaultCountry`, national number field with a local placeholder, live validation and formatting, storage as E.164, and paste normalization that also sets the country.
+- Settings UI SMS body counter with character, septet and segment counts and highlighting of characters outside GSM-7.
+- Settings UI validation mirroring startup validation: issues are listed with the field they belong to and the Save button is disabled while any remain. Provider and group ids are suggested from the name, switch ids are generated as UUIDs, and provider, channel, sender and group pickers are dropdowns fed by the current configuration.
+- Settings UI server (`homebridge-ui/server.js`, compiled from `src/ui`): Test connection per provider (SMTP `verify()`, Twilio account lookup, Telegram `getMe`), Find chat IDs for Telegram groups via `getUpdates`, and Test send per switch that requires a confirmation click and reports per-recipient results. Submitted credentials are used in memory for the one request, never logged, stored or returned; `credentialsFile` is applied the same way startup applies it.
+- Harness coverage for the settings UI server handlers, including checks that no response contains a credential.
+
+### Changed
+
+- The send path is shared between the switch accessory and the settings UI's Test send (`src/send.ts`); behavior of the switch is unchanged.
+- `@homebridge/plugin-ui-utils` is a runtime dependency because the Homebridge UI loads `homebridge-ui/server.js` from the installed package. The plugin itself never imports it.
 - CI workflow that lints, builds and runs the harness on Node 22 and 24.

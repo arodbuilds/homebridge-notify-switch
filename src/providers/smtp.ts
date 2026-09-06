@@ -5,7 +5,9 @@ import type { PluginLogger } from '../logging.js';
 import { EMAIL_PATTERN } from '../patterns.js';
 import { PROVIDER_CONCURRENCY, PROVIDER_RETRY_BACKOFF_MS, PROVIDER_TIMEOUT_MS } from '../settings.js';
 import { stripLineBreaks } from '../template.js';
-import type { Channel, Provider, RecipientResult, SendRequest, SmtpProviderConfig, ValidationIssue } from '../types.js';
+import type {
+  Channel, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, SmtpProviderConfig, ValidationIssue,
+} from '../types.js';
 import { PROVIDER_CHANNELS, SMTP_SECURITIES } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import { Semaphore, shortMessage, sleep } from './http.js';
@@ -13,6 +15,9 @@ import { Semaphore, shortMessage, sleep } from './http.js';
 /** The part of a nodemailer transport this provider uses. The harness substitutes a fake. */
 export interface MailTransport {
   sendMail(options: SendMailOptions): Promise<SentMessageInfo>;
+  /** nodemailer's connection and login check; used by the settings UI's Test connection. */
+  verify?(): Promise<true>;
+  close?(): void;
 }
 
 export type MailTransportFactory = (options: SMTPTransportOptions) => MailTransport;
@@ -69,7 +74,7 @@ interface Attempt {
  * `bcc` and the from address in `to`. Certificate verification cannot be disabled and nodemailer's
  * `debug` and `logger` options are never set.
  */
-export class SmtpProvider implements Provider {
+export class SmtpProvider implements Provider, ProviderDiagnostics {
   readonly type = 'smtp' as const;
   readonly channels: Channel[] = [...PROVIDER_CHANNELS.smtp];
   private readonly semaphore = new Semaphore(PROVIDER_CONCURRENCY);
@@ -148,6 +153,30 @@ export class SmtpProvider implements Provider {
       // Defensive: nothing above should throw, but a provider must never reject (SPEC section 6, rule 4).
       const error = this.redact(err instanceof Error ? err.message : String(err));
       return req.recipients.map((recipient) => ({ recipient, ok: false, error }));
+    }
+  }
+
+  /**
+   * Settings UI Test connection (SPEC section 11.2, item 3): nodemailer `verify()` on a throwaway
+   * transport, which connects, negotiates TLS and logs in without sending a message.
+   */
+  async testConnection(): Promise<ConnectionTestResult> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new SmtpTimeoutError()), PROVIDER_TIMEOUT_MS);
+    });
+    const transport = this.factory(this.transportOptions());
+    try {
+      if (!transport.verify) {
+        return { ok: false, message: 'SMTP: this transport cannot verify connections' };
+      }
+      await Promise.race([transport.verify(), timeout]);
+      return { ok: true, message: `Connected to ${this.config.host}:${this.config.port} and logged in as ${this.config.username}.` };
+    } catch (err) {
+      return { ok: false, message: this.describe(asMailError(err)) };
+    } finally {
+      clearTimeout(timer);
+      transport.close?.();
     }
   }
 

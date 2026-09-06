@@ -712,6 +712,36 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   return { issues: c.issues, notices: c.notices, config, switches, providers };
 }
 
+export interface ProviderValidationResult {
+  issues: ValidationIssue[];
+  /** Present only when the provider block has no blocking issues. */
+  config?: ProviderConfig;
+  provider?: Provider;
+}
+
+/**
+ * Validates one provider block on its own, for the settings UI's Test connection and Find chat IDs
+ * (SPEC section 11.2, items 3 and 5). Applies `credentialsFile` the same way startup does. Never throws.
+ */
+export async function validateProvider(rawProvider: unknown, log: PluginLogger, options: ValidateOptions = {}): Promise<ProviderValidationResult> {
+  const c = new Collector();
+  try {
+    const config = readProvider(c, rawProvider, 'provider', new Set(), DEFAULT_COUNTRY, options.storagePath);
+    if (!config || c.hasErrors) {
+      return { issues: c.issues };
+    }
+    const provider = await createProvider(config, log);
+    c.addPrefixed('provider', provider.validateConfig());
+    if (c.hasErrors) {
+      return { issues: c.issues };
+    }
+    return { issues: c.issues, config, provider };
+  } catch (err) {
+    c.error('provider', `unexpected error while validating the provider: ${err instanceof Error ? err.message : String(err)}`);
+    return { issues: c.issues };
+  }
+}
+
 export interface ValidateOptions {
   /** Homebridge storage directory; relative `credentialsFile` paths are resolved against it. */
   storagePath?: string;

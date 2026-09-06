@@ -1,5 +1,8 @@
 # Ignore source code
 src
+homebridge-ui/src
+homebridge-ui/tsconfig.json
+scripts
 
 # Project conventions for contributors, not needed at runtime
 CLAUDE.md

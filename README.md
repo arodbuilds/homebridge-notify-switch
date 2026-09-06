@@ -10,7 +10,7 @@
 
 A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Each switch is always off. Turn it on from a HomeKit automation or scene, it sends one or more preset messages through the providers you configured, and it turns itself back off. Any HomeKit event can notify people by SMS, email, or Telegram.
 
-> **Status:** early development. This version sends SMS and email through Twilio, email through SMTP, and messages through Telegram. The custom settings UI is not built yet; the schema form in the Homebridge UI covers every option. The full specification is in [SPEC.md](./SPEC.md).
+> **Status:** early development. This version sends SMS and email through Twilio, email through SMTP, and messages through Telegram, and has a custom settings UI with connection and send tests. The full specification is in [SPEC.md](./SPEC.md).
 
 ## How it works
 
@@ -28,9 +28,19 @@ Configure everything from the Homebridge UI under the plugin settings. You only 
 4. In the plugin settings add a Twilio provider with those values, a group with the phone numbers to notify, and a switch with an SMS action.
 5. Save, restart Homebridge, and use the switch in a HomeKit automation with **Turn On** as the action.
 
+## Settings UI
+
+Open the plugin settings in the Homebridge UI. The page has three sections, Providers, Recipient Groups and Switches, plus the platform settings at the bottom. Phone numbers are entered with a country dropdown and a national number; they are stored in international format. SMS messages show a live character and segment counter that highlights characters SMS cannot carry. Save stays disabled while the page lists something to fix. If the custom page fails to load, the standard schema form covers every option.
+
+Three buttons contact the outside world:
+
+- **Test connection** on a provider checks the credentials without sending anything. SMTP logs in to the mail server, Twilio reads your account details, Telegram asks the bot who it is. The credentials in the form are used for that one request and are not stored until you click Save.
+- **Find chat IDs** on a group asks your Telegram bot for the chats that have messaged it recently and adds one with a click. Send the bot a message first.
+- **Test send** on a switch sends the switch's actions to their real recipients after you confirm, and lists the result for each recipient. It ignores the master switch and the cooldown.
+
 ## Configuration
 
-The platform block in `config.json` looks like this. The Homebridge UI form writes the same structure.
+The platform block in `config.json` looks like this. The settings UI and the schema form write the same structure.
 
 ```json
 {
@@ -71,7 +81,7 @@ The platform block in `config.json` looks like this. The Homebridge UI form writ
 }
 ```
 
-Every field is documented in the settings form. Phone numbers are stored in E.164 format (`+` and country code). A number entered without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
+Every field is documented in the settings UI. Phone numbers are stored in E.164 format (`+` and country code). A number entered without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
 
 ### Template variables
 
@@ -125,6 +135,8 @@ npm run lint
 npm test        # builds, then runs the harness in test/harness against dist with mocked fetch and SMTP
 npm run watch   # builds, links, and starts Homebridge with test/hbConfig
 ```
+
+To try the settings UI, install the Homebridge UI into the dev instance once (`npm install --no-save homebridge-config-ui-x`), then `npm run watch` and open http://localhost:8581 (the dev config runs it without login). The settings page is built from `homebridge-ui/src` into `homebridge-ui/public/index.js` by `npm run build:ui`; edit, rebuild, and reopen the plugin settings to see changes. The server side lives in `src/ui` and is started by `homebridge-ui/server.js`.
 
 ## Changelog
 

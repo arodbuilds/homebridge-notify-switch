@@ -2,6 +2,8 @@
   "pluginAlias": "NotifySwitch",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
+  "customUiPath": "./homebridge-ui",
   "strictValidation": false,
   "headerDisplay": "Notify Switch creates HomeKit switches that send a message when turned on. Set it up in three steps: add a Provider (the service that sends messages), create a Recipient Group (who receives them), then create a Switch (what to send). You only need one provider. After saving, restart Homebridge, then use the switch in a HomeKit automation or scene. The switch turns itself off after sending.",
   "footerDisplay": "After saving, restart Homebridge. Your switches appear in the Home app. Open Automations, choose a trigger such as a sensor detecting water, and add the switch with Turn On as the action. You can also test by tapping the switch directly.",

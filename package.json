@@ -35,7 +35,8 @@
     "homebridge": "^1.6.0 || ^2.0.0"
   },
   "scripts": {
-    "build": "rimraf ./dist && tsc",
+    "build": "rimraf ./dist && tsc && npm run build:ui",
+    "build:ui": "tsc -p homebridge-ui --noEmit && node scripts/build-ui.mjs",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
     "test": "npm run build && node --test \"test/harness/*.test.mjs\"",
@@ -44,8 +45,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.9.0",
     "homebridge": "^2.4.0",
+    "libphonenumber-js": "^1.13.12",
     "nodemon": "^3.1.14",
     "rimraf": "^6.1.3",
     "ts-node": "^10.9.2",
@@ -53,6 +56,7 @@
     "typescript-eslint": "^8.67.0"
   },
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.2.6",
     "nodemailer": "^10.0.0"
   }
 }

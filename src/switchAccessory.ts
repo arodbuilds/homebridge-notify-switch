@@ -2,7 +2,8 @@ import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge
 
 import type { NotifySwitchPlatform } from './platform.js';
 import { PLUGIN_VERSION, SWITCH_RESET_DELAY_MS } from './settings.js';
-import { buildTemplateVariables, renderTemplate, stripLineBreaks } from './template.js';
+import { renderAction, sendAction } from './send.js';
+import { buildTemplateVariables } from './template.js';
 import type { Provider, RecipientResult, ResolvedAction, ResolvedSwitch } from './types.js';
 import { HAP_NAME_MAX_LENGTH } from './patterns.js';
 
@@ -148,35 +149,13 @@ export class NotifySwitchAccessory {
   private async runAction(action: ResolvedAction, vars: ReturnType<typeof buildTemplateVariables>): Promise<ActionOutcome> {
     const log = this.platform.log;
     const where = `${action.channel} via ${action.providerId}`;
-    const body = renderTemplate(action.body, vars);
-    const subject = action.subject !== undefined ? stripLineBreaks(renderTemplate(action.subject, vars)) : undefined;
+    const rendered = renderAction(action, vars);
 
     // Bodies are logged only when debug is on (SPEC section 8, item 4).
-    log.debug(`${this.label} ${where}${subject !== undefined ? ` subject "${subject}"` : ''} body: ${body}`);
+    log.debug(`${this.label} ${where}${rendered.subject !== undefined ? ` subject "${rendered.subject}"` : ''} body: ${rendered.body}`);
 
-    const provider = this.providers.get(action.providerId);
-    let results: RecipientResult[];
-    if (!provider) {
-      results = action.recipients.map((recipient) => ({ recipient, ok: false, error: `provider "${action.providerId}" is not available` }));
-    } else {
-      try {
-        results = await provider.send({
-          channel: action.channel,
-          sender: action.sender,
-          recipients: action.recipients,
-          subject,
-          body,
-        });
-      } catch (err) {
-        // Providers never throw by contract; treat a rejection as a failure for every recipient.
-        const error = err instanceof Error ? err.message : String(err);
-        results = action.recipients.map((recipient) => ({ recipient, ok: false, error }));
-      }
-    }
-
-    // Guarantee exactly one result per recipient, whatever the provider returned.
-    const byRecipient = new Map(results.map((r) => [r.recipient, r] as const));
-    const complete = action.recipients.map((recipient) => byRecipient.get(recipient) ?? { recipient, ok: false, error: 'no result returned by provider' });
+    // Exactly one result per recipient, whatever the provider returned.
+    const complete = await sendAction(action, this.providers.get(action.providerId), rendered);
 
     for (const result of complete) {
       const to = log.address(result.recipient, action.channel);
