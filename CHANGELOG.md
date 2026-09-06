@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Release workflow: publishing now uses npm trusted publishing (GitHub OIDC) instead of the `NPM_TOKEN` secret, which is no longer referenced. The workflow upgrades npm to the latest release before publishing, because trusted publishing requires npm 11.5.1 or newer and the version bundled with Node.js 22 is older, and fails early if npm is still too old.
+- Dependabot no longer opens pull requests for TypeScript major version updates.
+
 ### Fixed
 
 - Release workflow: `npm publish` now passes `--access public`. npm requires it to generate provenance for a package that does not exist on the registry yet, so the first publish failed without it. Applies to both the `beta` and `latest` dist-tags, which share one publish command.

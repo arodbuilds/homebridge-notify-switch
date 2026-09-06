@@ -39,12 +39,17 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Update npm for trusted publishing
+        # npm trusted publishing needs npm 11.5.1 or newer. The npm bundled with the Node.js version above can
+        # be older than that, so upgrade before publishing and fail early if the result is still too old.
+        run: |
+          npm install -g npm@latest
+          version="$(npm --version)"
+          echo "npm $version"
+          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)" != "11.5.1" ]; then
+            echo "npm $version is older than 11.5.1, which trusted publishing requires" >&2
+            exit 1
+          fi
+
       - name: Publish
         run: npm publish --provenance --access public --tag ${{ github.event.release.prerelease && 'beta' || 'latest' }}
-        env:
-          # TEMPORARY: the NPM_TOKEN repository secret (a granular automation token) is only needed for the
-          # first publish, because npm trusted publishing can only be configured for a package that already
-          # exists. After 0.1.0-beta.1 is on npm: open the package on npmjs.com > Settings > Trusted publisher,
-          # add this repository and `release.yml`, then delete the NPM_TOKEN secret and remove this `env`
-          # block. `registry-url` above plus `id-token: write` is all trusted publishing needs.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
