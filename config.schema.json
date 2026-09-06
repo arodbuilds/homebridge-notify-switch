@@ -1,17 +1,552 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "NotifySwitch",
   "pluginType": "platform",
   "singular": true,
   "strictValidation": false,
+  "headerDisplay": "Notify Switch creates HomeKit switches that send a message when turned on. Set it up in three steps: add a Provider (the service that sends messages), create a Recipient Group (who receives them), then create a Switch (what to send). You only need one provider. After saving, restart Homebridge, then use the switch in a HomeKit automation or scene. The switch turns itself off after sending.",
+  "footerDisplay": "After saving, restart Homebridge. Your switches appear in the Home app. Open Automations, choose a trigger such as a sensor detecting water, and add the switch with Turn On as the action. You can also test by tapping the switch directly.",
   "schema": {
     "type": "object",
-    "required": ["name"],
-    "additionalProperties": false,
+    "required": [
+      "name",
+      "providers",
+      "switches"
+    ],
     "properties": {
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "Example Dynamic Platform"
+        "default": "Notify Switch",
+        "description": "Platform display name shown in the Homebridge logs."
+      },
+      "configVersion": {
+        "title": "Config Version",
+        "type": "integer",
+        "default": 1,
+        "condition": {
+          "functionBody": "return false;"
+        }
+      },
+      "defaultCountry": {
+        "title": "Default Country",
+        "type": "string",
+        "default": "US",
+        "pattern": "^[A-Za-z]{2}$",
+        "description": "Two-letter country code (ISO 3166-1 alpha-2), for example US or GB. Phone numbers entered without a country code are treated as numbers from this country."
+      },
+      "masterSwitch": {
+        "title": "Master Switch",
+        "type": "object",
+        "description": "A single switch in the Home app that turns all notifications on or off. When it is off, no switch sends anything.",
+        "properties": {
+          "enabled": {
+            "title": "Show master switch",
+            "type": "boolean",
+            "default": true,
+            "description": "Expose the master switch as an accessory in HomeKit."
+          },
+          "name": {
+            "title": "Master switch name",
+            "type": "string",
+            "default": "Notifications Enabled",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9 ']*[A-Za-z0-9]$",
+            "maxLength": 64,
+            "description": "Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number."
+          }
+        }
+      },
+      "debug": {
+        "title": "Debug logging",
+        "type": "boolean",
+        "default": false,
+        "description": "Verbose logging, including message bodies and full recipient addresses. Credentials are never logged, even with this on."
+      },
+      "providers": {
+        "title": "Providers",
+        "type": "array",
+        "minItems": 1,
+        "description": "A provider is a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through an account you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. Add only the providers you plan to use. Use Test connection to confirm credentials before saving.",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "type",
+            "name"
+          ],
+          "properties": {
+            "id": {
+              "title": "ID",
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+              "description": "Short unique identifier switches use to reference this provider, for example twilio-main. Lowercase letters, numbers, dashes, and underscores."
+            },
+            "type": {
+              "title": "Type",
+              "type": "string",
+              "default": "twilio",
+              "oneOf": [
+                {
+                  "title": "Twilio (SMS and email)",
+                  "enum": [
+                    "twilio"
+                  ]
+                },
+                {
+                  "title": "SMTP (email)",
+                  "enum": [
+                    "smtp"
+                  ]
+                },
+                {
+                  "title": "Telegram",
+                  "enum": [
+                    "telegram"
+                  ]
+                }
+              ],
+              "description": "The messaging service this provider connects to."
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "description": "Display name for this provider."
+            },
+            "accountSid": {
+              "title": "Account SID",
+              "type": "string",
+              "pattern": "^AC[0-9a-fA-F]{32}$",
+              "description": "Found on the Twilio Console home page under Account Info. Starts with AC.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "apiKeySid": {
+              "title": "API Key SID",
+              "type": "string",
+              "pattern": "^SK[0-9a-fA-F]{32}$",
+              "description": "Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "apiKeySecret": {
+              "title": "API Key Secret",
+              "type": "string",
+              "x-schema-form": {
+                "type": "password"
+              },
+              "description": "Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "smsSenders": {
+              "title": "SMS Senders",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "title": "Phone number",
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "description": "Twilio phone numbers you own, from Console > Phone Numbers > Manage > Active numbers. Include the country code. US long codes must be registered for A2P 10DLC or messages will be filtered.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "messagingServiceSid": {
+              "title": "Messaging Service SID",
+              "type": "string",
+              "pattern": "^(MG[0-9a-fA-F]{32})?$",
+              "description": "Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "emailFrom": {
+              "title": "Email From",
+              "type": "object",
+              "description": "Optional. Required only to send email through Twilio. The domain must be authenticated at Console > Communications > Email > Domains.",
+              "properties": {
+                "address": {
+                  "title": "Address",
+                  "type": "string",
+                  "format": "email"
+                },
+                "name": {
+                  "title": "Name",
+                  "type": "string"
+                }
+              },
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
+              }
+            },
+            "host": {
+              "title": "Host",
+              "type": "string",
+              "description": "Your mail provider's outgoing server. Fastmail: smtp.fastmail.com, 465, SSL. Gmail: smtp.gmail.com, 465, SSL. iCloud: smtp.mail.me.com, 587, STARTTLS. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "port": {
+              "title": "Port",
+              "type": "integer",
+              "default": 465,
+              "minimum": 1,
+              "maximum": 65535,
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "security": {
+              "title": "Security",
+              "type": "string",
+              "default": "ssl",
+              "oneOf": [
+                {
+                  "title": "SSL",
+                  "enum": [
+                    "ssl"
+                  ]
+                },
+                {
+                  "title": "STARTTLS",
+                  "enum": [
+                    "starttls"
+                  ]
+                },
+                {
+                  "title": "None",
+                  "enum": [
+                    "none"
+                  ]
+                }
+              ],
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "username": {
+              "title": "Username",
+              "type": "string",
+              "description": "Usually your full email address.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "password": {
+              "title": "Password",
+              "type": "string",
+              "x-schema-form": {
+                "type": "password"
+              },
+              "description": "Most providers require an app password rather than your login password. Fastmail: Settings > Privacy & Security > App passwords, scope SMTP. Gmail: Google Account > Security > App passwords. iCloud: appleid.apple.com > Sign-In and Security > App-Specific Passwords.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "from": {
+              "title": "From",
+              "type": "object",
+              "properties": {
+                "address": {
+                  "title": "Address",
+                  "type": "string",
+                  "format": "email",
+                  "description": "Must be an address your provider allows you to send from."
+                },
+                "name": {
+                  "title": "Name",
+                  "type": "string"
+                }
+              },
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "botToken": {
+              "title": "Bot Token",
+              "type": "string",
+              "x-schema-form": {
+                "type": "password"
+              },
+              "pattern": "^\\d+:[A-Za-z0-9_-]{30,}$",
+              "description": "Message @BotFather in Telegram, send /newbot, and follow the prompts. BotFather replies with the token. Then open a chat with your new bot and send it any message so it can find you.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'telegram';"
+              }
+            },
+            "parseMode": {
+              "title": "Parse Mode",
+              "type": "string",
+              "default": "none",
+              "oneOf": [
+                {
+                  "title": "None (plain text)",
+                  "enum": [
+                    "none"
+                  ]
+                },
+                {
+                  "title": "Markdown",
+                  "enum": [
+                    "markdown"
+                  ]
+                },
+                {
+                  "title": "HTML",
+                  "enum": [
+                    "html"
+                  ]
+                }
+              ],
+              "description": "How Telegram should interpret the message body. Plain text is the safest choice.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'telegram';"
+              }
+            }
+          }
+        }
+      },
+      "groups": {
+        "title": "Recipient Groups",
+        "type": "array",
+        "description": "A group is a named list of people. Add phone numbers for SMS, email addresses for email, and chat IDs for Telegram. Switches send to groups, so you enter each person once here and reuse them everywhere. Phone numbers need a country code; pick it from the dropdown.",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name"
+          ],
+          "properties": {
+            "id": {
+              "title": "ID",
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+              "description": "Short unique identifier switches use to reference this group, for example family. Lowercase letters, numbers, dashes, and underscores."
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "description": "Display name for this group."
+            },
+            "sms": {
+              "title": "SMS",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "title": "Phone number",
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "description": "Phone numbers in international format with the country code, for example +16785550101."
+            },
+            "email": {
+              "title": "Email",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "title": "Email address",
+                "type": "string",
+                "format": "email"
+              },
+              "description": "Email addresses."
+            },
+            "telegram": {
+              "title": "Telegram",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "title": "Chat ID",
+                "type": "string",
+                "pattern": "^-?\\d+$"
+              },
+              "description": "Chat IDs are numbers, not usernames. Use Find chat IDs above after messaging the bot. Group chats have negative IDs."
+            }
+          }
+        }
+      },
+      "switches": {
+        "title": "Switches",
+        "type": "array",
+        "minItems": 1,
+        "description": "Each switch appears in the Home app. Turning it on sends every action listed below it, then the switch turns itself off. Add one action per channel you want to use. Cooldown prevents an automation that fires repeatedly from sending the same message over and over. The failure sensor is optional; turn it on if you want a HomeKit automation to tell you when a message did not go out.",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "actions"
+          ],
+          "properties": {
+            "id": {
+              "title": "ID",
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Unique identifier for this switch, a UUID such as 6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b. HomeKit tracks the switch by this id, so you can rename the switch freely. Do not change it after creation."
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9 ']*[A-Za-z0-9]$",
+              "maxLength": 64,
+              "description": "Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number. This is the name shown in the Home app."
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean",
+              "default": true,
+              "description": "A disabled switch still appears in the Home app but does nothing when turned on."
+            },
+            "cooldownSeconds": {
+              "title": "Cooldown (seconds)",
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 86400,
+              "description": "Minimum seconds between sends for this switch. 0 disables the cooldown."
+            },
+            "failureMode": {
+              "title": "Failure Mode",
+              "type": "string",
+              "default": "any",
+              "oneOf": [
+                {
+                  "title": "Any",
+                  "enum": [
+                    "any"
+                  ]
+                },
+                {
+                  "title": "All",
+                  "enum": [
+                    "all"
+                  ]
+                },
+                {
+                  "title": "Off",
+                  "enum": [
+                    "off"
+                  ]
+                }
+              ],
+              "description": "Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged."
+            },
+            "failureSensor": {
+              "title": "Failure Sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Adds a contact sensor to this switch that opens when a message fails to send and closes on the next successful send or after the reset time."
+            },
+            "failureSensorResetSeconds": {
+              "title": "Failure Sensor Reset (seconds)",
+              "type": "integer",
+              "default": 300,
+              "minimum": 0,
+              "maximum": 86400,
+              "description": "Seconds after a failure before the sensor closes again on its own. 0 keeps it open until the next successful send.",
+              "condition": {
+                "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; return !!s && s.failureSensor === true;"
+              }
+            },
+            "actions": {
+              "title": "Actions",
+              "type": "array",
+              "minItems": 1,
+              "description": "One send on one provider. Each action has its own message and targets one or more groups plus any extra recipients.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "providerId",
+                  "channel",
+                  "body"
+                ],
+                "properties": {
+                  "providerId": {
+                    "title": "Provider",
+                    "type": "string",
+                    "description": "The id of the provider that sends this action, exactly as entered under Providers."
+                  },
+                  "channel": {
+                    "title": "Channel",
+                    "type": "string",
+                    "default": "sms",
+                    "oneOf": [
+                      {
+                        "title": "SMS",
+                        "enum": [
+                          "sms"
+                        ]
+                      },
+                      {
+                        "title": "Email",
+                        "enum": [
+                          "email"
+                        ]
+                      },
+                      {
+                        "title": "Telegram",
+                        "enum": [
+                          "telegram"
+                        ]
+                      }
+                    ],
+                    "description": "The kind of message to send. Must be a channel the selected provider serves: Twilio sends SMS and email, SMTP sends email, Telegram sends Telegram."
+                  },
+                  "sender": {
+                    "title": "Sender",
+                    "type": "string",
+                    "pattern": "^(\\+[1-9]\\d{6,14})?$",
+                    "description": "Optional. One of the provider's SMS Senders. If left blank and the provider has exactly one sender, that sender is used. If left blank and the provider has a Messaging Service SID, the Messaging Service is used.",
+                    "condition": {
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'sms';"
+                    }
+                  },
+                  "groups": {
+                    "title": "Groups",
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "title": "Group id",
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                    },
+                    "description": "Ids of the recipient groups to send to, exactly as entered under Recipient Groups."
+                  },
+                  "recipients": {
+                    "title": "Extra Recipients",
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "title": "Recipient",
+                      "type": "string"
+                    },
+                    "description": "Optional individual recipients for this action in addition to the groups: phone numbers for SMS, email addresses for email, chat IDs for Telegram."
+                  },
+                  "subject": {
+                    "title": "Subject",
+                    "type": "string",
+                    "description": "Optional. Defaults to the switch name. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}.",
+                    "condition": {
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'email';"
+                    }
+                  },
+                  "body": {
+                    "title": "Message",
+                    "type": "string",
+                    "maxLength": 10000,
+                    "x-schema-form": {
+                      "type": "textarea"
+                    },
+                    "description": "SMS: Up to 160 characters using standard characters. Emoji and some symbols are not allowed because they shorten the limit and can split the message. Variables: {{switchName}}, {{time}}, {{date}}. Email and Telegram: Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}."
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

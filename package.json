@@ -1,37 +1,44 @@
 {
-  "name": "homebridge-plugin-name",
-  "displayName": "Plugin Name",
+  "name": "homebridge-notify-switch",
+  "displayName": "Notify Switch",
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "A short description about what your plugin does.",
-  "author": "Your Name",
+  "description": "Homebridge switches that send SMS, email, or Telegram messages when turned on. Trigger them from HomeKit automations and scenes.",
+  "author": "arodbuilds",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/USERNAME/GITHUB_PROJECT_NAME#readme",
+  "homepage": "https://github.com/arodbuilds/homebridge-notify-switch#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "https://github.com/arodbuilds/homebridge-notify-switch.git"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/arodbuilds/homebridge-notify-switch/issues"
   },
   "keywords": [
     "homebridge-plugin",
-    "supports-hap"
+    "supports-hap",
+    "homebridge",
+    "homekit",
+    "notification",
+    "notify",
+    "sms",
+    "twilio",
+    "email",
+    "smtp",
+    "telegram",
+    "switch"
   ],
   "main": "dist/index.js",
   "engines": {
-    "node": "^22.10.0 || ^24.0.0",
-    "homebridge": "^1.8.0 || ^2.0.0"
+    "node": "^22.12.0 || ^24.0.0",
+    "homebridge": "^1.6.0 || ^2.0.0"
   },
   "scripts": {
     "build": "rimraf ./dist && tsc",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
     "watch": "npm run build && npm link && nodemon"
-  },
-  "dependencies": {
-    "homebridge-lib": "^8.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

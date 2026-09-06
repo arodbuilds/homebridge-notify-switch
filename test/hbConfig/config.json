@@ -1,13 +1,13 @@
 {
   "bridge": {
-    "name": "PluginTemplate",
+    "name": "NotifySwitchDev",
     "username": "AA:BB:CC:DD:EE:FF",
     "port": 51826,
     "pin": "031-45-154"
   },
-  "description": "HomeBridge HTTP Status Control",
+  "description": "Local development config for homebridge-notify-switch",
   "plugins": [
-    "homebridge-plugin-name",
+    "homebridge-notify-switch",
     "homebridge-config-ui-x"
   ],
   "platforms": [
@@ -23,8 +23,45 @@
       "debug": false
     },
     {
-      "name": "homebridge-plugin-name",
-      "platform": "ExampleHomebridgePlugin"
+      "platform": "NotifySwitch",
+      "name": "Notify Switch",
+      "defaultCountry": "US",
+      "masterSwitch": { "enabled": true, "name": "Notifications Enabled" },
+      "debug": true,
+      "providers": [
+        {
+          "id": "twilio-main",
+          "type": "twilio",
+          "name": "Twilio",
+          "accountSid": "AC00000000000000000000000000000000",
+          "apiKeySid": "SK00000000000000000000000000000000",
+          "apiKeySecret": "replace-me",
+          "smsSenders": ["+16785550100"]
+        }
+      ],
+      "groups": [
+        {
+          "id": "family",
+          "name": "Family",
+          "sms": ["+16785550101"]
+        }
+      ],
+      "switches": [
+        {
+          "id": "6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b",
+          "name": "Water Leak Alert",
+          "cooldownSeconds": 60,
+          "failureSensor": true,
+          "actions": [
+            {
+              "providerId": "twilio-main",
+              "channel": "sms",
+              "groups": ["family"],
+              "body": "Water detected under the kitchen sink at {{time}}."
+            }
+          ]
+        }
+      ]
     }
   ],
   "accessories": []
