@@ -311,7 +311,7 @@ Additional behavior beyond the schema form:
 
 1. Phone number entry: country dropdown (flag, name, dial code) defaulting to `defaultCountry`, national number field with local placeholder, live validation and formatting via libphonenumber-js, storage as E.164, paste normalization that also sets the country.
 2. SMS body: live character count, segment count, and a warning when a non-GSM-7 character is present with the offending character highlighted.
-3. "Test connection" per provider: SMTP runs nodemailer `verify()`; Twilio calls the account lookup endpoint; Telegram calls `getMe`. Credentials from the form are used in memory only and never returned or written.
+3. "Test connection" per provider: SMTP runs nodemailer `verify()`; Twilio lists one message (GET `/2010-04-01/Accounts/{accountSid}/Messages.json?PageSize=1` with the API key pair, so Restricted keys scoped to Messaging pass as well as Standard keys); Telegram calls `getMe`. Twilio failures include Twilio's error code and message when the response carries them. Credentials from the form are used in memory only and never returned or written.
 4. "Test send" per switch: sends the switch's actions to the configured recipients and shows per-recipient results. Requires an explicit confirmation click since it sends real messages.
 5. "Find chat IDs" for Telegram: calls `getUpdates` and lists chats that have messaged the bot, with a one-click add to the current group.
 6. Switch `id` generation on create.

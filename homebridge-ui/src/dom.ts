@@ -99,10 +99,14 @@ export function numberField(label: string, value: number, onChange: (value: numb
   return wrapField(id, label, input, opts);
 }
 
-/** A password input with a Show/Hide toggle. The value is never echoed anywhere but the input itself. */
+/**
+ * A password input with a Show/Hide toggle. The value is never echoed anywhere but the input itself.
+ * `autocomplete` is `new-password` because browsers ignore `off` on password inputs and would offer the
+ * saved Homebridge login, silently replacing a pasted secret. The toggle only flips `type`; the value is untouched.
+ */
 export function passwordField(label: string, value: string, onChange: (value: string) => void, opts: FieldOptions = {}): HTMLElement {
   const id = uniqueId();
-  const input = el('input', { id, class: 'form-control font-monospace', type: 'password', value, autocomplete: 'off', spellcheck: 'false' });
+  const input = el('input', { id, class: 'form-control font-monospace', type: 'password', value, autocomplete: 'new-password', spellcheck: 'false' });
   input.addEventListener('input', () => onChange(input.value));
   const toggle = el('button', { class: 'btn btn-outline-secondary', type: 'button', 'aria-label': `Show ${label}` }, 'Show');
   toggle.addEventListener('click', () => {

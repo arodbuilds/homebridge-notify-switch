@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026-09-06
+
+### Added
+
+- Harness tests that assert the exact URL, method, empty body and `Authorization` header of the Twilio connection test as submitted by the settings form, that pasted whitespace is trimmed, and that 401, 403, 404 and 5xx responses are classified with Twilio's code and message.
+
 ### Changed
 
 - Release workflow: publishing now uses npm trusted publishing (GitHub OIDC) instead of the `NPM_TOKEN` secret, which is no longer referenced. The workflow upgrades npm to the latest release before publishing, because trusted publishing requires npm 11.5.1 or newer and the version bundled with Node.js 22 is older, and fails early if npm is still too old.
@@ -13,6 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Settings UI Twilio **Test connection** failed with "Twilio rejected the API key" for valid keys. The test read the Account resource (`GET /2010-04-01/Accounts/{accountSid}.json`), which Twilio answered with 401 for a valid Standard key and which a Restricted key cannot read, and the handler dropped Twilio's error code and message on 401, so a working Standard key looked like a wrong secret. The test now lists one message (`GET /2010-04-01/Accounts/{accountSid}/Messages.json?PageSize=1`) with Basic auth of `apiKeySid:apiKeySecret`, which passes for Standard keys and for Restricted keys scoped to Messaging. Failure messages for 401, 403 and 404 now include Twilio's `code` and `message` when present, and a 403 names the missing Messaging permission.
+- Settings UI password inputs use `autocomplete="new-password"` so browsers stop offering the saved Homebridge login in the API Key Secret, SMTP password and bot token fields.
+- Twilio requests without a body no longer send a `Content-Type` header.
 - Release workflow: `npm publish` now passes `--access public`. npm requires it to generate provenance for a package that does not exist on the registry yet, so the first publish failed without it. Applies to both the `beta` and `latest` dist-tags, which share one publish command.
 
 ## [0.1.0-beta.1] - 2026-09-06
@@ -52,5 +61,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.2...HEAD
+[0.1.0-beta.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/arodbuilds/homebridge-notify-switch/releases/tag/v0.1.0-beta.1

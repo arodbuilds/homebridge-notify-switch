@@ -2,7 +2,7 @@
   "name": "homebridge-notify-switch",
   "displayName": "Notify Switch",
   "type": "module",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Homebridge switches that send SMS, email, or Telegram messages when turned on. Trigger them from HomeKit automations and scenes.",
   "author": "arodbuilds",
   "license": "Apache-2.0",
