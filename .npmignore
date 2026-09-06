@@ -6,6 +6,8 @@ scripts
 
 # Project conventions for contributors, not needed at runtime
 CLAUDE.md
+SPEC.md
+CONTRIBUTING.md
 
 # ------------- Defaults ------------- #
 

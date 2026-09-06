@@ -2,8 +2,7 @@
   "name": "homebridge-notify-switch",
   "displayName": "Notify Switch",
   "type": "module",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.0-beta.1",
   "description": "Homebridge switches that send SMS, email, or Telegram messages when turned on. Trigger them from HomeKit automations and scenes.",
   "author": "arodbuilds",
   "license": "Apache-2.0",
@@ -30,6 +29,13 @@
     "switch"
   ],
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "homebridge-ui/public",
+    "homebridge-ui/server.js",
+    "config.schema.json",
+    "CHANGELOG.md"
+  ],
   "engines": {
     "node": "^22.12.0 || ^24.0.0",
     "homebridge": "^1.6.0 || ^2.0.0"
