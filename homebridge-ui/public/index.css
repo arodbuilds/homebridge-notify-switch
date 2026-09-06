@@ -1,8 +1,48 @@
 /* Layout for the Notify Switch settings UI. Colours, controls and typography come from the Bootstrap 5
    stylesheet and theme the Homebridge UI injects into this iframe. */
 
+/* The Homebridge UI shows this page in an iframe inside its settings modal with no padding of its own.
+   The container supplies it, so nothing (headings, labels, help text, the grid below) starts off-screen.
+   Every element on the page keeps its box inside the viewport: no negative margins, no width over 100%. */
 .notify-switch-ui {
-  padding: 0 0 1rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px 1rem;
+  overflow-wrap: anywhere;
+}
+
+.notify-switch-ui *,
+.notify-switch-ui *::before,
+.notify-switch-ui *::after {
+  box-sizing: border-box;
+}
+
+/* Two-column field layout without Bootstrap's `.row`, whose negative gutter margins reach past the
+   container when it has no padding to absorb them. A gap-based grid has no negative margins at all. */
+.ns-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 0.5rem;
+  row-gap: 0;
+  width: 100%;
+}
+
+.ns-grid > * {
+  min-width: 0;
+}
+
+.ns-span-3 { grid-column: span 3; }
+.ns-span-4 { grid-column: span 4; }
+.ns-span-5 { grid-column: span 5; }
+.ns-span-6 { grid-column: span 6; }
+.ns-span-7 { grid-column: span 7; }
+
+/* A single column on phones: every field takes the full width below 600px. */
+@media (max-width: 599.98px) {
+  .ns-grid > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .lead-copy,
@@ -32,10 +72,6 @@
 
 .form-text {
   line-height: 1.4;
-}
-
-.server-help {
-  margin-top: -0.5rem;
 }
 
 .address-row {
@@ -91,6 +127,23 @@
   border-radius: 0.375rem;
   padding: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+/* Uncovered channel warning on a switch card (SPEC section 11.2, item 8). Not a validation error. */
+.coverage-warnings:empty {
+  display: none;
+}
+
+.coverage-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.coverage-warning-text {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 .action-header {

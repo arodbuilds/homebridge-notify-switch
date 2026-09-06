@@ -7,7 +7,7 @@ import type {
 } from '../types.js';
 import { PROVIDER_CHANNELS } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
-import { parseJson, request, Semaphore, shortMessage } from './http.js';
+import { parseJson, request, Semaphore, sendEach, shortMessage } from './http.js';
 
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
 const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
@@ -81,7 +81,10 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
     try {
       switch (req.channel) {
       case 'sms':
-        return await Promise.all(req.recipients.map((recipient) => this.semaphore.run(() => this.sendSms(req, recipient))));
+        // One request per recipient; a failure for one number never stops the others (see `sendEach`).
+        return await sendEach(req.recipients, this.semaphore, (recipient) => this.sendSms(req, recipient), {
+          redact: [this.config.apiKeySecret, this.config.apiKeySid],
+        });
       case 'email':
         return await this.semaphore.run(() => this.sendEmail(req));
       default:

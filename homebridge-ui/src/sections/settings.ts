@@ -7,12 +7,12 @@ export function renderSettings(app: App, container: HTMLElement): void {
   const c = app.config;
   container.appendChild(el('p', { class: 'section-copy' },
     'Platform-wide options. The default country is used when a phone number is entered without a country code.'));
-  container.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-6' }, textField('Name', c.name, (value) => {
+  container.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-6' }, textField('Name', c.name, (value) => {
       c.name = value;
       app.changed();
     }, { path: 'name', required: true, help: 'Platform display name shown in the Homebridge logs.' })),
-    el('div', { class: 'col-md-6' }, selectField('Default Country', c.defaultCountry, countryOptions(), (value) => {
+    el('div', { class: 'ns-span-6' }, selectField('Default Country', c.defaultCountry, countryOptions(), (value) => {
       c.defaultCountry = value;
       // Phone rows default to this country, so redraw the sections that contain them.
       app.rerender('providers');
@@ -26,8 +26,8 @@ export function renderSettings(app: App, container: HTMLElement): void {
     app.changed();
   }, { path: 'masterSwitch.name', help: 'Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number.' });
   nameField.hidden = !c.masterSwitch.enabled;
-  container.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-6' }, checkboxField('Show master switch', c.masterSwitch.enabled, (value) => {
+  container.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-6' }, checkboxField('Show master switch', c.masterSwitch.enabled, (value) => {
       c.masterSwitch.enabled = value;
       nameField.hidden = !value;
       app.changed();
@@ -35,7 +35,7 @@ export function renderSettings(app: App, container: HTMLElement): void {
       path: 'masterSwitch.enabled',
       help: 'A single switch in the Home app that turns all notifications on or off. When it is off, no switch sends anything.',
     })),
-    el('div', { class: 'col-md-6' }, nameField),
+    el('div', { class: 'ns-span-6' }, nameField),
   ));
   container.appendChild(checkboxField('Debug logging', c.debug, (value) => {
     c.debug = value;

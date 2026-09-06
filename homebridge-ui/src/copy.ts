@@ -12,7 +12,7 @@ export const PROVIDERS_SECTION = 'A provider is a connection to a messaging serv
   + 'Add only the providers you plan to use. Use Test connection to confirm credentials before saving.';
 
 export const TWILIO_HELP = {
-  accountSid: 'Found on the Twilio Console home page under Account Info. Starts with AC.',
+  accountSid: 'Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC.',
   apiKey: 'Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. '
     + 'An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here.',
   smsSenders: 'Twilio phone numbers you own, from Console > Phone Numbers > Manage > Active numbers. Include the country code. '

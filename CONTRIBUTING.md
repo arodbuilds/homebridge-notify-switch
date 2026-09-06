@@ -37,6 +37,8 @@ npm test
 
 This builds the plugin, then runs the harness in `test/harness` with Node's built-in test runner against the compiled `dist` output. `fetch` and the nodemailer transport are mocked, so the tests never touch the network and need no credentials. Each provider's success, per-recipient failure, timeout, and rate limit paths are covered, along with startup validation, `credentialsFile`, and the settings UI server handlers (including a check that no response contains a credential). The harness is excluded from the published package.
 
+One test, `test/harness/ui-layout.test.mjs`, opens the built settings UI in headless Chromium through `playwright-core` and checks that nothing is clipped or overflows at phone and desktop widths. It needs a Chromium or Chrome binary: set `NOTIFY_SWITCH_CHROMIUM` (or `CHROMIUM_PATH` / `CHROME_BIN`) to one, or have Chrome installed in its usual location. Without a browser the test is skipped locally; on CI (where Chrome is present) it fails instead, so it cannot silently disappear. Nothing is downloaded.
+
 ## Before opening a pull request
 
 ```shell

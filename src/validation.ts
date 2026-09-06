@@ -3,6 +3,7 @@ import type { PluginLogger } from './logging.js';
 import {
   COUNTRY_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH, HAP_NAME_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN, UUID_PATTERN,
 } from './patterns.js';
+import { CHANNEL_ACTION_LABEL, CHANNEL_ADDRESS_NOUN, uncoveredChannels } from './coverage.js';
 import { loadCredentialsFile } from './credentials.js';
 import { createProvider } from './providers/index.js';
 import { stripLineBreaks } from './template.js';
@@ -567,6 +568,13 @@ async function resolveSwitch(
       subject: action.channel === 'email' ? (action.subject ?? sw.name) : undefined,
       body: action.body,
     });
+  }
+
+  // Once per switch and channel: people in a targeted group whose channel no action sends on (SPEC section 10 warnings).
+  for (const uncovered of uncoveredChannels(sw.actions, [...groups.values()])) {
+    const list = uncovered.groups.map((id) => `"${id}"`).join(', ');
+    c.warn(path, `switch "${sw.name}" sends to ${uncovered.groups.length === 1 ? 'group' : 'groups'} ${list} with ${CHANNEL_ADDRESS_NOUN[uncovered.channel]} `
+      + `but has no ${CHANNEL_ACTION_LABEL[uncovered.channel]} action; those recipients will not receive anything`);
   }
   return { ...sw, actions };
 }

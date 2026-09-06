@@ -128,7 +128,19 @@ export class NotifySwitchAccessory {
     this.lastSendAt = now;
 
     const vars = buildTemplateVariables(this.config.name, new Date(now));
-    const outcomes = await Promise.all(this.config.actions.map((action) => this.runAction(action, vars)));
+    // Step 5: every action fires in parallel. One action's failure must never stop the others, so the
+    // outcomes are collected with allSettled; a rejected action (which `sendAction` should make impossible)
+    // is reported as a failure for each of its recipients rather than abandoning the rest of the switch.
+    const settled = await Promise.allSettled(this.config.actions.map((action) => this.runAction(action, vars)));
+    const outcomes: ActionOutcome[] = settled.map((outcome, i) => {
+      if (outcome.status === 'fulfilled') {
+        return outcome.value;
+      }
+      const action = this.config.actions[i];
+      const error = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+      log.warn(`${this.label} ${action.channel} via ${action.providerId}: failed: ${error || 'unknown error'}`);
+      return { action, results: action.recipients.map((recipient) => ({ recipient, ok: false, error })) };
+    });
 
     let total = 0;
     let failed = 0;

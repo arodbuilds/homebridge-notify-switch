@@ -241,7 +241,7 @@ Rules:
 1. The switch code imports only this interface. Provider modules are loaded lazily by type so an unused provider costs nothing.
 2. Every provider request has a 10 second timeout and at most one retry with a 2 second backoff, except when the provider returns a rate limit response with a retry-after value, in which case that value is honored once.
 3. Per-provider in-flight concurrency is capped at 5.
-4. Providers never throw. All errors resolve to `RecipientResult` entries.
+4. Providers never throw. All errors resolve to `RecipientResult` entries. One recipient's failure never stops the others: a provider that sends one request per recipient collects the outcomes with `allSettled` semantics (never `Promise.all`), so a 4xx, a thrown error, or a timeout for one recipient changes that recipient's entry only, and every other recipient is still sent and reported.
 
 ### 6.1 Twilio SMS
 
@@ -293,7 +293,7 @@ Validation runs in code, independent of the schema, and reports every issue in o
 
 Blocking issues (the platform registers nothing): no providers, no switches, invalid provider credentials format, invalid or duplicate ids, a switch with no resolvable recipients, a body that violates channel constraints, a provider type that does not serve the requested channel, a switch name that violates HAP naming.
 
-Warnings (the platform starts): a group with no addresses, a provider that no switch uses, a sender not in the provider's list when only one sender exists (it is used anyway).
+Warnings (the platform starts): a group with no addresses, a provider that no switch uses, a sender not in the provider's list when only one sender exists (it is used anyway), and a switch that targets a group holding addresses on a channel none of its actions send on (an uncovered channel; logged once per switch and channel with the switch name, the group ids and the channel, because those people receive nothing).
 
 Phone numbers without a leading plus sign are normalized using `defaultCountry`; the normalized value is logged once at startup so the user can correct config.json if desired.
 
@@ -316,6 +316,7 @@ Additional behavior beyond the schema form:
 5. "Find chat IDs" for Telegram: calls `getUpdates` and lists chats that have messaged the bot, with a one-click add to the current group.
 6. Switch `id` generation on create.
 7. Reference pickers: provider and group selectors are dropdowns populated from the current config, not free text.
+8. Uncovered channel warnings: for each switch, the channels present in the groups (and extra recipients) it targets are compared with the channels its actions cover. Each uncovered channel shows a warning on the switch card (copy in section 11.3) with an "Add … action" button, worded per channel, that appends an action for that channel with the first provider that serves it preselected and the targeted groups that hold addresses on that channel selected. This is a warning, not a validation error: the Save button stays enabled. The same check is shared with startup validation (section 10).
 
 ### 11.3 In-app copy
 
@@ -331,7 +332,7 @@ Providers section:
 
 Twilio field help:
 
-`accountSid`: "Found on the Twilio Console home page under Account Info. Starts with AC."
+`accountSid`: "Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC."
 `apiKeySid` and `apiKeySecret`: "Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here."
 `smsSenders`: "Twilio phone numbers you own, from Console > Phone Numbers > Manage > Active numbers. Include the country code. US long codes must be registered for A2P 10DLC or messages will be filtered."
 `messagingServiceSid`: "Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG."
@@ -364,6 +365,14 @@ Switch field help:
 `failureMode`: "Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged."
 `body` (sms): "Up to 160 characters using standard characters. Emoji and some symbols are not allowed because they shorten the limit and can split the message. Variables: {{switchName}}, {{time}}, {{date}}."
 `body` (email and telegram): "Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}."
+
+Uncovered channel warning (switch card, one per uncovered channel; see section 11.2, item 8):
+
+email: "This switch sends to a group with email addresses, but it has no email action. Those recipients will not receive anything." Button: "Add email action".
+sms: "This switch sends to a group with phone numbers, but it has no SMS action. Those recipients will not receive anything." Button: "Add SMS action".
+telegram: "This switch sends to a group with Telegram chat IDs, but it has no Telegram action. Those recipients will not receive anything." Button: "Add Telegram action".
+
+Test send confirmation (switch card): "Send now" is the primary button and "Cancel" is neutral. Red is reserved for Remove buttons throughout the page.
 
 Using it in HomeKit (bottom of page):
 

@@ -89,8 +89,8 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     help: 'Short unique identifier switches use to reference this group. Lowercase letters, numbers, dashes, and underscores.',
   });
   const idInput = idField.querySelector('input') as HTMLInputElement;
-  body.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-6' }, textField('Name', g.name, (value) => {
+  body.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-6' }, textField('Name', g.name, (value) => {
       g.name = value;
       title.textContent = groupTitle(g);
       if (!idTouched) {
@@ -99,7 +99,7 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
       }
       app.changed(true);
     }, { path: `${path}.name`, required: true, placeholder: 'Family', help: 'Display name for this group.' })),
-    el('div', { class: 'col-md-6' }, idField),
+    el('div', { class: 'ns-span-6' }, idField),
   ));
 
   const onChange = (): void => app.changed(true);
