@@ -90,35 +90,35 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
       p.messagingServiceSid = v;
       app.changed(true);
     }, { path: `${path}.messagingServiceSid`, monospace: true, placeholder: 'MG…', help: TWILIO_HELP.messagingServiceSid }));
-    body.appendChild(el('div', { class: 'row g-2' },
-      el('div', { class: 'col-md-7' }, textField('Email From address', p.emailFrom.address, (v) => {
+    body.appendChild(el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-7' }, textField('Email From address', p.emailFrom.address, (v) => {
         p.emailFrom.address = v;
         app.changed(true);
       }, { path: `${path}.emailFrom.address`, type: 'email', placeholder: 'alerts@example.com', help: TWILIO_HELP.emailFrom })),
-      el('div', { class: 'col-md-5' }, textField('Email From name', p.emailFrom.name, (v) => {
+      el('div', { class: 'ns-span-5' }, textField('Email From name', p.emailFrom.name, (v) => {
         p.emailFrom.name = v;
         app.changed();
       }, { path: `${path}.emailFrom.name`, placeholder: 'Home' })),
     ));
     break;
   case 'smtp':
-    body.appendChild(el('div', { class: 'row g-2' },
-      el('div', { class: 'col-md-6' }, textField('Host', p.host, (v) => {
+    body.appendChild(el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-6' }, textField('Host', p.host, (v) => {
         p.host = v;
         app.changed();
       }, { path: `${path}.host`, required: true, placeholder: 'smtp.fastmail.com' })),
-      el('div', { class: 'col-md-3' }, numberField('Port', p.port, (v) => {
+      el('div', { class: 'ns-span-3' }, numberField('Port', p.port, (v) => {
         p.port = v;
         app.changed();
       }, { path: `${path}.port`, required: true, min: 1, max: 65535 })),
-      el('div', { class: 'col-md-3' }, selectField('Security', p.security, [
+      el('div', { class: 'ns-span-3' }, selectField('Security', p.security, [
         { value: 'ssl', label: 'SSL' }, { value: 'starttls', label: 'STARTTLS' }, { value: 'none', label: 'None' },
       ], (v) => {
         p.security = v as UiProvider['security'];
         app.changed();
       }, { path: `${path}.security` })),
     ));
-    body.appendChild(el('div', { class: 'form-text mb-3 server-help' }, SMTP_HELP.server));
+    body.appendChild(el('div', { class: 'form-text mb-3' }, SMTP_HELP.server));
     body.appendChild(textField('Username', p.username, (v) => {
       p.username = v;
       app.changed();
@@ -127,12 +127,12 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
       p.password = v;
       app.changed();
     }, { path: `${path}.password`, required: true, help: SMTP_HELP.password }));
-    body.appendChild(el('div', { class: 'row g-2' },
-      el('div', { class: 'col-md-7' }, textField('From address', p.from.address, (v) => {
+    body.appendChild(el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-7' }, textField('From address', p.from.address, (v) => {
         p.from.address = v;
         app.changed();
       }, { path: `${path}.from.address`, required: true, type: 'email', placeholder: 'you@example.com', help: SMTP_HELP.fromAddress })),
-      el('div', { class: 'col-md-5' }, textField('From name', p.from.name, (v) => {
+      el('div', { class: 'ns-span-5' }, textField('From name', p.from.name, (v) => {
         p.from.name = v;
         app.changed();
       }, { path: `${path}.from.name`, placeholder: 'Home' })),

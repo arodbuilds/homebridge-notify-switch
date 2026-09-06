@@ -1,4 +1,5 @@
 import { PROVIDER_MAX_RETRY_AFTER_MS, PROVIDER_RETRY_BACKOFF_MS, PROVIDER_TIMEOUT_MS } from '../settings.js';
+import type { RecipientResult } from '../types.js';
 
 /**
  * Small HTTP layer shared by the HTTP-based providers. Implements SPEC section 6 rules 2 and 3:
@@ -126,7 +127,10 @@ export async function request(url: string, init: RequestInit, options: RequestOp
   return attempt(url, init, options);
 }
 
-/** Limits the number of concurrently running tasks. */
+/**
+ * Limits the number of concurrently running tasks. A task that rejects releases its slot like any
+ * other; the rejection is passed to the caller of `run` and never affects the tasks queued behind it.
+ */
 export class Semaphore {
   private active = 0;
   private readonly waiting: Array<() => void> = [];
@@ -162,6 +166,33 @@ export class Semaphore {
       next();
     }
   }
+}
+
+/**
+ * Per-recipient runner for providers that make one request per recipient. Runs `task` for every
+ * recipient under the provider's semaphore and returns exactly one result per recipient, in the
+ * order given.
+ *
+ * One recipient's failure must never stop the others. The tasks are collected with
+ * `Promise.allSettled`, never `Promise.all`, so a task that rejects (or throws synchronously, which
+ * `Semaphore.run` turns into a rejection) becomes a failed result for that recipient alone while
+ * every other recipient's request still runs and is still reported. A 4xx for one number, a thrown
+ * error, or a timeout therefore affects only that recipient's entry.
+ */
+export async function sendEach(
+  recipients: readonly string[],
+  semaphore: Semaphore,
+  task: (recipient: string) => Promise<RecipientResult>,
+  options: { redact?: string[] } = {},
+): Promise<RecipientResult[]> {
+  const settled = await Promise.allSettled(recipients.map((recipient) => semaphore.run(() => task(recipient))));
+  return settled.map((outcome, i) => {
+    const recipient = recipients[i];
+    if (outcome.status === 'fulfilled') {
+      return { ...outcome.value, recipient };
+    }
+    return { recipient, ok: false, error: redact(describeError(outcome.reason), options.redact) };
+  });
 }
 
 /** Parses a JSON body, returning undefined instead of throwing. */

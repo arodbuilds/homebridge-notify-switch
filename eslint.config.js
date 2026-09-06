@@ -31,7 +31,8 @@ export default tseslint.config(
     },
   },
   {
-    // The local harness is plain ESM run by Node; these are the Node globals it uses.
+    // The local harness is plain ESM run by Node; these are the Node globals it uses, plus the browser
+    // globals the layout smoke test reads inside `page.evaluate` callbacks that run in Chromium.
     files: ['test/**/*.mjs'],
     languageOptions: {
       globals: {
@@ -41,6 +42,11 @@ export default tseslint.config(
         setImmediate: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        process: 'readonly',
+        console: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        getComputedStyle: 'readonly',
       },
     },
   },

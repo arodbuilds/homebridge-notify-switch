@@ -1,3 +1,4 @@
+import { addActionLabel, uncoveredChannels, uncoveredChannelWarning } from '../../../src/coverage.js';
 import type { Channel, RecipientResult } from '../../../src/types.js';
 import { PROVIDER_CHANNELS } from '../../../src/types.js';
 import { addressList } from '../addressList.js';
@@ -21,7 +22,39 @@ function providerFor(app: App, a: UiAction): UiProvider | undefined {
   return app.config.providers.find((p) => p.id.trim() === a.providerId && a.providerId);
 }
 
-function actionCard(app: App, s: UiSwitch, a: UiAction, switchIndex: number, index: number, rerenderSwitch: () => void): HTMLElement {
+/**
+ * Uncovered channel warnings for one switch (SPEC section 11.2, item 8, and section 11.3): one line
+ * per channel that a targeted group has addresses for but no action sends on, each with a button that
+ * appends the missing action. A warning, not a validation error: it never touches the Save button.
+ * `refresh()` recomputes it after the groups or actions change without re-rendering the card.
+ */
+function coverageWarnings(app: App, s: UiSwitch, rerenderSwitch: () => void): { el: HTMLElement; refresh(): void } {
+  const box = el('div', { class: 'coverage-warnings', role: 'status' });
+  const refresh = (): void => {
+    clear(box);
+    for (const uncovered of uncoveredChannels(s.actions, app.config.groups)) {
+      const add = button(addActionLabel(uncovered.channel), () => {
+        // The first provider that serves the channel, and the targeted groups that hold addresses on it.
+        const provider = app.config.providers.find((p) => p.id.trim() && PROVIDER_CHANNELS[p.type].includes(uncovered.channel));
+        const action = newAction(provider?.id.trim() ?? '', uncovered.channel);
+        action.groups = [...uncovered.groups];
+        s.actions.push(action);
+        app.changed();
+        rerenderSwitch();
+      }, 'btn btn-outline-primary btn-sm');
+      box.appendChild(el('div', { class: 'coverage-warning alert alert-warning py-2 px-3 mb-2', 'data-channel': uncovered.channel },
+        el('span', { class: 'coverage-warning-text' }, uncoveredChannelWarning(uncovered.channel)),
+        add,
+      ));
+    }
+  };
+  refresh();
+  return { el: box, refresh };
+}
+
+function actionCard(
+  app: App, s: UiSwitch, a: UiAction, switchIndex: number, index: number, rerenderSwitch: () => void, onGroupsChange: () => void,
+): HTMLElement {
   const path = `switches[${switchIndex}].actions[${index}]`;
   const provider = providerFor(app, a);
   const header = el('div', { class: 'action-header d-flex justify-content-between align-items-center' },
@@ -47,8 +80,8 @@ function actionCard(app: App, s: UiSwitch, a: UiAction, switchIndex: number, ind
     channelOptions.push({ value: a.channel, label: `${CHANNEL_LABELS[a.channel]} (not served by this provider)` });
   }
 
-  body.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-6' }, selectField('Provider', a.providerId, providerOptions, (value) => {
+  body.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-6' }, selectField('Provider', a.providerId, providerOptions, (value) => {
       a.providerId = value;
       const next = providerFor(app, a);
       if (next && !PROVIDER_CHANNELS[next.type].includes(a.channel)) {
@@ -58,7 +91,7 @@ function actionCard(app: App, s: UiSwitch, a: UiAction, switchIndex: number, ind
       app.changed();
       rerenderSwitch();
     }, { path: `${path}.providerId`, required: true })),
-    el('div', { class: 'col-md-6' }, selectField('Channel', a.channel, channelOptions, (value) => {
+    el('div', { class: 'ns-span-6' }, selectField('Channel', a.channel, channelOptions, (value) => {
       a.channel = value as Channel;
       a.sender = '';
       a.recipients = [];
@@ -104,6 +137,7 @@ function actionCard(app: App, s: UiSwitch, a: UiAction, switchIndex: number, ind
         a.groups = a.groups.filter((v) => v !== id);
       }
       app.changed();
+      onGroupsChange();
     });
     groupBox.appendChild(el('div', { class: 'form-check' },
       input,
@@ -117,6 +151,7 @@ function actionCard(app: App, s: UiSwitch, a: UiAction, switchIndex: number, ind
     input.addEventListener('change', () => {
       a.groups = a.groups.filter((v) => v !== missing);
       app.changed();
+      onGroupsChange();
     });
     groupBox.appendChild(el('div', { class: 'form-check' }, input,
       el('label', { class: 'form-check-label text-danger', for: `${path}.groups.${missing}` }, `${missing} (missing group)`)));
@@ -226,7 +261,7 @@ function testSendPanel(app: App, s: UiSwitch): HTMLElement {
       table.appendChild(tbody);
       results.appendChild(table);
     }
-  }, 'btn btn-danger btn-sm');
+  }, 'btn btn-primary btn-sm');
   confirm.appendChild(confirmText);
   confirm.appendChild(send);
   confirm.appendChild(button('Cancel', reset, 'btn btn-outline-secondary btn-sm'));
@@ -259,16 +294,16 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   body.appendChild(el('div', { class: 'form-text mb-3 switch-id', 'data-path': `${path}.id` },
     'ID ', el('code', {}, s.id), ' (generated; HomeKit tracks the switch by this id, so you can rename it freely)', el('div', { class: 'invalid-feedback' })));
 
-  body.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-4' }, checkboxField('Enabled', s.enabled, (value) => {
+  body.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-4' }, checkboxField('Enabled', s.enabled, (value) => {
       s.enabled = value;
       app.changed();
     }, { path: `${path}.enabled`, help: 'A disabled switch still appears in the Home app but does nothing when turned on.' })),
-    el('div', { class: 'col-md-4' }, numberField('Cooldown (seconds)', s.cooldownSeconds, (value) => {
+    el('div', { class: 'ns-span-4' }, numberField('Cooldown (seconds)', s.cooldownSeconds, (value) => {
       s.cooldownSeconds = value;
       app.changed();
     }, { path: `${path}.cooldownSeconds`, min: 0, max: 86400, help: SWITCH_HELP.cooldownSeconds })),
-    el('div', { class: 'col-md-4' }, selectField('Failure Mode', s.failureMode, [
+    el('div', { class: 'ns-span-4' }, selectField('Failure Mode', s.failureMode, [
       { value: 'any', label: 'Any' }, { value: 'all', label: 'All' }, { value: 'off', label: 'Off' },
     ], (value) => {
       s.failureMode = value as UiSwitch['failureMode'];
@@ -284,8 +319,8 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     help: 'Seconds after a failure before the sensor closes again on its own. 0 keeps it open until the next successful send.',
   });
   resetField.hidden = !s.failureSensor;
-  body.appendChild(el('div', { class: 'row g-2' },
-    el('div', { class: 'col-md-6' }, checkboxField('Failure Sensor', s.failureSensor, (value) => {
+  body.appendChild(el('div', { class: 'ns-grid' },
+    el('div', { class: 'ns-span-6' }, checkboxField('Failure Sensor', s.failureSensor, (value) => {
       s.failureSensor = value;
       resetField.hidden = !value;
       app.changed();
@@ -293,16 +328,18 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
       path: `${path}.failureSensor`,
       help: 'Adds a contact sensor to this switch that opens when a message fails to send and closes on the next successful send or after the reset time.',
     })),
-    el('div', { class: 'col-md-6' }, resetField),
+    el('div', { class: 'ns-span-6' }, resetField),
   ));
 
+  const coverage = coverageWarnings(app, s, rerenderSwitch);
   const actions = el('div', { class: 'actions mb-2', 'data-path': `${path}.actions` }, el('label', { class: 'form-label' }, 'Actions'));
-  s.actions.forEach((a, i) => actions.appendChild(actionCard(app, s, a, index, i, rerenderSwitch)));
+  s.actions.forEach((a, i) => actions.appendChild(actionCard(app, s, a, index, i, rerenderSwitch, coverage.refresh)));
   if (s.actions.length === 0) {
     actions.appendChild(el('div', { class: 'form-text mb-2' }, 'No actions yet. Add one action per channel you want to use.'));
   }
   actions.appendChild(el('div', { class: 'invalid-feedback' }));
   body.appendChild(actions);
+  body.appendChild(coverage.el);
   body.appendChild(button('Add action', () => {
     const first = app.config.providers.find((p) => p.id.trim());
     s.actions.push(newAction(first?.id.trim() ?? '', first ? PROVIDER_CHANNELS[first.type][0] : 'sms'));

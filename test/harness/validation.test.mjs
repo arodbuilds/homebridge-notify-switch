@@ -110,8 +110,9 @@ test('credentialsFile: keys that are not secret fields warn and are ignored', as
   const config = platformConfig({ providers: [{ ...TWILIO, credentialsFile: 'creds.json' }], actions: [SMS_ACTION] });
   const result = await validateConfig(config, fakeLogger().log, { storagePath });
   assert.deepEqual(errors(result), []);
-  assert.equal(warnings(result).length, 1);
-  assert.match(warnings(result)[0], /^providers\[0\]\.credentialsFile: key "password" in ".*creds\.json" is not a secret field of twilio providers/);
+  const fileWarnings = warnings(result).filter((line) => line.includes('credentialsFile'));
+  assert.equal(fileWarnings.length, 1);
+  assert.match(fileWarnings[0], /^providers\[0\]\.credentialsFile: key "password" in ".*creds\.json" is not a secret field of twilio providers/);
   assert.equal(result.config.providers[0].apiKeySecret, 'y');
 });
 

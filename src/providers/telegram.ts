@@ -7,7 +7,7 @@ import type {
 import { PROVIDER_CHANNELS, TELEGRAM_PARSE_MODES } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import type { HttpResponse } from './http.js';
-import { parseJson, request, Semaphore, shortMessage } from './http.js';
+import { parseJson, request, Semaphore, sendEach, shortMessage } from './http.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
@@ -86,7 +86,8 @@ export class TelegramProvider implements Provider, ProviderDiagnostics {
       if (req.channel !== 'telegram') {
         return req.recipients.map((recipient) => ({ recipient, ok: false, error: `telegram does not serve the ${req.channel} channel` }));
       }
-      return await Promise.all(req.recipients.map((chatId) => this.semaphore.run(() => this.sendMessage(req, chatId))));
+      // One request per chat id; a failure for one chat never stops the others (see `sendEach`).
+      return await sendEach(req.recipients, this.semaphore, (chatId) => this.sendMessage(req, chatId), { redact: [this.config.botToken] });
     } catch (err) {
       // Defensive: nothing above should throw, but a provider must never reject (SPEC section 6, rule 4).
       const error = err instanceof Error ? err.message : String(err);

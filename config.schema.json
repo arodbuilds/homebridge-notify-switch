@@ -122,7 +122,7 @@
               "title": "Account SID",
               "type": "string",
               "pattern": "^AC[0-9a-fA-F]{32}$",
-              "description": "Found on the Twilio Console home page under Account Info. Starts with AC.",
+              "description": "Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC.",
               "condition": {
                 "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
               }

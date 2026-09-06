@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-beta.3] - 2026-09-06
+
+### Added
+
+- Uncovered channel warnings. For each switch, the channels present in the groups it targets are compared with the channels its actions cover. The settings UI shows a warning on the switch card for each uncovered channel ("This switch sends to a group with email addresses, but it has no email action. Those recipients will not receive anything.", worded per channel) with an "Add email action" (or SMS, or Telegram) button that appends an action for that channel with the first provider serving it preselected and the targeted groups that hold addresses on that channel selected. It is a warning, not a validation error, so Save stays enabled. Startup logs the same condition once per switch and channel as a warning with the switch name, the group ids and the channel. The detection lives in one module (`src/coverage.ts`) shared by the UI and startup validation, with harness coverage.
+- Harness tests, one per provider, that send to three recipients where the second fails at once with a 4xx (Twilio error 21211 invalid To, Telegram 400 chat not found, SMTP 550 recipient rejected) and assert that the first and third are still sent and reported ok while the second is reported failed with the code. A further test drives the per-recipient runner directly with tasks that throw synchronously and reject asynchronously.
+- Headless Chromium smoke test for the built settings UI (`test/harness/ui-layout.test.mjs`, on `playwright-core`, a dev dependency that downloads nothing). It loads the page with the host's Bootstrap appended after the plugin stylesheet, as the Homebridge UI does, and checks at 400px, 599px and 900px that no rendered element has a bounding box starting left of the viewport or ending past it, that the page has no horizontal scroll, that the two-column grids stack to one column below 600px, and that the uncovered channel warning renders with its copy and button while Save stays enabled. It uses a Chromium or Chrome binary from `NOTIFY_SWITCH_CHROMIUM`, `CHROMIUM_PATH`, `CHROME_BIN`, the usual install paths or the `chrome` channel; without one it is skipped locally and fails on CI.
+
+### Changed
+
+- Per-recipient continuation is explicit. Providers that send one request per recipient (Twilio SMS, Telegram) collect the outcomes through a shared runner (`sendEach` in `src/providers/http.ts`) built on `Promise.allSettled`, never `Promise.all`, so one recipient's rejection or thrown error becomes a failed result for that recipient alone while every other recipient is still sent and reported. The switch accessory collects its actions the same way. The runner carries a comment stating that one recipient's failure must never stop the others; nothing in the send path was found to throw or return early, so this replaces the implicit guarantee with a structural one.
+- Account SID help text in the settings UI, `config.schema.json` and SPEC section 11.3 now reads: "Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC."
+- Settings UI Test send confirmation: "Send now" is now the primary (blue) button and Cancel stays neutral. Red is reserved for Remove buttons only; no other button on the page uses it.
+- Version bumped to `0.1.0-beta.3`.
+
+### Fixed
+
+- Settings UI content was clipped at the left edge of the settings modal: section headings, labels and help text started off-screen and the page scrolled horizontally. The iframe has no padding of its own, and the Settings section used bare Bootstrap `.row` elements whose negative gutter margins reached past the page. The page is now wrapped in a container with 16px of horizontal padding on both sides, and every two-column layout uses a gap-based grid (`.ns-grid`) with no negative margins that stacks to a single column below 600px. No element on the page has a negative margin or a width over 100%; the new smoke test enforces this.
+
 ## [0.1.0-beta.2] - 2026-09-06
 
 ### Added
@@ -61,6 +80,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.2...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.3...HEAD
+[0.1.0-beta.3]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/arodbuilds/homebridge-notify-switch/releases/tag/v0.1.0-beta.1
