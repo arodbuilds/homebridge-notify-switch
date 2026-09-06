@@ -40,7 +40,7 @@ jobs:
         run: npm test
 
       - name: Publish
-        run: npm publish --provenance --tag ${{ github.event.release.prerelease && 'beta' || 'latest' }}
+        run: npm publish --provenance --access public --tag ${{ github.event.release.prerelease && 'beta' || 'latest' }}
         env:
           # TEMPORARY: the NPM_TOKEN repository secret (a granular automation token) is only needed for the
           # first publish, because npm trusted publishing can only be configured for a package that already
