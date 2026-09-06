@@ -1,185 +1,127 @@
 <p align="center">
-
 <img src="https://github.com/homebridge/branding/raw/latest/logos/homebridge-wordmark-logo-vertical.png" width="150">
-
 </p>
 
 <span align="center">
 
-# Homebridge Platform Plugin Template
+# Notify Switch
 
 </span>
 
-This is a template Homebridge dynamic platform plugin and can be used as a base to help you get started developing your own plugin.
+A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Each switch is always off. Turn it on from a HomeKit automation or scene, it sends one or more preset messages through the providers you configured, and it turns itself back off. Any HomeKit event can notify people by SMS, email, or Telegram.
 
-This template should be used in conjunction with the [developer documentation](https://developers.homebridge.io/). A full list of all supported service types, and their characteristics is available on this site.
+> **Status:** early development. This version sends SMS through Twilio. Email (Twilio or SMTP) and Telegram can be configured and are validated at startup, but sending on those channels reports a "not yet implemented" failure until a later release. The full specification is in [SPEC.md](./SPEC.md).
 
-### Clone As Template
+## How it works
 
-Click the link below to create a new GitHub Repository using this template, or click the *Use This Template* button above.
+1. **Provider**: a connection to a messaging service (Twilio, SMTP, or Telegram).
+2. **Recipient group**: a named list of people with phone numbers, email addresses, and Telegram chat IDs.
+3. **Switch**: a HomeKit switch with one or more actions. Each action sends one message body on one provider to one or more groups.
 
-<span align="center">
+Configure everything from the Homebridge UI under the plugin settings. You only need one provider, one group, and one switch to start.
 
-### [Create New Repository From Template](https://github.com/homebridge/homebridge-plugin-template/generate)
+## Five-minute Twilio SMS setup
 
-</span>
+1. In the [Twilio Console](https://console.twilio.com), copy the **Account SID** from the home page.
+2. Create a Standard API key under **Account > API keys & tokens**. Copy the **SID** and the **Secret** (the secret is shown once). The Auth Token is deliberately not accepted; an API key can be revoked without rotating your account's master credential.
+3. Note a Twilio phone number you own under **Phone Numbers > Manage > Active numbers**. US long codes must be registered for A2P 10DLC or messages will be filtered.
+4. In the plugin settings add a Twilio provider with those values, a group with the phone numbers to notify, and a switch with an SMS action.
+5. Save, restart Homebridge, and use the switch in a HomeKit automation with **Turn On** as the action.
 
-### Setup Development Environment
+## Configuration
 
-To develop Homebridge plugins you must have Node.js 22 or later installed, and a modern code editor such as [VS Code](https://code.visualstudio.com/). This plugin template uses [TypeScript](https://www.typescriptlang.org/) to make development easier and comes with pre-configured settings for [VS Code](https://code.visualstudio.com/) and ESLint. If you are using VS Code install these extensions:
+The platform block in `config.json` looks like this. The Homebridge UI form writes the same structure.
 
-- [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
-
-### Install Development Dependencies
-
-Using a terminal, navigate to the project folder and run this command to install the development dependencies:
-
-```shell
-npm install
-```
-
-### Update package.json
-
-Open the [`package.json`](./package.json) and change the following attributes:
-
-- `name` - this should be prefixed with `homebridge-` or `@username/homebridge-`, is case-sensitive, and contains no spaces nor special characters apart from a dash `-`
-- `displayName` - this is the "nice" name displayed in the Homebridge UI
-- `homepage` - link to your GitHub repo's `README.md`
-- `repository.url` - link to your GitHub repo
-- `bugs.url` - link to your GitHub repo issues page
-- `keywords` - the template ships with `homebridge-plugin` (required) and `supports-hap` (the plugin publishes accessories over HAP, which template-based plugins do). Add `supports-matter` if your plugin also registers Matter accessories itself — see the [Matter Plugins](https://github.com/homebridge/homebridge/wiki/Matter-Plugins) wiki page
-
-When you are ready to publish the plugin you should set `private` to false, or remove the attribute entirely.
-
-### Update Plugin Defaults
-
-Open the [`src/settings.ts`](./src/settings.ts) file and change the default values:
-
-- `PLATFORM_NAME` - Set this to be the name of your platform. This is the name of the platform that users will use to register the plugin in the Homebridge `config.json`.
-- `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file.
-
-Open the [`config.schema.json`](./config.schema.json) file and change the following attribute:
-
-- `pluginAlias` - set this to match the `PLATFORM_NAME` you defined in the previous step.
-
-See the [Homebridge API docs](https://developers.homebridge.io/#/config-screen/schema#default-values) for more details on the other attributes you can set in the `config.schema.json` file.
-
-### Build Plugin
-
-TypeScript needs to be compiled into JavaScript before it can run. The following command will compile the contents of your [`src`](./src) directory and put the resulting code into the `dist` folder.
-
-```shell
-npm run build
-```
-
-### Link To Homebridge
-
-Run this command so your global installation of Homebridge can discover the plugin in your development environment:
-
-```shell
-npm link
-```
-
-You can now start Homebridge, use the `-D` flag, so you can see debug log messages in your plugin:
-
-```shell
-homebridge -D
-```
-
-### Watch For Changes and Build Automatically
-
-If you want to have your code compile automatically as you make changes, and restart Homebridge automatically between changes, you first need to add your plugin as a platform in `./test/hbConfig/config.json`:
-```
+```json
 {
-...
-    "platforms": [
+  "platform": "NotifySwitch",
+  "name": "Notify Switch",
+  "defaultCountry": "US",
+  "masterSwitch": { "enabled": true, "name": "Notifications Enabled" },
+  "providers": [
+    {
+      "id": "twilio-main",
+      "type": "twilio",
+      "name": "Twilio",
+      "accountSid": "AC...",
+      "apiKeySid": "SK...",
+      "apiKeySecret": "...",
+      "smsSenders": ["+16785550100"]
+    }
+  ],
+  "groups": [
+    { "id": "family", "name": "Family", "sms": ["+16785550101", "+16785550102"] }
+  ],
+  "switches": [
+    {
+      "id": "6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b",
+      "name": "Water Leak Alert",
+      "cooldownSeconds": 60,
+      "failureSensor": false,
+      "actions": [
         {
-            "name": "Config",
-            "port": 8581,
-            "platform": "config"
-        },
-        {
-            "name": "<PLUGIN_NAME>",
-            //... any other options, as listed in config.schema.json ...
-            "platform": "<PLATFORM_NAME>"
+          "providerId": "twilio-main",
+          "channel": "sms",
+          "groups": ["family"],
+          "body": "Water detected under the kitchen sink at {{time}}."
         }
-    ]
+      ]
+    }
+  ]
 }
 ```
 
-and then you can run:
+Every field is documented in the settings form. Phone numbers are stored in E.164 format (`+` and country code). A number entered without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
 
-```shell
-npm run watch
+### Template variables
+
+Available in `body` and `subject`: `{{switchName}}`, `{{time}}` (local HH:mm), `{{date}}` (local YYYY-MM-DD), and `{{datetime}}` (local ISO 8601 without zone). Unknown variables are left as typed. Times use the Homebridge host's time zone.
+
+### Master switch
+
+A platform-level switch, "Notifications Enabled" by default, appears in the Home app. While it is off no switch sends anything and each flip is logged as suppressed. Its state survives a Homebridge restart.
+
+### Cooldown and failure sensor
+
+`cooldownSeconds` sets the minimum time between sends for a switch, so an automation that fires repeatedly does not resend the same message. Set `failureSensor` to add a contact sensor to the switch's accessory. It opens when a send fails according to `failureMode` (`any`, `all`, or `off`) and closes on the next fully successful send or after `failureSensorResetSeconds`. Use it in a HomeKit automation to be told when a message did not go out.
+
+### Startup validation
+
+The plugin checks the whole configuration when Homebridge starts and logs every problem with its field path, for example:
+
+```
+switches[0].actions[0].providerId: no provider with id "twillio-main" (did you mean "twilio-main"?)
 ```
 
-This will launch an instance of Homebridge in debug mode which will restart every time you make a change to the source code. It will load the config stored in the default location under `~/.homebridge`. You may need to stop other running instances of Homebridge while using this command to prevent conflicts. You can adjust the Homebridge startup command in the [`nodemon.json`](./nodemon.json) file.
+While there are errors nothing is registered. Cached accessories are left in place so your HomeKit automations are not lost while you fix a typo.
 
-### Customise Plugin
+## Child bridge
 
-You can now start customising the plugin template to suit your requirements.
+Running this plugin as a [child bridge](https://github.com/homebridge/homebridge/wiki/Child-Bridges) is recommended. A slow or unreachable messaging service then cannot affect your other accessories.
 
-- [`src/platform.ts`](./src/platform.ts) - this is where your device setup and discovery should go.
-- [`src/platformAccessory.ts`](./src/platformAccessory.ts) - this is where your accessory control logic should go, you can rename or create multiple instances of this file for each accessory type you need to implement as part of your platform plugin. You can refer to the [developer documentation](https://developers.homebridge.io/) to see what characteristics you need to implement for each service type.
-- [`config.schema.json`](./config.schema.json) - update the config schema to match the config you expect from the user. See the [Plugin Config Schema Documentation](https://developers.homebridge.io/#/config-screen/schema).
+## Security notes
 
-### Versioning Your Plugin
+- Credentials live in `config.json` like every Homebridge plugin. Homebridge UI backups contain `config.json` and should be treated as containing secrets.
+- Twilio accepts API keys only, never the Auth Token. SMTP setups should use an app password.
+- Credentials are never written to the log at any level. Phone numbers and email addresses are partially masked at info level, and message bodies are logged only when `debug` is on.
+- TLS certificate verification cannot be disabled.
 
-Given a version number `MAJOR`.`MINOR`.`PATCH`, such as `1.4.3`, increment the:
+## Troubleshooting
 
-1. **MAJOR** version when you make breaking changes to your plugin,
-2. **MINOR** version when you add functionality in a backwards compatible manner, and
-3. **PATCH** version when you make backwards compatible bug fixes.
+- **Nothing appears in HomeKit**: look for lines starting with a field path in the Homebridge log. The configuration has errors and nothing is registered until they are fixed.
+- **The switch flips but nothing is sent**: check that the master switch is on, the switch is enabled, and the cooldown has expired. Each suppressed flip is logged at info level.
+- **Twilio reports an error code**: the code and Twilio's message are logged at warn level. Look the code up at https://www.twilio.com/docs/api/errors.
+- Turn on `debug` in the plugin settings for full addresses and message bodies in the log.
 
-You can use the `npm version` command to help you with this:
-
-```shell
-# major update / breaking changes
-npm version major
-
-# minor update / new features
-npm version update
-
-# patch / bugfixes
-npm version patch
-```
-
-### Publish Package
-
-When you are ready to publish your plugin to [npm](https://www.npmjs.com/), make sure you have removed the `private` attribute from the [`package.json`](./package.json) file then run:
+## Development
 
 ```shell
-npm publish
+npm install
+npm run build
+npm run lint
+npm run watch   # builds, links, and starts Homebridge with test/hbConfig
 ```
 
-If you are publishing a scoped plugin, i.e. `@username/homebridge-xxx` you will need to add `--access=public` to command the first time you publish.
+## Changelog
 
-#### Publishing Beta Versions
-
-You can publish *beta* versions of your plugin for other users to test before you release it to everyone.
-
-```shell
-# create a new pre-release version (eg. 2.1.0-beta.1)
-npm version prepatch --preid beta
-
-# publish to @beta
-npm publish --tag beta
-```
-
-Users can then install the  *beta* version by appending `@beta` to the install command, for example:
-
-```shell
-sudo npm install -g homebridge-example-plugin@beta
-```
-
-### Best Practices
-
-Consider creating your plugin with the [Homebridge Verified](https://github.com/homebridge/plugins) criteria in mind. This will help you to create a plugin that is easy to use and works well with Homebridge.
-You can then submit your plugin to the Homebridge Verified list for review.
-The most up-to-date criteria can be found on the [Verified Plugins](https://github.com/homebridge/plugins/wiki/Verified-Plugins) wiki page.
-
-### Useful Links
-
-Note these links are here for help but are not supported/verified by the Homebridge team
-
-- [Custom Characteristics](https://github.com/homebridge/homebridge-plugin-template/issues/20)
+See [CHANGELOG.md](./CHANGELOG.md).
