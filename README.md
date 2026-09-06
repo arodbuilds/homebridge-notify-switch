@@ -69,14 +69,14 @@ The plugin does nothing until it is configured, and it never registers accessori
 ## Five-minute Twilio SMS setup
 
 1. Sign in to the [Twilio Console](https://console.twilio.com) and copy the **Account SID** from **Account Info** on the home page. It starts with `AC`.
-2. Open [API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys) and create a **Standard** API key. Copy the **SID** (starts with `SK`) and the **Secret**. The secret is shown once; keep it in a password manager. The Auth Token is deliberately not accepted, because an API key can be revoked without rotating your account's master credential.
+2. Open [API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys) and create an API key. A **Standard** key works; so does a **Restricted** key with read and write access to Messaging. Copy the **SID** (starts with `SK`) and the **Secret**. The secret is shown once; keep it in a password manager. The Auth Token is deliberately not accepted, because an API key can be revoked without rotating your account's master credential.
 3. Open [Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming) and copy a Twilio phone number you own, including the country code, for example `+16785550100`. If you send to US numbers, read [A2P 10DLC](#a2p-10dlc-registration-for-us-numbers) below; unregistered US long codes are filtered by the carriers.
 4. In the Homebridge UI open the plugin settings and add a **Twilio** provider with those values, then click **Test connection**. Add a **Recipient group** with the phone numbers to notify (pick the country from the dropdown and type the national number). Add a **Switch**, give it a name such as `Water Leak Alert`, and add an **SMS** action on the Twilio provider to that group with a message body.
 5. Click **Test send** on the switch to send it for real, then save and restart Homebridge. In the Home app create an automation with a trigger such as a leak sensor detecting water and add the switch with **Turn On** as the action.
 
 ## Provider setup guides
 
-Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio reads your account details, and Telegram asks the bot who it is. Credentials in the form are used for that one request and are not stored until you click Save.
+Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), and Telegram asks the bot who it is. Credentials in the form are used for that one request and are not stored until you click Save.
 
 ### Twilio (SMS and email)
 
@@ -85,7 +85,7 @@ Twilio serves the `sms` channel and, once a domain is authenticated, the `email`
 | Field | Where to find it |
 | --- | --- |
 | `accountSid` | [Console home page](https://console.twilio.com), **Account Info**. Starts with `AC`. |
-| `apiKeySid` and `apiKeySecret` | [Account > API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys). Create a **Standard** key. |
+| `apiKeySid` and `apiKeySecret` | [Account > API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys). Create a **Standard** key, or a **Restricted** key with read and write access to Messaging. |
 | `smsSenders` | [Phone Numbers > Manage > Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming). E.164 format with the country code. |
 | `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. |
 | `emailFrom` | Optional. Required only for the `email` channel. The domain must be authenticated (see below). |
@@ -93,10 +93,10 @@ Twilio serves the `sms` channel and, once a domain is authenticated, the `email`
 #### API keys
 
 1. Open [API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys) and click **Create API key**.
-2. Give it a name such as `Homebridge`, keep the type **Standard**, and create it.
+2. Give it a name such as `Homebridge` and create it. **Standard** is the simplest choice. A **Restricted** key also works if you grant it read and write access to Messaging; Test connection reads the message list and sending creates messages, so both are needed.
 3. Copy the **SID** into `apiKeySid` and the **Secret** into `apiKeySecret`. The secret cannot be shown again; if you lose it, delete the key and create a new one.
 
-A Standard key can send messages but cannot manage the account. If a key leaks, delete it in the Console and create another; the plugin never asks for the Auth Token, so the account's master credential stays untouched. Full details: [Twilio API keys](https://www.twilio.com/docs/iam/api-keys).
+A Standard key can send messages but cannot manage the account, and a Restricted key can do only what you grant it. If a key leaks, delete it in the Console and create another; the plugin never asks for the Auth Token, so the account's master credential stays untouched. Full details: [Twilio API keys](https://www.twilio.com/docs/iam/api-keys).
 
 #### Phone numbers
 
@@ -414,7 +414,7 @@ The log line contains Twilio's error code and message, for example `Twilio error
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| 20003 | Authentication failed | The API key SID or secret is wrong, or the key was deleted. Create a new Standard key. |
+| 20003 | Authentication failed | The API key SID or secret is wrong, or the key was deleted. Create a new key. If Test connection reports a 403 with this code, the key is a Restricted key without Messaging permissions; grant them or use a Standard key. |
 | 20404 | Resource not found | The Account SID does not match the key, or the number is not on this account. |
 | 20429 | Too many requests | Twilio rate limited the account. The plugin honors the retry delay once; lower the number of recipients or add a cooldown. |
 | 21211 | Invalid `To` number | The recipient number is not a valid phone number in E.164 format. |

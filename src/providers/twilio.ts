@@ -95,13 +95,16 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
   }
 
   /**
-   * Settings UI Test connection (SPEC section 11.2, item 3): GET the account resource with the API key.
-   * Nothing is sent and the response is reduced to the account's friendly name and status.
+   * Settings UI Test connection (SPEC section 11.2, item 3): list one message on the account with the
+   * API key. Nothing is sent. The Messages list is used rather than the Account resource because
+   * Twilio answered 401 on the Account resource for a valid Standard key, and a Restricted key scoped
+   * to Messaging cannot read it at all, while any key that can send SMS can read this list.
+   * Twilio's error code and message are kept in the result.
    */
   async testConnection(): Promise<ConnectionTestResult> {
     try {
-      const url = `${TWILIO_API}/Accounts/${encodeURIComponent(this.config.accountSid)}.json`;
-      const outcome = await request(url, { method: 'GET', headers: this.headers('application/json') }, {
+      const url = `${TWILIO_API}/Accounts/${encodeURIComponent(this.config.accountSid)}/Messages.json?PageSize=1`;
+      const outcome = await request(url, { method: 'GET', headers: this.headers() }, {
         redact: [this.config.apiKeySecret, this.config.apiKeySid],
       });
       if (!outcome.ok) {
@@ -110,15 +113,17 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
       const { status, text } = outcome.response;
       const json = parseJson(text);
       if (status === 200) {
-        const friendly = shortMessage(json?.friendly_name ?? '', 80);
-        const accountStatus = shortMessage(json?.status ?? '', 20);
-        return { ok: true, message: `Connected to Twilio account${friendly ? ` "${friendly}"` : ''}${accountStatus ? ` (${accountStatus})` : ''}.` };
+        return { ok: true, message: 'Connected to Twilio. The API key can access messages on this account.' };
       }
+      const detail = this.twilioErrorDetail(json);
       if (status === 401) {
-        return { ok: false, message: 'Twilio rejected the API key. Check the API Key SID and Secret.' };
+        return { ok: false, message: `Twilio rejected the API key${detail}. Check the API Key SID and Secret.` };
+      }
+      if (status === 403) {
+        return { ok: false, message: `Twilio refused this API key access to messages${detail}. A Restricted key needs Messaging permissions on this account.` };
       }
       if (status === 404) {
-        return { ok: false, message: 'Twilio could not find that Account SID with this API key.' };
+        return { ok: false, message: `Twilio could not find that Account SID with this API key${detail}. Check the Account SID.` };
       }
       return { ok: false, message: this.describeFailure(status, json) };
     } catch (err) {
@@ -126,12 +131,24 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
     }
   }
 
-  private headers(contentType: string): Record<string, string> {
-    return {
-      'Authorization': this.authorization,
-      'Content-Type': contentType,
-      'Accept': 'application/json',
-    };
+  /** Request headers: Basic auth of `apiKeySid:apiKeySecret` (never the Account SID) plus a content type when there is a body. */
+  private headers(contentType?: string): Record<string, string> {
+    const headers: Record<string, string> = { 'Authorization': this.authorization, 'Accept': 'application/json' };
+    if (contentType) {
+      headers['Content-Type'] = contentType;
+    }
+    return headers;
+  }
+
+  /** Twilio's `code` and `message` from an error body as a parenthetical, or an empty string when the body has neither. */
+  private twilioErrorDetail(json: Record<string, unknown> | undefined): string {
+    const code = json?.code !== undefined ? shortMessage(json.code, 20) : '';
+    const message = shortMessage(json?.message ?? '', 200);
+    if (!code && !message) {
+      return '';
+    }
+    const inner = code && message ? `error ${code}: ${message}` : code ? `error ${code}` : message;
+    return ` (Twilio ${inner})`;
   }
 
   /** Reduces a Twilio error response to its `code` and `message` (SPEC section 6.1, section 8 item 5). */

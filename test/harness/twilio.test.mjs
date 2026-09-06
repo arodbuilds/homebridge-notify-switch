@@ -120,6 +120,33 @@ test('twilio email: send without emailFrom fails cleanly instead of throwing', a
   }
 });
 
+test('twilio testConnection: GET Messages.json?PageSize=1 on the account with the API key pair, nothing sent', async () => {
+  const fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ messages: [{ sid: 'SM1' }], page_size: 1 }) }));
+  try {
+    const result = await provider().testConnection();
+    assert.deepEqual(result, { ok: true, message: 'Connected to Twilio. The API key can access messages on this account.' });
+    assert.equal(fetch.calls.length, 1);
+    assert.equal(fetch.calls[0].url, `https://api.twilio.com/2010-04-01/Accounts/${TWILIO.accountSid}/Messages.json?PageSize=1`);
+    assert.equal(fetch.calls[0].init.method, 'GET');
+    assert.equal(fetch.calls[0].headers.Authorization, EXPECTED_AUTH);
+    assert.equal(fetch.calls[0].body, '');
+  } finally {
+    fetch.restore();
+  }
+});
+
+test('twilio testConnection: a 5xx is retried once and then reported with the Twilio code', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const fetch = installFetch(() => ({ status: 503, body: JSON.stringify({ code: 20500, message: 'Service unavailable' }) }));
+  try {
+    const result = await settle(t, provider().testConnection());
+    assert.deepEqual(result, { ok: false, message: 'Twilio error 20500: Service unavailable' });
+    assert.equal(fetch.calls.length, 2);
+  } finally {
+    fetch.restore();
+  }
+});
+
 test('twilio: timeout aborts after 10s, retries once after 2s, then reports the timeout', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const fetch = installFetch(() => 'hang');

@@ -20,27 +20,81 @@ function assertNoSecrets(value) {
   }
 }
 
-test('test-provider twilio: GET the account resource with the API key and report the friendly name', async () => {
-  const fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ friendly_name: 'My Home', status: 'active' }) }));
+test('test-provider twilio: lists one message on the submitted Account SID with Basic auth of apiKeySid:apiKeySecret', async () => {
+  const fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ messages: [], page_size: 1 }) }));
+  // Values exactly as the form submits them. The secret carries characters that matter in base64 and URLs so
+  // any encoding, escaping or redaction on the way to the header would show up.
+  const form = {
+    ...TWILIO,
+    accountSid: 'ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    apiKeySid: 'SKbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    apiKeySecret: 'p4ss/w0rd+with=odd:chars%20',
+  };
   try {
-    const result = await testProvider(TWILIO);
-    assert.deepEqual(result, { ok: true, message: 'Connected to Twilio account "My Home" (active).' });
+    const result = await testProvider(form);
+    assert.deepEqual(result, { ok: true, message: 'Connected to Twilio. The API key can access messages on this account.' });
     assert.equal(fetch.calls.length, 1);
-    assert.equal(fetch.calls[0].url, `https://api.twilio.com/2010-04-01/Accounts/${TWILIO.accountSid}.json`);
-    assert.equal(fetch.calls[0].init.method, 'GET');
-    assert.equal(fetch.calls[0].headers.Authorization, 'Basic ' + Buffer.from(`${TWILIO.apiKeySid}:${TWILIO.apiKeySecret}`).toString('base64'));
+    const call = fetch.calls[0];
+    assert.equal(call.url, 'https://api.twilio.com/2010-04-01/Accounts/ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Messages.json?PageSize=1');
+    assert.equal(call.init.method, 'GET');
+    assert.equal(call.body, '', 'a connection test sends nothing');
+    const expectedAuth = 'Basic ' + Buffer.from(`${form.apiKeySid}:${form.apiKeySecret}`, 'utf8').toString('base64');
+    assert.equal(call.headers.Authorization, expectedAuth);
+    assert.equal(call.headers.Authorization, 'Basic U0tiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYjpwNHNzL3cwcmQrd2l0aD1vZGQ6Y2hhcnMlMjA=');
+    assert.notEqual(call.headers.Authorization, 'Basic ' + Buffer.from(`${form.accountSid}:${form.apiKeySecret}`, 'utf8').toString('base64'),
+      'the Account SID is never the Basic auth username');
+    assert.equal(call.headers['Content-Type'], undefined, 'no content type on a bodiless GET');
     assertNoSecrets(result);
+    assert.ok(!JSON.stringify(result).includes(form.apiKeySecret));
   } finally {
     fetch.restore();
   }
 });
 
-test('test-provider twilio: a 401 is a readable rejection, a network error is sanitized', async () => {
-  let fetch = installFetch(() => ({ status: 401, body: JSON.stringify({ code: 20003, message: 'Authenticate' }) }));
+test('test-provider twilio: pasted values are trimmed before the URL and header are built', async () => {
+  const fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ messages: [] }) }));
+  try {
+    const padded = { ...TWILIO, accountSid: ` ${TWILIO.accountSid}\n`, apiKeySid: `${TWILIO.apiKeySid} `, apiKeySecret: `\t${TWILIO.apiKeySecret}\n` };
+    const result = await testProvider(padded);
+    assert.equal(result.ok, true);
+    assert.equal(fetch.calls[0].url, `https://api.twilio.com/2010-04-01/Accounts/${TWILIO.accountSid}/Messages.json?PageSize=1`);
+    assert.equal(fetch.calls[0].headers.Authorization, 'Basic ' + Buffer.from(`${TWILIO.apiKeySid}:${TWILIO.apiKeySecret}`, 'utf8').toString('base64'));
+  } finally {
+    fetch.restore();
+  }
+});
+
+test('test-provider twilio: 401, 403 and 404 carry Twilio\'s code and message, and a network error is sanitized', async () => {
+  let fetch = installFetch(() => ({ status: 401, body: JSON.stringify({ code: 20003, message: 'Authenticate', status: 401 }) }));
+  try {
+    const result = await testProvider(TWILIO);
+    assert.deepEqual(result, { ok: false, message: 'Twilio rejected the API key (Twilio error 20003: Authenticate). Check the API Key SID and Secret.' });
+    assert.equal(fetch.calls.length, 1, 'a 401 is not retried');
+  } finally {
+    fetch.restore();
+  }
+  fetch = installFetch(() => ({ status: 401, body: '' }));
+  try {
+    const result = await testProvider(TWILIO);
+    assert.deepEqual(result, { ok: false, message: 'Twilio rejected the API key. Check the API Key SID and Secret.' });
+  } finally {
+    fetch.restore();
+  }
+  fetch = installFetch(() => ({ status: 403, body: JSON.stringify({ code: 20003, message: 'Permission Denied', status: 403 }) }));
   try {
     const result = await testProvider(TWILIO);
     assert.equal(result.ok, false);
-    assert.match(result.message, /rejected the API key/);
+    assert.equal(result.message,
+      'Twilio refused this API key access to messages (Twilio error 20003: Permission Denied). A Restricted key needs Messaging permissions on this account.');
+  } finally {
+    fetch.restore();
+  }
+  fetch = installFetch(() => ({ status: 404, body: JSON.stringify({ code: 20404, message: 'The requested resource was not found', status: 404 }) }));
+  try {
+    const result = await testProvider(TWILIO);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /could not find that Account SID/);
+    assert.match(result.message, /Twilio error 20404: The requested resource was not found/);
   } finally {
     fetch.restore();
   }
