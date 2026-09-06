@@ -1,7 +1,9 @@
 import type { PluginLogger } from '../logging.js';
 import { BOT_TOKEN_PATTERN } from '../patterns.js';
 import { PROVIDER_CONCURRENCY } from '../settings.js';
-import type { Channel, Provider, RecipientResult, SendRequest, TelegramProviderConfig, ValidationIssue } from '../types.js';
+import type {
+  Channel, ChatSummary, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TelegramProviderConfig, ValidationIssue,
+} from '../types.js';
 import { PROVIDER_CHANNELS, TELEGRAM_PARSE_MODES } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import type { HttpResponse } from './http.js';
@@ -29,11 +31,27 @@ function retryAfterFromBody(response: HttpResponse): number | undefined {
   return undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Human readable label for a chat object: the title for groups and channels, the person's name for private chats. */
+function describeChat(chat: Record<string, unknown>): string {
+  const title = shortMessage(chat.title ?? '', 64);
+  if (title) {
+    return title;
+  }
+  const name = [chat.first_name, chat.last_name].filter((part) => typeof part === 'string' && part.length > 0).join(' ');
+  const username = typeof chat.username === 'string' && chat.username.length > 0 ? `@${chat.username}` : '';
+  const label = [shortMessage(name, 64), username].filter((part) => part.length > 0).join(' ');
+  return label || 'Unnamed chat';
+}
+
 /**
  * Telegram provider (SPEC section 6.4): one `sendMessage` request per chat id, concurrency 5,
  * readable errors for blocked bots and bad chat ids, `retry_after` honored once on 429.
  */
-export class TelegramProvider implements Provider {
+export class TelegramProvider implements Provider, ProviderDiagnostics {
   readonly type = 'telegram' as const;
   readonly channels: Channel[] = [...PROVIDER_CHANNELS.telegram];
   private readonly semaphore = new Semaphore(PROVIDER_CONCURRENCY);
@@ -73,6 +91,85 @@ export class TelegramProvider implements Provider {
       // Defensive: nothing above should throw, but a provider must never reject (SPEC section 6, rule 4).
       const error = err instanceof Error ? err.message : String(err);
       return req.recipients.map((recipient) => ({ recipient, ok: false, error }));
+    }
+  }
+
+  /** Settings UI Test connection (SPEC section 11.2, item 3): `getMe`. */
+  async testConnection(): Promise<ConnectionTestResult> {
+    const outcome = await this.call('getMe');
+    if (!outcome.ok) {
+      return { ok: false, message: outcome.message };
+    }
+    const result = isRecord(outcome.result) ? outcome.result : {};
+    const username = shortMessage(result.username ?? '', 64);
+    const name = shortMessage(result.first_name ?? '', 64);
+    return { ok: true, message: `Connected to Telegram as ${username ? `@${username}` : (name || 'the bot')}.` };
+  }
+
+  /**
+   * Settings UI Find chat IDs (SPEC section 11.2, item 5): `getUpdates` reduced to the distinct chats
+   * that have messaged the bot. Only chat ids, titles and types leave this method.
+   */
+  async findChats(): Promise<{ ok: boolean; message: string; chats: ChatSummary[] }> {
+    const outcome = await this.call('getUpdates', { limit: 100, allowed_updates: ['message', 'channel_post', 'my_chat_member'] });
+    if (!outcome.ok) {
+      return { ok: false, message: outcome.message, chats: [] };
+    }
+    const chats = new Map<string, ChatSummary>();
+    for (const update of Array.isArray(outcome.result) ? outcome.result : []) {
+      if (!isRecord(update)) {
+        continue;
+      }
+      for (const key of ['message', 'edited_message', 'channel_post', 'my_chat_member']) {
+        const item = update[key];
+        const chat = isRecord(item) && isRecord(item.chat) ? item.chat : undefined;
+        if (!chat || (typeof chat.id !== 'number' && typeof chat.id !== 'string')) {
+          continue;
+        }
+        const id = String(chat.id);
+        if (!chats.has(id)) {
+          chats.set(id, { id, title: describeChat(chat), type: typeof chat.type === 'string' ? chat.type : 'chat' });
+        }
+      }
+    }
+    const list = [...chats.values()];
+    const message = list.length === 0
+      ? 'No chats found. Send the bot a message in Telegram, then try again. Telegram only keeps recent messages, and a webhook set on the bot hides them.'
+      : `Found ${list.length} chat${list.length === 1 ? '' : 's'}.`;
+    return { ok: true, message, chats: list };
+  }
+
+  /** One Bot API call with the token scrubbed from every error (SPEC section 12, item 4). */
+  private async call(method: string, payload?: Record<string, unknown>): Promise<{ ok: true; result: unknown } | { ok: false; message: string }> {
+    try {
+      const url = `${TELEGRAM_API}/bot${this.config.botToken}/${method}`;
+      const outcome = await request(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload ?? {}),
+      }, { redact: [this.config.botToken], retryAfterFromBody });
+      if (!outcome.ok) {
+        return { ok: false, message: outcome.error };
+      }
+      const { status, text } = outcome.response;
+      const json = parseJson(text);
+      if (json?.ok === true) {
+        return { ok: true, result: json.result };
+      }
+      const description = shortMessage(json?.description ?? '', 200).split(this.config.botToken).join('[redacted]');
+      const code = typeof json?.error_code === 'number' ? json.error_code : status;
+      if (code === 401 || code === 404) {
+        return { ok: false, message: `Telegram rejected the bot token (error ${code}). Check the token from BotFather.` };
+      }
+      if (code === 409) {
+        return {
+          ok: false,
+          message: 'Telegram error 409: a webhook is set on this bot, so updates cannot be fetched. Remove it with deleteWebhook or use another bot.',
+        };
+      }
+      return { ok: false, message: `Telegram error ${code}: ${description || `HTTP ${status}`}` };
+    } catch (err) {
+      return { ok: false, message: (err instanceof Error ? err.message : String(err)).split(this.config.botToken).join('[redacted]') };
     }
   }
 

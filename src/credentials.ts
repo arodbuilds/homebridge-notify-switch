@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
 import type { ProviderType } from './types.js';
+import { CREDENTIAL_KEYS } from './types.js';
+
+export { CREDENTIAL_KEYS };
 
 /**
  * Optional `credentialsFile` on a provider (SPEC section 12, item 2): a JSON file, relative to the
@@ -9,13 +12,6 @@ import type { ProviderType } from './types.js';
  * startup. A missing or malformed file is a blocking validation error. Nothing here ever logs or
  * returns file content beyond the values themselves, which the caller merges into the provider.
  */
-
-/** Secret fields each provider type accepts from a credentials file. */
-export const CREDENTIAL_KEYS: Readonly<Record<ProviderType, readonly string[]>> = {
-  twilio: ['accountSid', 'apiKeySid', 'apiKeySecret'],
-  smtp: ['username', 'password'],
-  telegram: ['botToken'],
-};
 
 export interface CredentialsFileResult {
   /** Secret fields read from the file. Present only when the file was read and parsed. */

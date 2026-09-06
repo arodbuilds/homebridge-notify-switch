@@ -1,0 +1,142 @@
+/* Layout for the Notify Switch settings UI. Colours, controls and typography come from the Bootstrap 5
+   stylesheet and theme the Homebridge UI injects into this iframe. */
+
+.notify-switch-ui {
+  padding: 0 0 1rem;
+}
+
+.lead-copy,
+.section-copy {
+  line-height: 1.5;
+}
+
+.ns-section {
+  margin-top: 1.5rem;
+}
+
+.ns-section h2 {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+}
+
+.card-header .badge {
+  vertical-align: middle;
+  text-transform: capitalize;
+}
+
+.form-label {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.form-text {
+  line-height: 1.4;
+}
+
+.server-help {
+  margin-top: -0.5rem;
+}
+
+.address-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.address-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.phone-controls {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.phone-country {
+  flex: 0 1 15rem;
+  min-width: 8rem;
+}
+
+.phone-national {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+@media (max-width: 575px) {
+  .phone-controls {
+    flex-wrap: wrap;
+  }
+
+  .phone-country,
+  .phone-national {
+    flex-basis: 100%;
+  }
+}
+
+.has-issue > .invalid-feedback,
+.address-row.has-issue > .invalid-feedback,
+.address-list.has-issue > .invalid-feedback,
+.list-feedback.has-issue > .invalid-feedback,
+.actions.has-issue > .invalid-feedback,
+.switch-id.has-issue > .invalid-feedback {
+  display: block;
+}
+
+.action-card {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-header {
+  margin-bottom: 0.75rem;
+}
+
+.sms-preview {
+  margin-top: 0.25rem;
+}
+
+.sms-preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  padding: 0.375rem 0.5rem;
+  border: 1px dashed rgba(220, 53, 69, 0.6);
+  border-radius: 0.375rem;
+}
+
+mark.sms-bad {
+  background: rgba(220, 53, 69, 0.35);
+  color: inherit;
+  padding: 0 0.1em;
+  border-radius: 0.2em;
+}
+
+.status-box:empty {
+  display: none;
+}
+
+.status-box {
+  flex: 1 1 100%;
+}
+
+.chat-result {
+  padding: 0.25rem 0;
+}
+
+.test-results table {
+  font-size: 0.9rem;
+}
+
+.issues {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 5;
+  margin-top: 1rem;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+}

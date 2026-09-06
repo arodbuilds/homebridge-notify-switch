@@ -21,6 +21,13 @@ export const PROVIDER_CHANNELS: Readonly<Record<ProviderType, readonly Channel[]
   telegram: ['telegram'],
 };
 
+/** Secret fields each provider type accepts from a `credentialsFile` (SPEC section 12, item 2). */
+export const CREDENTIAL_KEYS: Readonly<Record<ProviderType, readonly string[]>> = {
+  twilio: ['accountSid', 'apiKeySid', 'apiKeySecret'],
+  smtp: ['username', 'password'],
+  telegram: ['botToken'],
+};
+
 export interface EmailIdentity {
   address: string;
   name?: string;
@@ -152,6 +159,30 @@ export interface RecipientResult {
   id?: string;
   /** Sanitized, no secrets, no request dumps. */
   error?: string;
+}
+
+/** Outcome of a settings UI connection test (SPEC section 11.2, item 3). `message` never contains a credential. */
+export interface ConnectionTestResult {
+  ok: boolean;
+  message: string;
+}
+
+/** A chat that has messaged a Telegram bot, as listed by Find chat IDs (SPEC section 11.2, item 5). */
+export interface ChatSummary {
+  id: string;
+  title: string;
+  type: string;
+}
+
+/**
+ * Optional diagnostics a provider can offer to the settings UI. Not part of the `Provider` interface the
+ * switch code depends on; the UI server checks for these methods at runtime.
+ */
+export interface ProviderDiagnostics {
+  /** Checks the credentials against the service without sending anything. Never throws. */
+  testConnection(): Promise<ConnectionTestResult>;
+  /** Telegram only: lists chats that have messaged the bot. Never throws. */
+  findChats?(): Promise<{ ok: boolean; message: string; chats: ChatSummary[] }>;
 }
 
 export interface Provider {

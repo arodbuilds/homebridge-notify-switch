@@ -6,6 +6,17 @@ const GSM7_BASIC = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ 
 const GSM7_EXTENSION = '\f^{}\\[~]|€';
 
 const GSM7_SET: ReadonlySet<string> = new Set([...GSM7_BASIC, ...GSM7_EXTENSION]);
+const GSM7_EXTENSION_SET: ReadonlySet<string> = new Set([...GSM7_EXTENSION]);
+
+/** True when `ch` (one code point) is in the GSM-7 alphabet. */
+export function isGsm7Char(ch: string): boolean {
+  return GSM7_SET.has(ch);
+}
+
+/** True when `ch` is in the GSM-7 extension table and therefore costs two septets. */
+export function isGsm7Extension(ch: string): boolean {
+  return GSM7_EXTENSION_SET.has(ch);
+}
 
 /** Characters allowed in an sms body, as a JSON-schema friendly character class. */
 export const SMS_MAX_LENGTH = 160;

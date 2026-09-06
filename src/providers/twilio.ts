@@ -2,7 +2,9 @@ import { ACCOUNT_SID_PATTERN, API_KEY_SID_PATTERN, E164_PATTERN, EMAIL_PATTERN, 
 import type { PluginLogger } from '../logging.js';
 import { PROVIDER_CONCURRENCY } from '../settings.js';
 import { stripLineBreaks } from '../template.js';
-import type { Channel, Provider, RecipientResult, SendRequest, TwilioProviderConfig, ValidationIssue } from '../types.js';
+import type {
+  Channel, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TwilioProviderConfig, ValidationIssue,
+} from '../types.js';
 import { PROVIDER_CHANNELS } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import { parseJson, request, Semaphore, shortMessage } from './http.js';
@@ -28,7 +30,7 @@ export function plainTextAsHtml(body: string): string {
  * Twilio provider. Serves `sms` (SPEC section 6.1) with one request per recipient and `email`
  * (SPEC section 6.2) with one request per action carrying every recipient.
  */
-export class TwilioProvider implements Provider {
+export class TwilioProvider implements Provider, ProviderDiagnostics {
   readonly type = 'twilio' as const;
   readonly channels: Channel[] = [...PROVIDER_CHANNELS.twilio];
   private readonly semaphore = new Semaphore(PROVIDER_CONCURRENCY);
@@ -89,6 +91,38 @@ export class TwilioProvider implements Provider {
       // Defensive: nothing above should throw, but a provider must never reject (SPEC section 6, rule 4).
       const error = err instanceof Error ? err.message : String(err);
       return req.recipients.map((recipient) => ({ recipient, ok: false, error }));
+    }
+  }
+
+  /**
+   * Settings UI Test connection (SPEC section 11.2, item 3): GET the account resource with the API key.
+   * Nothing is sent and the response is reduced to the account's friendly name and status.
+   */
+  async testConnection(): Promise<ConnectionTestResult> {
+    try {
+      const url = `${TWILIO_API}/Accounts/${encodeURIComponent(this.config.accountSid)}.json`;
+      const outcome = await request(url, { method: 'GET', headers: this.headers('application/json') }, {
+        redact: [this.config.apiKeySecret, this.config.apiKeySid],
+      });
+      if (!outcome.ok) {
+        return { ok: false, message: outcome.error };
+      }
+      const { status, text } = outcome.response;
+      const json = parseJson(text);
+      if (status === 200) {
+        const friendly = shortMessage(json?.friendly_name ?? '', 80);
+        const accountStatus = shortMessage(json?.status ?? '', 20);
+        return { ok: true, message: `Connected to Twilio account${friendly ? ` "${friendly}"` : ''}${accountStatus ? ` (${accountStatus})` : ''}.` };
+      }
+      if (status === 401) {
+        return { ok: false, message: 'Twilio rejected the API key. Check the API Key SID and Secret.' };
+      }
+      if (status === 404) {
+        return { ok: false, message: 'Twilio could not find that Account SID with this API key.' };
+      }
+      return { ok: false, message: this.describeFailure(status, json) };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
   }
 
