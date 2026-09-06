@@ -1,0 +1,50 @@
+name: Release
+
+# Publishes to npm when a GitHub release is published (SPEC section 13, item 5).
+# A release marked as a pre-release goes to the `beta` dist-tag; a full release goes to `latest`.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  # Required for `npm publish --provenance` (Sigstore signing through GitHub's OIDC token).
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        run: npm publish --provenance --tag ${{ github.event.release.prerelease && 'beta' || 'latest' }}
+        env:
+          # TEMPORARY: the NPM_TOKEN repository secret (a granular automation token) is only needed for the
+          # first publish, because npm trusted publishing can only be configured for a package that already
+          # exists. After 0.1.0-beta.1 is on npm: open the package on npmjs.com > Settings > Trusted publisher,
+          # add this repository and `release.yml`, then delete the NPM_TOKEN secret and remove this `env`
+          # block. `registry-url` above plus `id-token: write` is all trusted publishing needs.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
