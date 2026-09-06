@@ -3,7 +3,8 @@ import type { PluginLogger } from './logging.js';
 import {
   COUNTRY_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH, HAP_NAME_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN, UUID_PATTERN,
 } from './patterns.js';
-import { createProvider, isChannelImplemented } from './providers/index.js';
+import { loadCredentialsFile } from './credentials.js';
+import { createProvider } from './providers/index.js';
 import { stripLineBreaks } from './template.js';
 import type {
   ActionConfig, Channel, EmailIdentity, FailureMode, GroupConfig, MasterSwitchConfig, NotifySwitchConfig, Provider, ProviderConfig,
@@ -275,24 +276,42 @@ function checkHapName(c: Collector, name: string | undefined, path: string): boo
 
 // ---- Section readers --------------------------------------------------------
 
-function readProvider(c: Collector, raw: unknown, path: string, seen: Set<string>, defaultCountry: string): ProviderConfig | undefined {
-  if (!isRaw(raw)) {
+function readProvider(
+  c: Collector, rawProvider: unknown, path: string, seen: Set<string>, defaultCountry: string, storagePath: string | undefined,
+): ProviderConfig | undefined {
+  if (!isRaw(rawProvider)) {
     c.error(path, 'must be an object');
     return undefined;
   }
-  const id = readString(c, raw, 'id', path, { required: true });
+  const id = readString(c, rawProvider, 'id', path, { required: true });
   const idOk = checkId(c, id, path, seen, 'provider');
-  const type = readEnum<ProviderType>(c, raw, 'type', path, PROVIDER_TYPES, undefined);
-  const name = readString(c, raw, 'name', path, { required: true });
+  const type = readEnum<ProviderType>(c, rawProvider, 'type', path, PROVIDER_TYPES, undefined);
+  const name = readString(c, rawProvider, 'name', path, { required: true });
   if (!idOk || !id || !type || !name) {
     return undefined;
+  }
+
+  // SPEC section 12, item 2: keys in credentialsFile override the provider's secret fields. Read once, here.
+  const credentialsFile = readString(c, rawProvider, 'credentialsFile', path);
+  let raw: Raw = rawProvider;
+  if (credentialsFile) {
+    const loaded = loadCredentialsFile(credentialsFile, type, storagePath);
+    for (const warning of loaded.warnings) {
+      c.warn(`${path}.credentialsFile`, warning);
+    }
+    if (loaded.error) {
+      c.error(`${path}.credentialsFile`, loaded.error);
+    } else if (loaded.values) {
+      raw = { ...rawProvider, ...loaded.values };
+      c.notice(`${path}.credentialsFile: using ${Object.keys(loaded.values).join(', ')} from "${credentialsFile}"`);
+    }
   }
 
   switch (type) {
   case 'twilio': {
     const messagingServiceSid = readString(c, raw, 'messagingServiceSid', path);
     return {
-      id, type, name,
+      id, type, name, credentialsFile,
       accountSid: readString(c, raw, 'accountSid', path, { required: true }) ?? '',
       apiKeySid: readString(c, raw, 'apiKeySid', path, { required: true }) ?? '',
       apiKeySecret: readString(c, raw, 'apiKeySecret', path, { required: true }) ?? '',
@@ -307,7 +326,7 @@ function readProvider(c: Collector, raw: unknown, path: string, seen: Set<string
       c.error(`${path}.from.address`, 'is required');
     }
     return {
-      id, type, name,
+      id, type, name, credentialsFile,
       host: readString(c, raw, 'host', path, { required: true }) ?? '',
       port: readInteger(c, raw, 'port', path, { fallback: 465, min: 1, max: 65535 }),
       security: readEnum<SmtpSecurity>(c, raw, 'security', path, SMTP_SECURITIES, 'ssl') ?? 'ssl',
@@ -318,7 +337,7 @@ function readProvider(c: Collector, raw: unknown, path: string, seen: Set<string
   }
   case 'telegram':
     return {
-      id, type, name,
+      id, type, name, credentialsFile,
       botToken: readString(c, raw, 'botToken', path, { required: true }) ?? '',
       parseMode: readEnum<TelegramParseMode>(c, raw, 'parseMode', path, TELEGRAM_PARSE_MODES, 'none') ?? 'none',
     };
@@ -506,7 +525,8 @@ async function resolveSwitch(
         }
         sender = resolution.sender;
       } else if (!providerConfig.emailFrom) {
-        c.error(`${actionPath}.channel`, `provider "${providerConfig.id}" needs emailFrom before it can send email`);
+        c.error(`${actionPath}.channel`,
+          `provider "${providerConfig.id}" cannot send email until emailFrom.address is set on it (the domain must be authenticated in the Twilio Console)`);
         continue;
       }
     }
@@ -538,11 +558,6 @@ async function resolveSwitch(
       c.error(actionPath, `no recipients resolve for ${action.channel}; add a group with ${action.channel} addresses or list recipients directly`);
     }
 
-    if (!isChannelImplemented(providerConfig.type, action.channel)) {
-      c.warn(actionPath,
-        `${action.channel} via ${providerConfig.type} is not yet implemented in this version; this action will report a failure when the switch is flipped`);
-    }
-
     actions.push({
       index,
       providerId: providerConfig.id,
@@ -558,7 +573,7 @@ async function resolveSwitch(
 
 // ---- Entry point ------------------------------------------------------------
 
-async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger): Promise<ValidationResult> {
+async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger, options: ValidateOptions): Promise<ValidationResult> {
   if (!isRaw(rawConfig)) {
     c.error('', 'platform configuration is missing');
     return { issues: c.issues, notices: c.notices };
@@ -594,7 +609,7 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
     c.error('providers', 'no providers configured; add at least one provider');
   } else {
     raw.providers.forEach((item, i) => {
-      const provider = readProvider(c, item, `providers[${i}]`, providerIds, defaultCountry);
+      const provider = readProvider(c, item, `providers[${i}]`, providerIds, defaultCountry, options.storagePath);
       if (provider) {
         providerConfigs.set(provider.id, provider);
       }
@@ -697,13 +712,18 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   return { issues: c.issues, notices: c.notices, config, switches, providers };
 }
 
+export interface ValidateOptions {
+  /** Homebridge storage directory; relative `credentialsFile` paths are resolved against it. */
+  storagePath?: string;
+}
+
 /**
  * Validates and normalizes the platform block. Never throws.
  */
-export async function validateConfig(rawConfig: unknown, log: PluginLogger): Promise<ValidationResult> {
+export async function validateConfig(rawConfig: unknown, log: PluginLogger, options: ValidateOptions = {}): Promise<ValidationResult> {
   const c = new Collector();
   try {
-    return await validateInner(c, rawConfig, log);
+    return await validateInner(c, rawConfig, log, options);
   } catch (err) {
     c.error('', `unexpected error while validating configuration: ${err instanceof Error ? err.message : String(err)}`);
     return { issues: c.issues, notices: c.notices };

@@ -111,6 +111,11 @@
               "type": "string",
               "description": "Display name for this provider."
             },
+            "credentialsFile": {
+              "title": "Credentials File",
+              "type": "string",
+              "description": "Optional. Path, relative to the Homebridge storage directory, of a JSON file whose keys override this provider's secret fields (Twilio: accountSid, apiKeySid, apiKeySecret. SMTP: username, password. Telegram: botToken). Keeps secrets out of config.json and backups. Read once when Homebridge starts."
+            },
             "accountSid": {
               "title": "Account SID",
               "type": "string",

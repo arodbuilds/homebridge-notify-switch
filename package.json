@@ -38,6 +38,7 @@
     "build": "rimraf ./dist && tsc",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
+    "test": "npm run build && node --test \"test/harness/*.test.mjs\"",
     "watch": "npm run build && npm link && nodemon"
   },
   "devDependencies": {
@@ -50,5 +51,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0"
+  },
+  "dependencies": {
+    "nodemailer": "^10.0.0"
   }
 }

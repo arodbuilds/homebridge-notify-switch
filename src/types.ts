@@ -30,6 +30,8 @@ export interface ProviderConfigBase {
   id: string;
   type: ProviderType;
   name: string;
+  /** Path, relative to the Homebridge storage directory, of a JSON file whose keys override the secret fields (SPEC section 12, item 2). */
+  credentialsFile?: string;
 }
 
 export interface TwilioProviderConfig extends ProviderConfigBase {

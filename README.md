@@ -10,7 +10,7 @@
 
 A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Each switch is always off. Turn it on from a HomeKit automation or scene, it sends one or more preset messages through the providers you configured, and it turns itself back off. Any HomeKit event can notify people by SMS, email, or Telegram.
 
-> **Status:** early development. This version sends SMS through Twilio. Email (Twilio or SMTP) and Telegram can be configured and are validated at startup, but sending on those channels reports a "not yet implemented" failure until a later release. The full specification is in [SPEC.md](./SPEC.md).
+> **Status:** early development. This version sends SMS and email through Twilio, email through SMTP, and messages through Telegram. The custom settings UI is not built yet; the schema form in the Homebridge UI covers every option. The full specification is in [SPEC.md](./SPEC.md).
 
 ## How it works
 
@@ -102,6 +102,7 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 ## Security notes
 
 - Credentials live in `config.json` like every Homebridge plugin. Homebridge UI backups contain `config.json` and should be treated as containing secrets.
+- To keep secrets out of `config.json`, set `credentialsFile` on a provider to the path of a JSON file, relative to the Homebridge storage directory. Its keys override the provider's secret fields: `accountSid`, `apiKeySid` and `apiKeySecret` for Twilio, `username` and `password` for SMTP, `botToken` for Telegram. The file is read once at startup; a missing or malformed file is reported as a configuration error and nothing is registered. Example: `{ "apiKeySecret": "..." }` in `notify-switch-twilio.json` with `"credentialsFile": "notify-switch-twilio.json"` on the provider.
 - Twilio accepts API keys only, never the Auth Token. SMTP setups should use an app password.
 - Credentials are never written to the log at any level. Phone numbers and email addresses are partially masked at info level, and message bodies are logged only when `debug` is on.
 - TLS certificate verification cannot be disabled.
@@ -111,6 +112,8 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 - **Nothing appears in HomeKit**: look for lines starting with a field path in the Homebridge log. The configuration has errors and nothing is registered until they are fixed.
 - **The switch flips but nothing is sent**: check that the master switch is on, the switch is enabled, and the cooldown has expired. Each suppressed flip is logged at info level.
 - **Twilio reports an error code**: the code and Twilio's message are logged at warn level. Look the code up at https://www.twilio.com/docs/api/errors.
+- **SMTP fails with EAUTH**: most providers require an app password rather than your login password. **ECONNECTION or ETIMEDOUT** usually means the wrong port or security setting; port 465 pairs with SSL and port 587 with STARTTLS.
+- **Telegram error 403**: the recipient has not started a chat with the bot, or blocked it. Open the bot in Telegram and send it any message. **Error 400** means the chat id is wrong or the message is not valid for the selected parse mode.
 - Turn on `debug` in the plugin settings for full addresses and message bodies in the log.
 
 ## Development
@@ -119,6 +122,7 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 npm install
 npm run build
 npm run lint
+npm test        # builds, then runs the harness in test/harness against dist with mocked fetch and SMTP
 npm run watch   # builds, links, and starts Homebridge with test/hbConfig
 ```
 

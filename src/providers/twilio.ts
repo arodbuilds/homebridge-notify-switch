@@ -1,17 +1,32 @@
 import { ACCOUNT_SID_PATTERN, API_KEY_SID_PATTERN, E164_PATTERN, EMAIL_PATTERN, MESSAGING_SERVICE_SID_PATTERN } from '../patterns.js';
 import type { PluginLogger } from '../logging.js';
 import { PROVIDER_CONCURRENCY } from '../settings.js';
+import { stripLineBreaks } from '../template.js';
 import type { Channel, Provider, RecipientResult, SendRequest, TwilioProviderConfig, ValidationIssue } from '../types.js';
 import { PROVIDER_CHANNELS } from '../types.js';
-import { notImplementedResults, validateBodyForChannel } from './bodyRules.js';
+import { validateBodyForChannel } from './bodyRules.js';
 import { parseJson, request, Semaphore, shortMessage } from './http.js';
 
-
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
+const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
+
+const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' };
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+}
 
 /**
- * Twilio provider (SPEC section 6.1). Serves `sms` now; `email` (section 6.2) is a later phase and
- * resolves to a clear "not yet implemented" result for every recipient.
+ * The Emails API requires `content.html`. Bodies are plain text (SPEC section 5.5, item 8), so the
+ * HTML part is the same text escaped and wrapped in a `pre` that keeps line breaks and wraps long lines.
+ */
+export function plainTextAsHtml(body: string): string {
+  return `<pre style="font-family: inherit; white-space: pre-wrap">${escapeHtml(body)}</pre>`;
+}
+
+/**
+ * Twilio provider. Serves `sms` (SPEC section 6.1) with one request per recipient and `email`
+ * (SPEC section 6.2) with one request per action carrying every recipient.
  */
 export class TwilioProvider implements Provider {
   readonly type = 'twilio' as const;
@@ -65,14 +80,32 @@ export class TwilioProvider implements Provider {
       switch (req.channel) {
       case 'sms':
         return await Promise.all(req.recipients.map((recipient) => this.semaphore.run(() => this.sendSms(req, recipient))));
+      case 'email':
+        return await this.semaphore.run(() => this.sendEmail(req));
       default:
-        return notImplementedResults(req.recipients, this.type, req.channel);
+        return req.recipients.map((recipient) => ({ recipient, ok: false, error: `twilio does not serve the ${req.channel} channel` }));
       }
     } catch (err) {
       // Defensive: nothing above should throw, but a provider must never reject (SPEC section 6, rule 4).
       const error = err instanceof Error ? err.message : String(err);
       return req.recipients.map((recipient) => ({ recipient, ok: false, error }));
     }
+  }
+
+  private headers(contentType: string): Record<string, string> {
+    return {
+      'Authorization': this.authorization,
+      'Content-Type': contentType,
+      'Accept': 'application/json',
+    };
+  }
+
+  /** Reduces a Twilio error response to its `code` and `message` (SPEC section 6.1, section 8 item 5). */
+  private describeFailure(status: number, json: Record<string, unknown> | undefined): string {
+    const code = json?.code !== undefined ? shortMessage(json.code, 20) : undefined;
+    const message = shortMessage(json?.message ?? '', 200);
+    const detail = message.length > 0 ? message : `HTTP ${status}`;
+    return code ? `Twilio error ${code}: ${detail}` : `Twilio HTTP ${status}: ${detail}`;
   }
 
   private async sendSms(req: SendRequest, recipient: string): Promise<RecipientResult> {
@@ -90,11 +123,7 @@ export class TwilioProvider implements Provider {
     const url = `${TWILIO_API}/Accounts/${encodeURIComponent(this.config.accountSid)}/Messages.json`;
     const outcome = await request(url, {
       method: 'POST',
-      headers: {
-        'Authorization': this.authorization,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
+      headers: this.headers('application/x-www-form-urlencoded'),
       body: form.toString(),
     }, {
       redact: [this.config.apiKeySecret, this.config.apiKeySid],
@@ -111,11 +140,50 @@ export class TwilioProvider implements Provider {
       this.log.debug(`twilio ${this.id}: message accepted for ${this.log.address(recipient, 'sms')}${sid ? ` (${sid})` : ''}`);
       return { recipient, ok: true, id: sid };
     }
+    return { recipient, ok: false, error: this.describeFailure(status, json) };
+  }
 
-    const code = json?.code !== undefined ? shortMessage(json.code, 20) : undefined;
-    const message = shortMessage(json?.message ?? '', 200);
-    const detail = message.length > 0 ? message : `HTTP ${status}`;
-    const error = code ? `Twilio error ${code}: ${detail}` : `Twilio HTTP ${status}: ${detail}`;
-    return { recipient, ok: false, error };
+  /**
+   * SPEC section 6.2: one request per action with every recipient in `to`; `operationId` is the id for
+   * all of them. The API takes `from` and `to` as `{ address, name }` objects and requires
+   * `content.subject` and `content.html`; `content.text` carries the plain body.
+   */
+  private async sendEmail(req: SendRequest): Promise<RecipientResult[]> {
+    const from = this.config.emailFrom;
+    if (!from) {
+      return req.recipients.map((recipient) => ({ recipient, ok: false, error: 'emailFrom is not configured on this provider' }));
+    }
+    const fromName = from.name ? stripLineBreaks(from.name) : '';
+    const payload = {
+      from: fromName ? { address: from.address, name: fromName } : { address: from.address },
+      to: req.recipients.map((address) => ({ address })),
+      content: {
+        subject: stripLineBreaks(req.subject ?? ''),
+        html: plainTextAsHtml(req.body),
+        text: req.body,
+      },
+    };
+
+    const outcome = await request(TWILIO_EMAIL_API, {
+      method: 'POST',
+      headers: this.headers('application/json'),
+      body: JSON.stringify(payload),
+    }, {
+      redact: [this.config.apiKeySecret, this.config.apiKeySid],
+    });
+
+    if (!outcome.ok) {
+      return req.recipients.map((recipient) => ({ recipient, ok: false, error: outcome.error }));
+    }
+
+    const { status, text } = outcome.response;
+    const json = parseJson(text);
+    if (status === 202) {
+      const operationId = typeof json?.operationId === 'string' ? json.operationId : undefined;
+      this.log.debug(`twilio ${this.id}: email accepted for ${req.recipients.length} recipient(s)${operationId ? ` (${operationId})` : ''}`);
+      return req.recipients.map((recipient) => ({ recipient, ok: true, id: operationId }));
+    }
+    const error = this.describeFailure(status, json);
+    return req.recipients.map((recipient) => ({ recipient, ok: false, error }));
   }
 }
