@@ -1,6 +1,9 @@
 # Ignore source code
 src
 
+# Project conventions for contributors, not needed at runtime
+CLAUDE.md
+
 # ------------- Defaults ------------- #
 
 # gitHub actions

@@ -30,6 +30,20 @@ export default tseslint.config(
       sourceType: 'module',
     },
   },
+  {
+    // The local harness is plain ESM run by Node; these are the Node globals it uses.
+    files: ['test/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        Buffer: 'readonly',
+        Response: 'readonly',
+        URLSearchParams: 'readonly',
+        setImmediate: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
 );

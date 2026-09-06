@@ -53,13 +53,22 @@ export class NotifySwitchPlatform implements DynamicPlatformPlugin {
     this.cached.set(accessory.UUID, accessory);
   }
 
+  /** Homebridge storage directory, used to resolve relative `credentialsFile` paths. */
+  private storagePath(): string | undefined {
+    try {
+      return this.api.user.storagePath();
+    } catch {
+      return undefined;
+    }
+  }
+
   /** True when sends are allowed by the master switch (or when no master switch is exposed). */
   isMasterOn(): boolean {
     return this.master ? this.master.isOn : true;
   }
 
   private async start(): Promise<void> {
-    const result = await validateConfig(this.config, this.log);
+    const result = await validateConfig(this.config, this.log, { storagePath: this.storagePath() });
 
     for (const notice of result.notices) {
       this.log.info(notice);

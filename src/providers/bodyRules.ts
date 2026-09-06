@@ -1,5 +1,5 @@
 import { describeCharacter, firstNonGsm7Character, SMS_MAX_LENGTH } from '../gsm7.js';
-import type { Channel, RecipientResult, ValidationIssue } from '../types.js';
+import type { Channel, ValidationIssue } from '../types.js';
 
 export const EMAIL_MAX_LENGTH = 10000;
 export const TELEGRAM_MAX_LENGTH = 4096;
@@ -49,13 +49,4 @@ export function validateBodyForChannel(channel: Channel, body: string): Validati
   }
   }
   return issues;
-}
-
-/** Result set for a channel a provider type serves but this version does not implement yet. */
-export function notImplementedResults(recipients: string[], providerType: string, channel: Channel): RecipientResult[] {
-  return recipients.map((recipient) => ({
-    recipient,
-    ok: false,
-    error: `${channel} via ${providerType} is not yet implemented in this version of homebridge-notify-switch`,
-  }));
 }
