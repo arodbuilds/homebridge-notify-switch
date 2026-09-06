@@ -51,11 +51,12 @@ test('twilio sms: per-recipient failure carries the Twilio code and message', as
 test('twilio email: one request for every recipient, operationId returned as id for each', async () => {
   const fetch = installFetch(() => ({ status: 202, body: JSON.stringify({ operationId: 'op-123' }) }));
   try {
+    const body = 'Water detected under the sink <kitchen> & "pantry".\nCheck now.';
     const results = await provider().send({
       channel: 'email',
       recipients: ['a@example.com', 'b@example.com'],
       subject: 'Water\r\nleak',
-      body: 'Water detected.',
+      body,
     });
     assert.deepEqual(results, [
       { recipient: 'a@example.com', ok: true, id: 'op-123' },
@@ -63,13 +64,30 @@ test('twilio email: one request for every recipient, operationId returned as id 
     ]);
     assert.equal(fetch.calls.length, 1);
     assert.equal(fetch.calls[0].url, 'https://comms.twilio.com/v1/Emails');
+    assert.equal(fetch.calls[0].init.method, 'POST');
     assert.equal(fetch.calls[0].headers.Authorization, EXPECTED_AUTH);
     assert.equal(fetch.calls[0].headers['Content-Type'], 'application/json');
+    // Exact request shape of POST https://comms.twilio.com/v1/Emails: `address` keys, and `content` with subject, html and text.
     assert.deepEqual(JSON.parse(fetch.calls[0].body), {
-      from: { email: 'alerts@example.com', name: 'Home' },
-      to: [{ email: 'a@example.com' }, { email: 'b@example.com' }],
-      content: { subject: 'Water leak', text: 'Water detected.' },
+      from: { address: 'alerts@example.com', name: 'Home' },
+      to: [{ address: 'a@example.com' }, { address: 'b@example.com' }],
+      content: {
+        subject: 'Water leak',
+        html: '<pre style="font-family: inherit; white-space: pre-wrap">'
+          + 'Water detected under the sink &lt;kitchen&gt; &amp; &quot;pantry&quot;.\nCheck now.</pre>',
+        text: body,
+      },
     });
+  } finally {
+    fetch.restore();
+  }
+});
+
+test('twilio email: from without a name is sent as address only', async () => {
+  const fetch = installFetch(() => ({ status: 202, body: JSON.stringify({ operationId: 'op-1' }) }));
+  try {
+    await provider({ emailFrom: { address: 'alerts@example.com' } }).send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b' });
+    assert.deepEqual(JSON.parse(fetch.calls[0].body).from, { address: 'alerts@example.com' });
   } finally {
     fetch.restore();
   }

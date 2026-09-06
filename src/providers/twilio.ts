@@ -10,6 +10,20 @@ import { parseJson, request, Semaphore, shortMessage } from './http.js';
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
 const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
 
+const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' };
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+}
+
+/**
+ * The Emails API requires `content.html`. Bodies are plain text (SPEC section 5.5, item 8), so the
+ * HTML part is the same text escaped and wrapped in a `pre` that keeps line breaks and wraps long lines.
+ */
+export function plainTextAsHtml(body: string): string {
+  return `<pre style="font-family: inherit; white-space: pre-wrap">${escapeHtml(body)}</pre>`;
+}
+
 /**
  * Twilio provider. Serves `sms` (SPEC section 6.1) with one request per recipient and `email`
  * (SPEC section 6.2) with one request per action carrying every recipient.
@@ -129,7 +143,11 @@ export class TwilioProvider implements Provider {
     return { recipient, ok: false, error: this.describeFailure(status, json) };
   }
 
-  /** SPEC section 6.2: one request per action with every recipient in `to`; `operationId` is the id for all of them. */
+  /**
+   * SPEC section 6.2: one request per action with every recipient in `to`; `operationId` is the id for
+   * all of them. The API takes `from` and `to` as `{ address, name }` objects and requires
+   * `content.subject` and `content.html`; `content.text` carries the plain body.
+   */
   private async sendEmail(req: SendRequest): Promise<RecipientResult[]> {
     const from = this.config.emailFrom;
     if (!from) {
@@ -137,10 +155,11 @@ export class TwilioProvider implements Provider {
     }
     const fromName = from.name ? stripLineBreaks(from.name) : '';
     const payload = {
-      from: fromName ? { email: from.address, name: fromName } : { email: from.address },
-      to: req.recipients.map((email) => ({ email })),
+      from: fromName ? { address: from.address, name: fromName } : { address: from.address },
+      to: req.recipients.map((address) => ({ address })),
       content: {
         subject: stripLineBreaks(req.subject ?? ''),
+        html: plainTextAsHtml(req.body),
         text: req.body,
       },
     };
