@@ -1,8 +1,8 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
 import { helpToggle, idField } from '../card.js';
-import { GROUPS_SECTION, ID_FIELD, TELEGRAM_HELP } from '../copy.js';
-import { addButton, cardFooter, dangerLinkButton, disclosure, el, helpText, paragraph, textField } from '../dom.js';
+import { GROUP_NAME_HELP, GROUPS_SECTION, ID_FIELD, REMOVE, TELEGRAM_HELP } from '../copy.js';
+import { addButton, cardFooter, dangerLinkButton, disclosure, el, helpText, inlineConfirm, paragraph, textField } from '../dom.js';
 import { createGroup, slugify, uniqueSlug } from '../model.js';
 import type { UiGroup } from '../model.js';
 
@@ -43,29 +43,35 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
       idInput.value = g.id;
     }
     app.changed(true);
-  }, { path: `${path}.name`, required: true, placeholder: 'Family' }));
+  }, { path: `${path}.name`, required: true, placeholder: 'e.g. Family', help: GROUP_NAME_HELP }));
 
   const onChange = (): void => app.changed(true);
-  body.appendChild(el('div', { class: 'mb-3' },
-    el('label', { class: 'form-label' }, 'Phone numbers (SMS)'),
-    addressList({ channel: 'sms', values: g.sms, defaultCountry: app.config.defaultCountry, path: `${path}.sms`, onChange }).el,
-  ));
-  body.appendChild(el('div', { class: 'mb-3' },
-    el('label', { class: 'form-label' }, 'Email addresses'),
-    addressList({ channel: 'email', values: g.email, defaultCountry: app.config.defaultCountry, path: `${path}.email`, onChange }).el,
-  ));
-  const telegramList = addressList({ channel: 'telegram', values: g.telegram, defaultCountry: app.config.defaultCountry, path: `${path}.telegram`, onChange });
+  const list = (channel: 'sms' | 'email' | 'telegram'): HTMLElement => addressList({
+    channel, values: g[channel], defaultCountry: app.config.defaultCountry, path: `${path}.${channel}`, onChange,
+    onRemove: (i) => app.entryRemoved(`${path}.${channel}`, i),
+  }).el;
+  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Phone numbers (SMS)'), list('sms')));
+  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Email addresses'), list('email')));
   body.appendChild(el('div', { class: 'mb-3' },
     el('label', { class: 'form-label' }, 'Telegram chat IDs'),
-    telegramList.el,
+    list('telegram'),
     helpText(TELEGRAM_HELP.chatIds),
   ));
   body.appendChild(disclosure('Advanced', [id], { attrs: { 'data-advanced': path } }));
 
-  // Footer (SPEC section 11.2, item 11): Remove group on the left, nothing on the right.
-  const remove = dangerLinkButton('Remove group', () => {
-    app.config.groups.splice(index, 1);
-    app.rerender('groups', true);
+  // Footer (SPEC section 11.2, item 11): Remove group on the left with its in-place confirmation, nothing on the right.
+  const remove = inlineConfirm({
+    start: dangerLinkButton('Remove group', () => undefined),
+    question: () => REMOVE.question('group'),
+    confirmLabel: REMOVE.confirm,
+    confirmClass: 'btn btn-danger btn-sm',
+    cancelLabel: REMOVE.cancel,
+    cls: 'ns-remove-confirm',
+    onConfirm: () => {
+      app.config.groups.splice(index, 1);
+      app.entryRemoved('groups', index);
+      app.rerender('groups', true);
+    },
   });
   card.appendChild(header);
   card.appendChild(body);

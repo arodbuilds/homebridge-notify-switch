@@ -250,9 +250,73 @@ export function statusBox(): { el: HTMLElement; set(kind: 'success' | 'danger' |
   };
 }
 
-/** A link-style (text) button: no border or background, used for secondary actions such as Add action and Cancel. */
+/** A link-style (text) button: no border or background, used for secondary actions such as Cancel and Dismiss. */
 export function linkButton(label: string, onClick: () => void, extra = ''): HTMLButtonElement {
   return button(label, onClick, `btn btn-link btn-sm p-0 ns-link-button${extra ? ` ${extra}` : ''}`);
+}
+
+/** An outlined secondary button: every "Add …" control and Cancel in the chooser (SPEC section 11.2, item 11). */
+export function outlineButton(label: string, onClick: () => void, extra = ''): HTMLButtonElement {
+  return button(label, onClick, `btn btn-outline-secondary btn-sm${extra ? ` ${extra}` : ''}`);
+}
+
+/** Replaces the sentence and link of a field's help line (the SMTP password help follows the chosen mail provider). */
+export function setHelp(field: HTMLElement, text: string, link?: HelpLinkSpec): void {
+  const help = field.querySelector<HTMLElement>(':scope > .ns-help');
+  if (!help) {
+    return;
+  }
+  clear(help);
+  append(help, text, link ? ' ' : null, link ? helpLink(link) : null);
+}
+
+export interface InlineConfirmOptions {
+  /** The button that opens the confirmation; it is put back when the confirmation closes. */
+  start: HTMLElement;
+  /** The question shown in place of the button, computed when it opens. */
+  question: () => string;
+  confirmLabel: string;
+  /** Classes of the confirm button, for example `btn btn-danger btn-sm`. */
+  confirmClass: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  /** Extra class on the container, for tests and layout. */
+  cls?: string;
+}
+
+/**
+ * In-place confirmation (SPEC section 11.2, item 11): clicking `start` replaces it with the question, a
+ * confirm button and a text Cancel button. Escape or Cancel restores the original button. Shared by Test
+ * send and the three Remove buttons so they behave the same way.
+ */
+export function inlineConfirm(opts: InlineConfirmOptions): HTMLElement {
+  const control = el('span', { class: `d-inline-flex flex-wrap align-items-center gap-2 ns-inline-confirm${opts.cls ? ` ${opts.cls}` : ''}` });
+  let onKey: (event: KeyboardEvent) => void = () => undefined;
+  const reset = (): void => {
+    document.removeEventListener('keydown', onKey);
+    clear(control);
+    control.appendChild(opts.start);
+  };
+  onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      reset();
+    }
+  };
+  opts.start.addEventListener('click', () => {
+    clear(control);
+    control.appendChild(el('span', { class: 'small ns-confirm-question' }, opts.question()));
+    const confirm = button(opts.confirmLabel, () => {
+      reset();
+      opts.onConfirm();
+    }, opts.confirmClass);
+    control.appendChild(confirm);
+    control.appendChild(linkButton(opts.cancelLabel, reset));
+    document.addEventListener('keydown', onKey);
+    confirm.focus();
+  });
+  control.appendChild(opts.start);
+  return control;
 }
 
 /** A red text button: Remove and Reset only (SPEC section 11.3). */

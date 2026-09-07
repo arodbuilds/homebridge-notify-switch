@@ -39,6 +39,12 @@ export const CHOOSER = {
   cancel: 'Cancel',
 };
 
+/** Provider type badge text in card headers and dropdowns (SPEC section 11.2, item 13). */
+export const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = { twilio: 'Twilio', smtp: 'SMTP', telegram: 'Telegram' };
+
+/** Provider Name field help, with examples (SPEC section 11.3). */
+export const PROVIDER_NAME_HELP = 'How this provider is listed when you set up a switch. For example: Twilio, Home Gmail, Family bot.';
+
 /** Guided empty state (SPEC section 11.2, item 19): the Get started card and the disabled Add buttons. */
 export const GET_STARTED = {
   title: 'Get started',
@@ -92,18 +98,16 @@ export const TWILIO_HELP = {
 };
 
 export const SMTP_HELP = {
-  server: 'Your mail provider\'s outgoing server settings.',
-  commonSettings: 'Common settings',
-  commonSettingsRows: [
-    ['Fastmail', 'smtp.fastmail.com', '465', 'SSL'],
-    ['Gmail', 'smtp.gmail.com', '465', 'SSL'],
-    ['iCloud', 'smtp.mail.me.com', '587', 'STARTTLS'],
-    ['Outlook.com', 'smtp-mail.outlook.com', '587', 'STARTTLS'],
-  ],
-  username: 'Usually your full email address.',
+  presetLabel: 'Mail provider',
+  preset: 'Pick your mail service to fill in the server settings. Choose Other for any other mail server.',
+  server: 'Your mail provider\'s outgoing server settings. For example: smtp.fastmail.com, 465, SSL.',
+  serverLocked: 'Filled in from the mail provider above. Click Edit to change them.',
+  edit: 'Edit',
+  username: 'Usually your full email address. For example: you@example.com.',
   password: 'Use an app password, not your login password. Most providers require it.',
   passwordLink: { text: 'Where do I create one?', href: 'https://github.com/arodbuilds/homebridge-notify-switch#app-passwords' } as HelpLink,
-  fromAddress: 'The address messages come from. Your provider must allow sending from it.',
+  fromAddress: 'The address messages come from. Your provider must allow sending from it. For example: alerts@example.com.',
+  fromName: 'Optional. Some providers replace this with your account\'s display name.',
 };
 
 export const TELEGRAM_HELP = {
@@ -115,11 +119,14 @@ export const TELEGRAM_HELP = {
 
 export const GROUPS_SECTION = 'A group is a list of people. Switches send to groups, so you enter each person once.';
 
+/** Group Name field help, with examples (SPEC section 11.3). */
+export const GROUP_NAME_HELP = 'Who is in this list. For example: Family, Neighbors, On-call.';
+
 export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on runs every action below it, then the switch turns itself off. '
   + 'Add one action per channel you want.';
 
 export const SWITCH_HELP = {
-  name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes.',
+  name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes. For example: Water Leak Alert, Smoke Alarm.',
   cooldownSeconds: 'Minimum seconds between sends for this switch. 0 disables the cooldown.',
   failureMode: 'Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged.',
   failureSensor: 'Adds a sensor to this switch that HomeKit automations can watch. It opens when a message fails to send.',
@@ -128,11 +135,14 @@ export const SWITCH_HELP = {
   bodySms: 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.',
   bodyOther: 'Plain text.',
   sender: 'Automatic uses the only sender, or the Messaging Service when one is set.',
+  bcc: 'Hide recipients from each other (BCC)',
+  bccHelp: 'Recipients go in Bcc and your from address in To, so nobody sees the other addresses. A message to one recipient always uses To.',
 };
 
-/** The "Variables" toggle next to every body and subject field (SPEC section 11.2, item 17). */
+/** The "Show variables" toggle next to every body and subject field (SPEC section 11.2, item 17). */
 export const VARIABLES = {
-  label: 'Variables',
+  show: 'Show variables',
+  hide: 'Hide variables',
   intro: 'Type these anywhere in the message or subject:',
   items: [
     ['{{switchName}}', 'the switch name'],
@@ -162,6 +172,29 @@ export const VALIDATION = {
   switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
   /** Shown instead of the issue list while every remaining issue is on a card nobody has touched yet (SPEC section 11.2, item 15). */
   finishNew: (what: string): string => `Fill in the new ${what} to enable Save.`,
+};
+
+/** The "Fix these before saving" box (SPEC section 11.2, item 15): a link per field, collapsed to a count past three entries. */
+export const ISSUES = {
+  heading: 'Fix these before saving:',
+  count: (n: number): string => `${n} field${n === 1 ? '' : 's'} need${n === 1 ? 's' : ''} attention`,
+  showAll: 'Show all',
+  hide: 'Hide',
+  collapseAfter: 3,
+};
+
+/** In-place Remove confirmation on card footers (SPEC section 11.2, item 11). */
+export const REMOVE = {
+  question: (what: 'provider' | 'group' | 'switch'): string => `Remove this ${what}?`,
+  confirm: 'Remove',
+  cancel: 'Cancel',
+};
+
+/** Unsaved draft recovery banner (SPEC section 11.2, item 23). */
+export const DRAFT = {
+  message: 'You have unsaved changes from earlier. Restore them?',
+  restore: 'Restore',
+  discard: 'Discard',
 };
 
 /** Telegram onboarding flow (SPEC section 11.2, item 10). */
@@ -214,12 +247,14 @@ export const TWILIO_LOOKUP = {
   servicesPlaceholder: 'Choose a Messaging Service…',
 };
 
-/** Switch card Test send confirmation (SPEC section 11.3). */
+/** Switch card Test send confirmation and its disabled-state hints (SPEC section 11.3). */
 export const TEST_SEND = {
   confirm: (count: number): string => `Send to ${count} recipient${count === 1 ? '' : 's'} now?`,
   send: 'Send',
   cancel: 'Cancel',
   dismiss: 'Dismiss',
+  fixErrors: 'Fix the errors above first',
+  noRecipients: 'No recipients yet',
 };
 
 /** Settings > Advanced: backup, restore and reset (SPEC section 11.2, item 12). */

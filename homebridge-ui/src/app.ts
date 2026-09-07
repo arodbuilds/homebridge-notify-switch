@@ -1,6 +1,12 @@
 import type { UiConfig } from './model.js';
+import type { UiIssue } from './validate.js';
 
 export type Section = 'providers' | 'groups' | 'switches' | 'settings';
+
+/** An element that wants to know the current issues after every validation pass (the Test send gate). */
+export interface ValidationListener extends HTMLElement {
+  nsOnValidate?(issues: UiIssue[]): void;
+}
 
 /** What a section needs from the page: the shared config and a way to report changes. */
 export interface App {
@@ -18,10 +24,15 @@ export interface App {
    */
   replaceConfig(config: UiConfig, reason?: 'restore' | 'reset'): void;
   /**
-   * Marks a provider, group or switch that was just added. Its card shows placeholders and no errors
+   * Marks a provider, group or switch that was just added. Its card's issues stay out of the issue list
    * until a field in it is touched (SPEC section 11.2, item 15).
    */
   addFresh(item: object): void;
-  /** Hooks a card to its item: while the item is fresh, the first focusout or change inside the card reveals its errors. */
+  /** Hooks a card to its item: while the item is fresh, the first focusout or change inside the card lifts the hold. */
   watchCard(card: HTMLElement, item: object): void;
+  /**
+   * An entry of a list (`providers`, `groups[0].sms`, `switches[1].actions`) was removed: the touched state of
+   * the entries after it moves down one index so it keeps following the right fields (SPEC section 11.2, item 15).
+   */
+  entryRemoved(listPath: string, index: number): void;
 }

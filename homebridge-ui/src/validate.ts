@@ -19,6 +19,13 @@ export interface UiIssue {
   path: string;
   label: string;
   message: string;
+  /**
+   * Other fields this check reads (SPEC section 11.2, item 15): a cross-field issue such as "nobody would
+   * receive this action" or a duplicate name belongs to every field it references, and it is shown inline
+   * once any of them has been touched. Each entry is a path prefix: `switches[0].actions[1].recipients`
+   * covers every entry of that list.
+   */
+  related?: string[];
 }
 
 const EMAIL_MAX_LENGTH = 10000;
@@ -28,8 +35,8 @@ const MAX_SECONDS = 86400;
 class Issues {
   readonly list: UiIssue[] = [];
 
-  add(path: string, label: string, message: string): void {
-    this.list.push({ path, label, message });
+  add(path: string, label: string, message: string, related?: string[]): void {
+    this.list.push(related && related.length > 0 ? { path, label, message, related } : { path, label, message });
   }
 }
 
@@ -45,14 +52,14 @@ function switchLabel(s: UiSwitch, i: number): string {
   return `Switch ${i + 1}${s.name.trim() ? ` "${s.name.trim()}"` : ''}`;
 }
 
-function checkHapName(issues: Issues, name: string, path: string, label: string): void {
+function checkHapName(issues: Issues, name: string, path: string, label: string, related?: string[]): void {
   const value = name.trim();
   if (!value) {
-    issues.add(path, label, 'Name is required.');
+    issues.add(path, label, 'Name is required.', related);
   } else if (value.length > HAP_NAME_MAX_LENGTH) {
-    issues.add(path, label, `Name must be ${HAP_NAME_MAX_LENGTH} characters or fewer.`);
+    issues.add(path, label, `Name must be ${HAP_NAME_MAX_LENGTH} characters or fewer.`, related);
   } else if (!HAP_NAME_PATTERN.test(value)) {
-    issues.add(path, label, VALIDATION.switchName);
+    issues.add(path, label, VALIDATION.switchName, related);
   }
 }
 
@@ -80,18 +87,20 @@ function checkAddress(issues: Issues, channel: Channel, value: string, path: str
   }
 }
 
-function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<string>): void {
+function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<string, string>): void {
   const path = `providers[${i}]`;
   const label = providerLabel(p, i);
   const id = p.id.trim();
+  // The id is generated from the name (SPEC section 11.2, item 14), so an id issue belongs to the name field too.
   if (!id) {
-    issues.add(`${path}.id`, label, 'ID is required.');
+    issues.add(`${path}.id`, label, 'ID is required.', [`${path}.name`]);
   } else if (!SLUG_PATTERN.test(id)) {
-    issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.');
+    issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.', [`${path}.name`]);
   } else if (seen.has(id)) {
-    issues.add(`${path}.id`, label, `ID "${id}" is used by another provider.`);
+    const other = seen.get(id) as string;
+    issues.add(`${path}.id`, label, `ID "${id}" is used by another provider.`, [`${path}.name`, `${other}.id`, `${other}.name`]);
   } else {
-    seen.add(id);
+    seen.set(id, path);
   }
   if (!p.name.trim()) {
     issues.add(`${path}.name`, label, 'Name is required.');
@@ -121,7 +130,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
       issues.add(`${path}.emailFrom.address`, label, 'Email From address is not a valid email address.');
     }
     if (!p.emailFrom.address.trim() && p.emailFrom.name.trim()) {
-      issues.add(`${path}.emailFrom.address`, label, 'Email From address is required when a from name is set.');
+      issues.add(`${path}.emailFrom.address`, label, 'Email From address is required when a from name is set.', [`${path}.emailFrom.name`]);
     }
     break;
   case 'smtp':
@@ -149,18 +158,19 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
   }
 }
 
-function checkGroup(issues: Issues, g: UiGroup, i: number, seen: Set<string>): void {
+function checkGroup(issues: Issues, g: UiGroup, i: number, seen: Map<string, string>): void {
   const path = `groups[${i}]`;
   const label = groupLabel(g, i);
   const id = g.id.trim();
   if (!id) {
-    issues.add(`${path}.id`, label, 'ID is required.');
+    issues.add(`${path}.id`, label, 'ID is required.', [`${path}.name`]);
   } else if (!SLUG_PATTERN.test(id)) {
-    issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.');
+    issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.', [`${path}.name`]);
   } else if (seen.has(id)) {
-    issues.add(`${path}.id`, label, `ID "${id}" is used by another group.`);
+    const other = seen.get(id) as string;
+    issues.add(`${path}.id`, label, `ID "${id}" is used by another group.`, [`${path}.name`, `${other}.id`, `${other}.name`]);
   } else {
-    seen.add(id);
+    seen.set(id, path);
   }
   if (!g.name.trim()) {
     issues.add(`${path}.name`, label, 'Name is required.');
@@ -207,24 +217,28 @@ function checkBody(issues: Issues, channel: Channel, body: string, path: string,
 
 function checkAction(issues: Issues, config: UiConfig, a: UiAction, path: string, label: string): void {
   const provider = config.providers.find((p) => p.id.trim() === a.providerId && a.providerId);
+  // Checks that read the provider as well as the channel or sender belong to the Provider dropdown too.
+  const viaProvider = [`${path}.providerId`];
   if (!provider) {
     issues.add(`${path}.providerId`, label, a.providerId ? `Provider "${a.providerId}" does not exist.` : 'Choose a provider.');
   } else if (!PROVIDER_CHANNELS[provider.type].includes(a.channel)) {
-    issues.add(`${path}.channel`, label, `Provider "${provider.name.trim() || provider.id}" is ${provider.type}, which cannot send ${a.channel}.`);
+    issues.add(`${path}.channel`, label, `Provider "${provider.name.trim() || provider.id}" is ${provider.type}, which cannot send ${a.channel}.`, viaProvider);
   } else if (provider.type === 'twilio' && a.channel === 'sms') {
     const senders = provider.smsSenders.map((s) => s.trim()).filter((s) => s.length > 0);
     const service = provider.messagingServiceSid.trim().length > 0;
     if (a.sender) {
       if (!senders.includes(a.sender)) {
-        issues.add(`${path}.sender`, label, `Sender ${a.sender} is not one of the provider's SMS senders.`);
+        issues.add(`${path}.sender`, label, `Sender ${a.sender} is not one of the provider's SMS senders.`, viaProvider);
       }
     } else if (senders.length === 0 && !service) {
-      issues.add(`${path}.sender`, label, `Provider "${provider.name.trim() || provider.id}" needs an SMS sender or a Messaging Service SID to send SMS.`);
+      issues.add(`${path}.sender`, label,
+        `Provider "${provider.name.trim() || provider.id}" needs an SMS sender or a Messaging Service SID to send SMS.`, viaProvider);
     } else if (senders.length > 1 && !service) {
-      issues.add(`${path}.sender`, label, 'Choose a sender: the provider has more than one SMS sender.');
+      issues.add(`${path}.sender`, label, 'Choose a sender: the provider has more than one SMS sender.', viaProvider);
     }
   } else if (provider.type === 'twilio' && a.channel === 'email' && !provider.emailFrom.address.trim()) {
-    issues.add(`${path}.channel`, label, `Provider "${provider.name.trim() || provider.id}" needs an Email From address before it can send email.`);
+    issues.add(`${path}.channel`, label,
+      `Provider "${provider.name.trim() || provider.id}" needs an Email From address before it can send email.`, viaProvider);
   }
 
   let recipients = 0;
@@ -245,12 +259,14 @@ function checkAction(issues: Issues, config: UiConfig, a: UiAction, path: string
     }
   });
   if (recipients === 0) {
-    issues.add(`${path}.groups`, label, `Nobody would receive this ${a.channel} action. Pick a group with ${a.channel} entries or add an extra recipient.`);
+    // Recipient coverage belongs to the Groups checkboxes and the extra recipients list alike.
+    const message = `Nobody would receive this ${a.channel} action. Pick a group with ${a.channel} entries or add an extra recipient.`;
+    issues.add(`${path}.groups`, label, message, [`${path}.recipients`]);
   }
   checkBody(issues, a.channel, a.body, `${path}.body`, label);
 }
 
-function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, seenIds: Set<string>, seenNames: Set<string>): void {
+function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, seenIds: Set<string>, seenNames: Map<string, string>): void {
   const path = `switches[${i}]`;
   const label = switchLabel(s, i);
   if (!UUID_PATTERN.test(s.id)) {
@@ -264,9 +280,10 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   const name = s.name.trim();
   if (name && HAP_NAME_PATTERN.test(name)) {
     if (seenNames.has(name)) {
-      issues.add(`${path}.name`, label, `Another switch is already named "${name}".`);
+      // A duplicate name belongs to both name fields: touching either reveals it.
+      issues.add(`${path}.name`, label, `Another switch is already named "${name}".`, [`${seenNames.get(name)}.name`]);
     } else {
-      seenNames.add(name);
+      seenNames.set(name, path);
     }
   }
   if (!Number.isInteger(s.cooldownSeconds) || s.cooldownSeconds < 0 || s.cooldownSeconds > MAX_SECONDS) {
@@ -276,7 +293,8 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
     issues.add(`${path}.failureSensorResetSeconds`, label, `Failure sensor reset must be a whole number between 0 and ${MAX_SECONDS}.`);
   }
   if (s.actions.length === 0) {
-    issues.add(`${path}.actions`, label, 'Add at least one action.');
+    // A new switch has no action field to touch yet; the name is the field the user fills in first.
+    issues.add(`${path}.actions`, label, 'Add at least one action.', [`${path}.name`]);
   }
   s.actions.forEach((action, k) => checkAction(issues, config, action, `${path}.actions[${k}]`, `${label}, action ${k + 1}`));
 }
@@ -294,14 +312,14 @@ export function validate(config: UiConfig): UiIssue[] {
   }
 
   // No providers or no switches is valid (a fresh install, or after Reset plugin to fresh install); startup then registers nothing.
-  const providerIds = new Set<string>();
+  const providerIds = new Map<string, string>();
   config.providers.forEach((p, i) => checkProvider(issues, p, i, providerIds));
 
-  const groupIds = new Set<string>();
+  const groupIds = new Map<string, string>();
   config.groups.forEach((g, i) => checkGroup(issues, g, i, groupIds));
 
   const switchIds = new Set<string>();
-  const switchNames = new Set<string>();
+  const switchNames = new Map<string, string>();
   config.switches.forEach((s, i) => checkSwitch(issues, config, s, i, switchIds, switchNames));
 
   return issues.list;

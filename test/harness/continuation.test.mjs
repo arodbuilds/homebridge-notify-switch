@@ -63,13 +63,13 @@ test('telegram: the second of three chats fails synchronously with 400 (chat not
 });
 
 test('smtp: the server rejects the second of three recipients with 550; the first and third are still accepted', async () => {
-  // One message carries all three in bcc; the server's per-recipient verdict is what continues past the rejection.
+  // One message carries all three in to; the server's per-recipient verdict is what continues past the rejection.
   const transport = fakeTransport([(mail) => Promise.resolve({
     messageId: '<id-3@example.com>',
-    accepted: [mail.bcc[0], mail.bcc[2]],
-    rejected: [mail.bcc[1]],
+    accepted: [mail.to[0], mail.to[2]],
+    rejected: [mail.to[1]],
     rejectedErrors: [Object.assign(new Error('Recipient command failed'), {
-      code: 'EENVELOPE', response: '550 5.1.1 No such user', responseCode: 550, recipient: mail.bcc[1],
+      code: 'EENVELOPE', response: '550 5.1.1 No such user', responseCode: 550, recipient: mail.to[1],
     })],
     envelope: {},
   })]);

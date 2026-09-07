@@ -54,7 +54,7 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     await page.locator('.ns-chooser-tile[data-type="smtp"]').click();
     const card = page.locator('.card[data-path="providers[1]"]');
     assert.equal(await card.count(), 1);
-    assert.equal(await card.locator('.card-header .badge').textContent(), 'smtp', 'the type badge stays in the header');
+    assert.equal(await card.locator('.card-header .badge').textContent(), 'SMTP', 'the type badge stays in the header and reads SMTP');
     assert.equal(await card.locator('[data-path="providers[1].name"] input').inputValue(), 'Email');
     assert.equal(await card.locator('select option', { hasText: 'SMTP (email)' }).count(), 0, 'the type cannot be changed');
     assert.equal(await card.locator('.card-body > [data-path="providers[1].id"]').count(), 0, 'the ID is not in the main form');
@@ -67,13 +67,18 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     assert.equal(config.providers[1].id, 'email');
     assert.equal(config.providers[1].type, 'smtp');
     assert.equal(config.providers[1].name, 'Email');
-    // Common settings for SMTP sit under a collapsed expander next to the one-line server help.
-    assert.equal(await card.locator('.ns-server-help').textContent(), 'Your mail provider\'s outgoing server settings.');
-    const common = card.locator('details.ns-common-settings');
-    assert.equal(await common.evaluate((node) => node.open), false);
-    assert.equal(await common.locator('summary').textContent(), 'Common settings');
-    assert.deepEqual(await common.locator('tbody td[data-label="Host"]').allTextContents(),
-      ['smtp.fastmail.com', 'smtp.gmail.com', 'smtp.mail.me.com', 'smtp-mail.outlook.com']);
+    // The Mail provider picker sits at the top of the SMTP card (SPEC section 11.2, item 22): segments on a wide screen, Other selected.
+    const picker = card.locator('.ns-preset-picker');
+    assert.equal(await picker.locator('.form-label').textContent(), 'Mail provider');
+    assert.deepEqual(await picker.locator('.ns-preset-segments label').allTextContents(),
+      ['Fastmail', 'Gmail', 'iCloud', 'Outlook.com', 'Yahoo', 'Zoho', 'Other']);
+    assert.equal(await picker.locator('.ns-preset-segments').isVisible(), true);
+    assert.equal(await picker.locator('.ns-preset-select').isVisible(), false, 'the dropdown is for narrow screens');
+    assert.equal(await picker.locator('.ns-preset-segments input:checked').getAttribute('value'), 'other');
+    assert.equal(await card.locator('details.ns-common-settings').count(), 0, 'the Common settings table is gone');
+    assert.equal(await card.locator('.ns-server-help').textContent(),
+      'Your mail provider\'s outgoing server settings. For example: smtp.fastmail.com, 465, SSL.');
+    assert.equal(await card.locator('[data-path="providers[1].host"] input').evaluate((node) => node.readOnly), false, 'Other leaves the server editable');
 
     // A second Twilio provider gets a numeric suffix; the existing one is twilio-main, so the first is plain twilio.
     await page.getByRole('button', { name: 'Add provider' }).click();
@@ -83,7 +88,25 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers.length === 4);
     assert.deepEqual(config.providers.map((p) => p.id), ['twilio-main', 'email', 'twilio', 'twilio-2']);
     assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio', 'Twilio']);
-    assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'twilio');
+    assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'Twilio');
+
+    // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in three equal columns (SPEC section 11.2, item 13).
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    assert.match(await page.locator('.ns-chooser').getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-outline-secondary\b/);
+    const tileBoxes = async () => page.locator('.ns-chooser .ns-chooser-tile').evaluateAll((nodes) => nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return { top: Math.round(rect.top), width: Math.round(rect.width), left: Math.round(rect.left) };
+    }));
+    const tilesWidth = Math.round((await page.locator('.ns-chooser .ns-chooser-tiles').boundingBox()).width);
+    let boxes = await tileBoxes();
+    assert.equal(new Set(boxes.map((b) => b.top)).size, 1, 'three across at 900px');
+    assert.ok(boxes.every((b) => Math.abs(b.width - boxes[0].width) <= 1), `equal columns: ${boxes.map((b) => b.width).join(', ')}`);
+    assert.ok(Math.abs(boxes[2].left + boxes[2].width - boxes[0].left - tilesWidth) <= 1, 'the tiles fill the card width');
+    await page.setViewportSize({ width: 400, height: 900 });
+    boxes = await tileBoxes();
+    assert.equal(new Set(boxes.map((b) => b.left)).size, 1, 'stacked below 600px');
+    assert.ok(boxes[0].top < boxes[1].top && boxes[1].top < boxes[2].top);
+    await page.setViewportSize({ width: 900, height: 900 });
   } finally {
     await browser.close();
   }
@@ -109,18 +132,26 @@ test('fresh cards: no errors until a field is touched, then errors appear; the i
     assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fill in the new provider to enable Save.');
     assert.match(await page.locator('.issues').getAttribute('class'), /\balert-info\b/);
 
-    // Touching a field (blur) reveals the errors for the whole card, with the rewritten messages.
+    // Touching a field (blur) reveals that field's error, with the rewritten message; the card's other errors go into
+    // the issue list but stay off the untouched fields (SPEC section 11.2, item 15).
     const accountSid = card.locator('[data-path="providers[1].accountSid"] input');
     await accountSid.fill('AC12');
     assert.equal(await card.locator('.is-invalid').count(), 0, 'typing alone does not reveal errors');
     await accountSid.blur();
-    assert.ok(await card.locator('.is-invalid').count() > 0, 'errors appear after blur');
+    assert.equal(await card.locator('.is-invalid').count(), 1, 'only the blurred field shows its error');
     assert.equal(await card.locator('[data-path="providers[1].accountSid"] .invalid-feedback').textContent(),
       'That does not look like an Account SID. It starts with AC and is 34 characters; copy it from the Twilio Console.');
+    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] .invalid-feedback').textContent(), '', 'an untouched field shows nothing');
+    assert.equal(await page.locator('.issues li').count(), 3, 'the issue list fills in: Account SID, API Key SID, API Key Secret');
+    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:', 'three entries are shown in full');
+    assert.equal(await page.locator('.issues .ns-issues-toggle').isVisible(), false);
+    // Each entry is a link that marks the field touched, focuses it and shows its message.
+    const apiKeyLink = page.locator('.issues .ns-issue-link[data-issue-path="providers[1].apiKeySid"]');
+    assert.equal(await apiKeyLink.count(), 1);
+    await apiKeyLink.click();
     assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] .invalid-feedback').textContent(),
       'That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console.');
-    assert.ok(await page.locator('.issues li').count() > 0, 'the issue list fills in');
-    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:');
+    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] input').evaluate((node) => node === document.activeElement), true);
 
     // The id follows the name until the provider is referenced by a switch.
     const name = card.locator('[data-path="providers[1].name"] input');
@@ -214,11 +245,16 @@ test('show help toggle, Variables toggle, and the channel dropdown limited to th
     const action = page.locator('.action-card').first();
     const bodyHelp = action.locator('[data-path="switches[0].actions[0].body"] .ns-help');
     assert.equal(await bodyHelp.textContent(), 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.');
-    const variables = action.getByRole('button', { name: 'Variables' });
+    const variables = action.locator('.ns-variables-toggle');
     assert.equal(await variables.count(), 1);
+    assert.equal(await action.getByRole('button', { name: 'Show variables' }).count(), 1);
+    assert.match(await variables.getAttribute('class'), /\bbtn-link\b/, 'a link-styled toggle');
+    assert.equal(await variables.locator('.ns-chevron').count(), 1, 'with a chevron');
     assert.equal(await action.locator('.ns-variables').isVisible(), false);
     await variables.click();
     assert.equal(await action.locator('.ns-variables').isVisible(), true);
+    assert.equal(await variables.textContent(), 'Hide variables');
+    assert.equal(await variables.getAttribute('aria-expanded'), 'true');
     assert.deepEqual(await action.locator('.ns-variables code').allTextContents(), ['{{switchName}}', '{{time}}', '{{date}}', '{{datetime}}']);
     assert.equal(await action.locator('.ns-variables a').getAttribute('href'), 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables');
     // The channel dropdown offers only what the Twilio provider serves, with no help text.

@@ -1,6 +1,8 @@
 import { HomebridgePluginUiServer } from '@homebridge/plugin-ui-utils';
 
-import { findChats, lookupTwilio, payloadProvider, payloadTestSend, pluginVersion, telegramBot, testProvider, testSend } from './handlers.js';
+import {
+  findChats, hostTimeZone, lookupTwilio, payloadProvider, payloadTestSend, pluginVersion, telegramBot, testProvider, testSend,
+} from './handlers.js';
 
 /**
  * Server side of the custom settings UI (SPEC section 11.2). Started by the Homebridge UI as a child
@@ -17,6 +19,7 @@ class NotifySwitchUiServer extends HomebridgePluginUiServer {
     this.onRequest('/telegram-bot', (payload: unknown) => telegramBot(payloadProvider(payload), options()));
     this.onRequest('/twilio-lookup', (payload: unknown) => lookupTwilio(payloadProvider(payload), options()));
     this.onRequest('/version', () => pluginVersion());
+    this.onRequest('/host-timezone', () => hostTimeZone());
     this.onRequest('/test-send', (payload: unknown) => {
       const { config, switchId } = payloadTestSend(payload);
       return testSend(config, switchId, options());

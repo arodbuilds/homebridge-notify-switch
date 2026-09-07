@@ -86,6 +86,8 @@ export interface ActionConfig {
   recipients: string[];
   subject?: string;
   body: string;
+  /** Email only. Hide recipients from each other: they go in Bcc and the from address in To (SPEC section 6.2 and 6.3). Default false. */
+  bcc?: boolean;
 }
 
 export interface SwitchConfig {
@@ -129,6 +131,8 @@ export interface ResolvedAction {
   recipients: string[];
   subject?: string;
   body: string;
+  /** Email only: recipients in Bcc instead of To. */
+  bcc?: boolean;
 }
 
 export interface ResolvedSwitch extends Omit<SwitchConfig, 'actions'> {
@@ -150,6 +154,11 @@ export interface SendRequest {
   recipients: string[];
   subject?: string;
   body: string;
+  /**
+   * Email only. When true and there is more than one recipient, recipients go in Bcc and the from
+   * address in To, so they do not see each other. Otherwise every recipient is in To (SPEC section 6.2 and 6.3).
+   */
+  bcc?: boolean;
 }
 
 export interface RecipientResult {

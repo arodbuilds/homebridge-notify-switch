@@ -74,8 +74,9 @@ export function idField(opts: IdFieldOptions): HTMLElement {
 }
 
 /**
- * The "Variables" toggle placed on a message or subject field's label row. `extra` goes into the field's
- * `labelExtra`; `box` is inserted after the control and lists the template variables when open.
+ * The "Show variables" / "Hide variables" toggle placed on a message or subject field's label row (SPEC
+ * section 11.2, item 17): a link-styled button with a chevron that turns when the list is open. `extra`
+ * goes into the field's `labelExtra`; `box` is inserted after the control and lists the template variables.
  */
 export function variablesToggle(): { extra: HTMLElement; box: HTMLElement } {
   const box = el('div', { class: 'ns-variables form-text', hidden: true },
@@ -83,10 +84,17 @@ export function variablesToggle(): { extra: HTMLElement; box: HTMLElement } {
     el('ul', { class: 'mb-1 ps-3' }, ...VARIABLES.items.map(([token, meaning]) => el('li', {}, el('code', {}, token), ` ${meaning}`))),
     helpLink(VARIABLES.link),
   );
-  const extra = linkButton(VARIABLES.label, () => {
+  const chevron = el('span', { class: 'ns-chevron', 'aria-hidden': 'true' });
+  const label = el('span', {}, VARIABLES.show);
+  const extra = linkButton('', () => {
     box.hidden = !box.hidden;
-    extra.setAttribute('aria-expanded', box.hidden ? 'false' : 'true');
+    const open = !box.hidden;
+    extra.setAttribute('aria-expanded', open ? 'true' : 'false');
+    extra.classList.toggle('ns-open', open);
+    label.textContent = open ? VARIABLES.hide : VARIABLES.show;
   }, 'ns-variables-toggle');
+  extra.appendChild(chevron);
+  extra.appendChild(label);
   extra.setAttribute('aria-expanded', 'false');
   return { extra, box };
 }

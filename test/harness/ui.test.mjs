@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { SmtpProvider } from '../../dist/providers/smtp.js';
-import { findChats, lookupTwilio, pluginVersion, telegramBot, testProvider, testSend } from '../../dist/ui/handlers.js';
+import { findChats, hostTimeZone, lookupTwilio, pluginVersion, telegramBot, testProvider, testSend } from '../../dist/ui/handlers.js';
+import { timeZoneCountry } from '../../dist/timeZones.js';
 import { fakeLogger, installFetch, platformConfig, SMTP, storageDir, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
@@ -488,6 +489,25 @@ test('test-provider: credentialsFile is applied from the storage directory, just
   } finally {
     fetch.restore();
   }
+});
+
+test('host-timezone: the endpoint reports the host\'s IANA zone and the static table maps zones to countries', () => {
+  const result = hostTimeZone();
+  assert.equal(result.ok, true);
+  assert.equal(result.timeZone, Intl.DateTimeFormat().resolvedOptions().timeZone);
+  assert.equal(result.message, '');
+  // The table covers the zones people run Homebridge in and yields nothing for zones shared by several countries.
+  assert.equal(timeZoneCountry('Europe/Berlin'), 'DE');
+  assert.equal(timeZoneCountry('America/New_York'), 'US');
+  assert.equal(timeZoneCountry('America/Toronto'), 'CA');
+  assert.equal(timeZoneCountry('Australia/Sydney'), 'AU');
+  assert.equal(timeZoneCountry('Asia/Kolkata'), 'IN');
+  assert.equal(timeZoneCountry(' Europe/London '), 'GB', 'surrounding whitespace is ignored');
+  assert.equal(timeZoneCountry('UTC'), undefined, 'a zone that spans countries names none');
+  assert.equal(timeZoneCountry('Etc/GMT+5'), undefined);
+  assert.equal(timeZoneCountry(''), undefined);
+  assert.equal(timeZoneCountry(undefined), undefined);
+  assert.equal(timeZoneCountry(42), undefined);
 });
 
 test('version: the footer endpoint reports the installed package version from package.json', () => {

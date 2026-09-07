@@ -3,16 +3,17 @@ import type { Channel, RecipientResult } from '../../../src/types.js';
 import { PROVIDER_CHANNELS } from '../../../src/types.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
-import type { App } from '../app.js';
+import type { App, ValidationListener } from '../app.js';
 import { helpToggle, variablesToggle } from '../card.js';
-import { SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { PROVIDER_TYPE_LABEL, REMOVE, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
-  addButton, button, cardFooter, checkboxField, clear, dangerLinkButton, el, linkButton, numberField, paragraph, selectField, statusBox, textField,
-  textareaField,
+  addButton, button, cardFooter, checkboxField, clear, dangerLinkButton, el, inlineConfirm, linkButton, numberField, outlineButton, paragraph,
+  selectField, statusBox, textField, textareaField,
 } from '../dom.js';
 import { exportConfig, newAction, newSwitch } from '../model.js';
 import type { UiAction, UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
+import type { UiIssue } from '../validate.js';
 import { groupTitle } from './groups.js';
 import { providerTitle } from './providers.js';
 
@@ -69,8 +70,10 @@ function actionCard(
   const provider = providerFor(app, a);
   const header = el('div', { class: 'action-header d-flex justify-content-between align-items-center' },
     el('span', { class: 'fw-semibold' }, `Action ${index + 1}`),
+    // List-entry Remove buttons stay single-click (SPEC section 11.2, item 11).
     button('Remove action', () => {
       s.actions.splice(index, 1);
+      app.entryRemoved(`switches[${switchIndex}].actions`, index);
       app.changed();
       rerenderSwitch();
     }, 'btn btn-outline-danger btn-sm'),
@@ -79,7 +82,7 @@ function actionCard(
 
   const providerOptions = [
     { value: '', label: app.config.providers.length === 0 ? 'No providers configured' : 'Choose a provider…', disabled: true },
-    ...app.config.providers.filter((p) => p.id.trim()).map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${p.type})` })),
+    ...app.config.providers.filter((p) => p.id.trim()).map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
   ];
   if (a.providerId && !provider) {
     providerOptions.push({ value: a.providerId, label: `${a.providerId} (missing)` });
@@ -171,18 +174,26 @@ function actionCard(
     el('label', { class: 'form-label' }, `Extra recipients (${CHANNEL_LABELS[a.channel]})`),
     addressList({
       channel: a.channel, values: a.recipients, defaultCountry: app.config.defaultCountry, path: `${path}.recipients`,
-      onChange: () => app.changed(), emptyText: 'None. Groups above cover everyone unless you add someone here.',
+      onChange: () => app.changed(), onRemove: (i) => app.entryRemoved(`${path}.recipients`, i),
+      emptyText: 'None. Groups above cover everyone unless you add someone here.',
     }).el,
   ));
 
   if (a.channel === 'email') {
     const variables = variablesToggle();
+    const name = s.name.trim();
     body.appendChild(withVariables(textField('Subject', a.subject, (value) => {
       a.subject = value;
       app.changed();
     }, {
-      path: `${path}.subject`, placeholder: s.name.trim() || 'Defaults to the switch name', help: SWITCH_HELP.subject, labelExtra: variables.extra,
+      path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name', help: SWITCH_HELP.subject,
+      labelExtra: variables.extra,
     }), variables.box));
+    // Recipients see each other in To unless this is checked (SPEC section 6.2 and 6.3).
+    body.appendChild(checkboxField(SWITCH_HELP.bcc, a.bcc, (value) => {
+      a.bcc = value;
+      app.changed();
+    }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp }));
   }
 
   const counter = a.channel === 'sms' ? smsCounter() : undefined;
@@ -194,6 +205,7 @@ function actionCard(
   }, {
     path: `${path}.body`, required: true, rows: a.channel === 'sms' ? 3 : 5, help: a.channel === 'sms' ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther,
     labelExtra: variables.extra,
+    placeholder: a.channel === 'sms' ? 'e.g. Water detected under the kitchen sink at {{time}}.' : 'e.g. Water detected at {{time}} on {{date}}.',
   });
   withVariables(bodyField, variables.box);
   if (counter) {
@@ -232,8 +244,26 @@ function recipientCount(app: App, s: UiSwitch): number {
   return seen.size;
 }
 
+/** The paths whose issues block a Test send of this switch: the switch itself and the providers and groups it uses. */
+function testSendScope(app: App, s: UiSwitch, index: number): string[] {
+  const scope = [`switches[${index}]`];
+  for (const a of s.actions) {
+    const p = app.config.providers.findIndex((entry) => entry.id.trim() === a.providerId && a.providerId);
+    if (p >= 0) {
+      scope.push(`providers[${p}]`);
+    }
+    for (const groupId of a.groups) {
+      const g = app.config.groups.findIndex((entry) => entry.id.trim() === groupId);
+      if (g >= 0) {
+        scope.push(`groups[${g}]`);
+      }
+    }
+  }
+  return scope;
+}
+
 interface TestSendPanel {
-  /** The footer control: the Test send button, replaced in place by the confirmation while it is open. */
+  /** The footer control: the Test send button with its hint, replaced in place by the confirmation while it is open. */
   control: HTMLElement;
   /** Per-recipient results, rendered below the footer with a Dismiss link. */
   results: HTMLElement;
@@ -242,26 +272,15 @@ interface TestSendPanel {
 /**
  * Test send (SPEC section 11.2, item 4, and section 11.3): the outlined Test send button is replaced in
  * place by "Send to {n} recipients now?" with a primary Send button and a text Cancel button. Escape or
- * Cancel restores the button. Results appear below the card footer with a Dismiss link.
+ * Cancel restores the button. Results appear below the card footer with a Dismiss link. The button is
+ * disabled, with a short hint beside it, while the switch has validation errors or no recipients, so the
+ * confirmation can never read "Send to 0 recipients".
  */
-function testSendPanel(app: App, s: UiSwitch): TestSendPanel {
+function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
   const status = statusBox();
   const results = el('div', { class: 'ns-card-results test-results' });
-  const control = el('span', { class: 'd-inline-flex flex-wrap align-items-center gap-2 test-send' });
-
   const start = el('button', { type: 'button', class: 'btn btn-outline-primary btn-sm' }, 'Test send');
-  let onKey: (event: KeyboardEvent) => void = () => undefined;
-  const reset = (): void => {
-    document.removeEventListener('keydown', onKey);
-    clear(control);
-    control.appendChild(start);
-  };
-  onKey = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      reset();
-    }
-  };
+  const hint = el('span', { class: 'form-text ns-test-send-hint', hidden: true });
   const showResults = (result: TestSendResult): void => {
     clear(results);
     status.set(result.ok ? 'success' : 'danger', result.message);
@@ -287,21 +306,30 @@ function testSendPanel(app: App, s: UiSwitch): TestSendPanel {
     }
     results.appendChild(linkButton(TEST_SEND.dismiss, () => clear(results)));
   };
-  start.addEventListener('click', () => {
-    const count = recipientCount(app, s);
-    clear(control);
-    control.appendChild(el('span', { class: 'small test-send-question' }, TEST_SEND.confirm(count)));
-    control.appendChild(button(TEST_SEND.send, async () => {
-      reset();
+  const confirm = inlineConfirm({
+    start,
+    question: () => TEST_SEND.confirm(recipientCount(app, s)),
+    confirmLabel: TEST_SEND.send,
+    confirmClass: 'btn btn-primary btn-sm',
+    cancelLabel: TEST_SEND.cancel,
+    cls: 'test-send',
+    onConfirm: async () => {
       clear(results);
       status.set('info', 'Sending…');
       results.appendChild(status.el);
       showResults(await callServer<TestSendResult>('/test-send', { config: exportConfig(app.config), switchId: s.id }));
-    }, 'btn btn-primary btn-sm'));
-    control.appendChild(linkButton(TEST_SEND.cancel, reset));
-    document.addEventListener('keydown', onKey);
+    },
   });
-  control.appendChild(start);
+  const control: ValidationListener = el('span', { class: 'd-inline-flex flex-wrap align-items-center gap-2 ns-on-validate ns-test-send' }, confirm, hint);
+  control.nsOnValidate = (issues: UiIssue[]): void => {
+    const scope = testSendScope(app, s, index);
+    const blocked = issues.some((issue) => scope.some((prefix) => issue.path === prefix || issue.path.startsWith(`${prefix}.`)));
+    const reason = blocked ? TEST_SEND.fixErrors : recipientCount(app, s) === 0 ? TEST_SEND.noRecipients : '';
+    start.disabled = reason.length > 0;
+    start.title = reason;
+    hint.textContent = reason;
+    hint.hidden = reason.length === 0;
+  };
   return { control, results };
 }
 
@@ -319,7 +347,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     s.name = value;
     title.textContent = switchTitle(s);
     app.changed();
-  }, { path: `${path}.name`, required: true, placeholder: 'Water Leak Alert', help: SWITCH_HELP.name }));
+  }, { path: `${path}.name`, required: true, placeholder: 'e.g. Water Leak Alert', help: SWITCH_HELP.name }));
   body.appendChild(el('div', { class: 'form-text ns-help mb-3 switch-id', 'data-path': `${path}.id` },
     'ID ', el('code', {}, s.id), ' (generated; HomeKit tracks the switch by this id, so you can rename it freely)', el('div', { class: 'invalid-feedback' })));
 
@@ -362,8 +390,8 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   }
   actions.appendChild(el('div', { class: 'invalid-feedback' }));
   body.appendChild(actions);
-  // Add action: a secondary, link-style button directly under the actions list (SPEC section 11.2, item 11).
-  body.appendChild(el('div', { class: 'ns-add-action' }, linkButton('Add action', () => {
+  // Add action: an outlined secondary button directly under the actions list, like Add phone number (SPEC section 11.2, item 11).
+  body.appendChild(el('div', { class: 'ns-add-action' }, outlineButton('Add action', () => {
     const first = app.config.providers.find((p) => p.id.trim());
     s.actions.push(newAction(first?.id.trim() ?? '', first ? PROVIDER_CHANNELS[first.type][0] : 'sms'));
     app.changed();
@@ -371,11 +399,20 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   })));
   body.appendChild(coverage.el);
 
-  // Footer: Remove switch on the left, Test send on the right; results below the footer.
-  const testSend = testSendPanel(app, s);
-  const remove = dangerLinkButton('Remove switch', () => {
-    app.config.switches.splice(index, 1);
-    app.rerender('switches');
+  // Footer: Remove switch (with its in-place confirmation) on the left, Test send on the right; results below the footer.
+  const testSend = testSendPanel(app, s, index);
+  const remove = inlineConfirm({
+    start: dangerLinkButton('Remove switch', () => undefined),
+    question: () => REMOVE.question('switch'),
+    confirmLabel: REMOVE.confirm,
+    confirmClass: 'btn btn-danger btn-sm',
+    cancelLabel: REMOVE.cancel,
+    cls: 'ns-remove-confirm',
+    onConfirm: () => {
+      app.config.switches.splice(index, 1);
+      app.entryRemoved('switches', index);
+      app.rerender('switches');
+    },
   });
 
   card.appendChild(header);

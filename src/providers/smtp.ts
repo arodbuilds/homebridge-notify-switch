@@ -71,8 +71,9 @@ interface Attempt {
 
 /**
  * SMTP provider (SPEC section 6.3) on nodemailer. One message per action with every recipient in
- * `bcc` and the from address in `to`. Certificate verification cannot be disabled and nodemailer's
- * `debug` and `logger` options are never set.
+ * `to`; with the action's `bcc` option and more than one recipient, the recipients go in `bcc` and
+ * the from address in `to` so they do not see each other. Certificate verification cannot be
+ * disabled and nodemailer's `debug` and `logger` options are never set.
  */
 export class SmtpProvider implements Provider, ProviderDiagnostics {
   readonly type = 'smtp' as const;
@@ -202,10 +203,11 @@ export class SmtpProvider implements Provider, ProviderDiagnostics {
     const from = this.config.from;
     const fromName = from.name ? stripLineBreaks(from.name) : '';
     const identity = fromName ? { name: fromName, address: from.address } : { address: from.address };
+    // Recipients see each other in To unless the action hides them; a single recipient always goes in To.
+    const hide = req.bcc === true && req.recipients.length > 1;
     const mail: SendMailOptions = {
       from: identity,
-      to: identity,
-      bcc: req.recipients,
+      ...(hide ? { to: identity, bcc: req.recipients } : { to: req.recipients }),
       subject: stripLineBreaks(req.subject ?? ''),
       text: req.body,
     };

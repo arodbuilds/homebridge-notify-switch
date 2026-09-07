@@ -14,7 +14,7 @@ function nodemailerError(fields) {
   return Object.assign(new Error(fields.message ?? 'failed'), fields);
 }
 
-const accepted = (mail) => Promise.resolve({ messageId: '<id-1@example.com>', accepted: [...mail.bcc], rejected: [], envelope: {} });
+const accepted = (mail) => Promise.resolve({ messageId: '<id-1@example.com>', accepted: [...(mail.bcc ?? mail.to)], rejected: [], envelope: {} });
 
 test('smtp: security maps to secure and requireTLS; debug and logger are never set', () => {
   const cases = [
@@ -36,7 +36,7 @@ test('smtp: security maps to secure and requireTLS; debug and logger are never s
   }
 });
 
-test('smtp: one message per action, recipients in bcc, from in to, header line breaks stripped', async () => {
+test('smtp: one message per action, recipients in to by default, header line breaks stripped', async () => {
   const transport = fakeTransport([accepted]);
   const results = await provider(transport, { from: { address: 'alex@example.com', name: 'Home\r\nBcc: x@y' } }).send({
     channel: 'email',
@@ -50,21 +50,35 @@ test('smtp: one message per action, recipients in bcc, from in to, header line b
   ]);
   assert.equal(transport.sent.length, 1);
   const mail = transport.sent[0];
-  assert.deepEqual(mail.bcc, RECIPIENTS);
+  assert.deepEqual(mail.to, RECIPIENTS, 'recipients see each other in To (SPEC section 6.3)');
+  assert.ok(!('bcc' in mail), 'no Bcc without the action option');
   assert.deepEqual(mail.from, { name: 'Home Bcc: x@y', address: 'alex@example.com' });
-  assert.deepEqual(mail.to, mail.from);
   assert.equal(mail.subject, 'Leak X-Injected: 1');
   assert.equal(mail.text, 'Water detected.');
   assert.ok(!('html' in mail));
 });
 
+test('smtp: with bcc set, recipients go in bcc and the from address in to; a single recipient always goes in to', async () => {
+  const hidden = fakeTransport([accepted]);
+  const results = await provider(hidden).send({ channel: 'email', recipients: RECIPIENTS, subject: 's', body: 'b', bcc: true });
+  assert.deepEqual(results.map((r) => r.ok), [true, true]);
+  assert.equal(hidden.sent.length, 1);
+  assert.deepEqual(hidden.sent[0].bcc, RECIPIENTS);
+  assert.deepEqual(hidden.sent[0].to, { name: 'Home', address: 'alex@example.com' }, 'the from address keeps the envelope valid');
+
+  const single = fakeTransport([accepted]);
+  await provider(single).send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b', bcc: true });
+  assert.deepEqual(single.sent[0].to, ['a@example.com'], 'one recipient is always addressed directly');
+  assert.ok(!('bcc' in single.sent[0]));
+});
+
 test('smtp: addresses the server rejected become per-recipient failures', async () => {
   const transport = fakeTransport([(mail) => Promise.resolve({
     messageId: '<id-2@example.com>',
-    accepted: [mail.bcc[0]],
-    rejected: [mail.bcc[1]],
+    accepted: [mail.to[0]],
+    rejected: [mail.to[1]],
     rejectedErrors: [nodemailerError({
-      code: 'EENVELOPE', message: 'Recipient command failed', response: '550 5.1.1 No such user', responseCode: 550, recipient: mail.bcc[1],
+      code: 'EENVELOPE', message: 'Recipient command failed', response: '550 5.1.1 No such user', responseCode: 550, recipient: mail.to[1],
     })],
     envelope: {},
   })]);
@@ -81,8 +95,8 @@ test('smtp: when every recipient is rejected the per-recipient errors are kept a
     message: 'Can\'t send mail - all recipients were rejected',
     response: '550 5.1.1 No such user',
     responseCode: 550,
-    rejected: [...mail.bcc],
-    rejectedErrors: mail.bcc.map((recipient) => nodemailerError({
+    rejected: [...mail.to],
+    rejectedErrors: mail.to.map((recipient) => nodemailerError({
       code: 'EENVELOPE', message: 'Recipient command failed', response: `550 5.1.1 <${recipient}> not found`, responseCode: 550, recipient,
     })),
   }))]);

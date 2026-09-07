@@ -124,7 +124,9 @@ Emails are sent as plain text. An email action on a Twilio provider without `ema
 
 ### SMTP (email through your own mailbox)
 
-SMTP serves the `email` channel through any mail account. The plugin sends one message per action with the recipients in `Bcc`, so recipients do not see each other's addresses. TLS certificate verification is always on.
+SMTP serves the `email` channel through any mail account. The plugin sends one message per action with every recipient in `To`, so recipients see each other; tick **Hide recipients from each other (BCC)** on an action to put them in `Bcc` with your from address in `To` instead (a message to one recipient always uses `To`). TLS certificate verification is always on.
+
+In the settings UI the SMTP card opens with a **Mail provider** picker (Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other). Picking one fills the server settings below and locks them (click **Edit** to change them), and the password help links straight to that provider's app-password page. Choose **Other** for any other mail server.
 
 | Field | Value |
 | --- | --- |
@@ -139,6 +141,8 @@ SMTP serves the `email` channel through any mail account. The plugin sends one m
 | Gmail | `smtp.gmail.com` | 465 | `ssl` |
 | iCloud | `smtp.mail.me.com` | 587 | `starttls` |
 | Outlook.com | `smtp-mail.outlook.com` | 587 | `starttls` |
+| Yahoo | `smtp.mail.yahoo.com` | 465 | `ssl` |
+| Zoho | `smtp.zoho.com` | 465 | `ssl` |
 
 #### App passwords
 
@@ -173,6 +177,16 @@ Apple help: [App-specific passwords](https://support.apple.com/102654) and [Mail
 2. Use `smtp-mail.outlook.com`, port `587`, `starttls`, your full address as `username`, the app password as `password`, and your Outlook.com address as `from.address`.
 
 Microsoft is retiring password sign-in for third-party apps on personal accounts. If the mail server rejects an app password with `EAUTH`, use Fastmail, Gmail, iCloud, or Twilio for email instead. Microsoft help: [POP, IMAP, and SMTP settings for Outlook.com](https://support.microsoft.com/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040).
+
+#### Yahoo
+
+1. Open [Generate and manage third-party app passwords](https://help.yahoo.com/kb/SLN15241.html) and follow the steps to create an app password named `Homebridge`.
+2. Use `smtp.mail.yahoo.com`, port `465`, `ssl`, your full Yahoo address as `username`, the app password as `password`, and your Yahoo address as `from.address`.
+
+#### Zoho
+
+1. Open [Zoho Accounts > Security > App Passwords](https://accounts.zoho.com/home#security/app_passwords) and generate one named `Homebridge`.
+2. Use `smtp.zoho.com` (or your region's Zoho host, such as `smtp.zoho.eu`), port `465`, `ssl`, your full Zoho address as `username`, the app password as `password`, and your Zoho address as `from.address`.
 
 #### Other mail servers
 
@@ -241,11 +255,12 @@ Each action has:
 | `groups` | Recipient groups to send to. |
 | `recipients` | Extra individual addresses for this channel, on top of the groups. At least one address must come from `groups` or `recipients`. |
 | `subject` | Email only. Defaults to the switch name. Line breaks are removed. |
+| `bcc` | Email only, default `false`. **Hide recipients from each other (BCC)**: recipients go in `Bcc` and the from address in `To`. A message to a single recipient always uses `To`. |
 | `body` | The message. SMS: 1 to 160 characters from the GSM-7 set, so no emoji; the settings UI shows a live character and segment counter and highlights characters SMS cannot carry. Email: up to 10,000 characters of plain text. Telegram: up to 4,096 characters. |
 
 Recipients from every group plus `recipients` are merged and deduplicated before sending. Each SMS and each Telegram message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
 
-The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends its actions to the real recipients and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save as long as the switch has no validation errors.
+The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends its actions to the real recipients and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
 
 The plugin checks the whole configuration when Homebridge starts and logs every problem with its field path, for example:
 
@@ -497,7 +512,9 @@ Group chat IDs are negative. If a group was upgraded to a supergroup, its ID cha
 ### Settings UI
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
-- **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to. A card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save."
+- **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to and is a link that takes you to the field. A field shows its error only after you leave it (or jump to it from the list), and a card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save." With more than three items the list collapses to "{n} fields need attention"; click **Show all**.
+- **"You have unsaved changes from earlier" appears at the top**: you closed the settings without saving last time. **Restore** brings those changes back into the form (every field is checked at once); **Discard** forgets them. The draft is kept in your browser for 24 hours and is cleared once the same configuration has been saved, or when you reset the plugin.
+- **The default country was wrong on first load**: on a fresh install the settings UI guesses it from your browser's language, else from the Homebridge host's time zone, else United States. Pick the right one under Settings; once saved it is never changed for you.
 - **Help text is hard to read in dark mode**: update the plugin; since 0.1.0-beta.6 secondary text follows the Homebridge UI theme, including the way the Homebridge UI marks dark mode inside the settings page.
 - **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.

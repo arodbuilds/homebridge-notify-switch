@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-beta.7] - 2026-09-07
+
+Validation and polish in the settings UI, plus two runtime changes: email recipients are in To by default with a per-action BCC option, and the default country prefill also reads the Homebridge host's time zone.
+
+### Added
+
+- Per-action **Hide recipients from each other (BCC)** checkbox on email actions (`bcc`, default false; SPEC sections 5.5, 6.2 and 6.3). SMTP and Twilio Email now put every recipient in To by default so recipients see each other; with the option on and more than one recipient, recipients go in Bcc and the from address in To as before. A single recipient is always addressed in To. Set on another channel the option is ignored with a startup warning. Harness tests cover both providers and the validation passthrough; `config.schema.json` carries the field for the schema form.
+- Default country from the host time zone (SPEC section 11.2, item 21): when the browser locale names no region, the settings UI asks the UI server for the Homebridge host's time zone (new `/host-timezone` endpoint returning `Intl.DateTimeFormat().resolvedOptions().timeZone`) and maps it to a country with a small static table (`src/timeZones.ts`), falling back to US. A saved value is never overridden. Harness tests cover the endpoint, the table, and every branch in the browser.
+- SMTP **Mail provider** preset picker (SPEC section 11.2, item 22) replacing the Common settings table: Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other, as a segmented control on wide screens and a dropdown below 600px. A preset fills host, port and security and locks them behind an **Edit** link; Other leaves them editable. The password help names the chosen provider and links directly to its app-password page (the Gmail text notes that 2-Step Verification must be on first). The preset key is stored as `smtpPreset` for redisplay only; the runtime reads host, port and security. From name help: "Some providers replace this with your account's display name."
+- Unsaved draft recovery (SPEC section 11.2, item 23): every change is written to `localStorage` under `homebridge-notify-switch:draft`; on the next load a draft that differs from the saved configuration and is less than 24 hours old is offered in a banner ("You have unsaved changes from earlier. Restore them?" with **Restore** and **Discard**). Restore loads the draft and marks every field touched; a draft equal to the saved configuration is removed; a Reset confirm never leaves a draft behind. The Homebridge UI exposes no hook to intercept Close, so the banner is the recovery path.
+- Green check inside a field once it passes validation after being touched.
+- Browser tests: per-field validation (blur, focus, clearing, checks), input bounding boxes unchanged when an error appears on an email entry and a phone entry, issue list links and collapsing, Test send gating, in-place Remove confirmation, placeholder italics and a 2:1 contrast check against the input text colour in both themes, outlined button hover and focus state, chooser columns, draft recovery, the SMTP presets, and the time zone branches.
+
+### Changed
+
+- Per-field validation (SPEC section 11.2, item 15): touched state is tracked per field rather than per card. A field shows its error only after it has been left, changed (selects and checkboxes) or jumped to from the issue list; while it has focus an error is only ever cleared, never added. Cross-field checks (recipient coverage, duplicate names, ids that follow the name, provider-dependent channel and sender checks, "Add at least one action") belong to every field they read and appear once one of those fields is touched. New cards still show nothing until a field is touched and their issues stay out of the list behind "Fill in the new … to enable Save."
+- Error layout: validation messages render on their own line below the field or list row; address rows put the input and Remove in a flex line with the message as a block below, so inputs never change width or wrap when a message appears. A phone row explains a parse failure once, under the number.
+- Issue list: every entry in "Fix these before saving" is a link that scrolls to the field, marks it touched and focuses it. With more than three entries the box collapses to "{n} fields need attention" with a **Show all** toggle.
+- Test send is disabled while the switch, or a provider or group it uses, has a validation issue ("Fix the errors above first") or resolves to zero recipients ("No recipients yet"); the confirmation can no longer read "Send to 0 recipients".
+- **Remove switch**, **Remove provider** and **Remove group** confirm in place like Test send: "Remove this switch?" with a red **Remove** and a text **Cancel**; Escape or Cancel restores the button. List-entry Remove buttons stay single-click.
+- **Add action** is an outlined secondary button matching **Add phone number**, directly under the actions list. The chooser's **Cancel** is an outlined secondary button too, and the chooser tiles fill the card width in three equal columns, stacked below 600px.
+- Outlined secondary buttons keep their outline on hover and focus with a subtle background highlight; they no longer take Bootstrap's solid fill.
+- Provider type badges read Twilio, SMTP and Telegram (also in the switch Provider dropdown).
+- Placeholders: every realistic-looking placeholder starts with "e.g." and placeholders are italic in the host's lighter placeholder colour in both themes. Help lines carry examples where a field has one (provider, group and switch names, SMTP username and from address, server settings).
+- The **Variables** label next to Subject and Message is a link-styled **Show variables** / **Hide variables** toggle with a chevron; the panel content is unchanged.
+- SPEC sections 5.1, 5.2, 5.5, 6.2, 6.3, 11.2 and 11.3, and the README (SMTP section with Yahoo and Zoho, actions table, Test send, troubleshooting) describe the new behaviour.
+- Version bumped to `0.1.0-beta.7`.
+
 ## [0.1.0-beta.6] - 2026-09-07
 
 Dark-mode contrast, a guided empty state, and a footer. Runtime behavior does not change, except that the settings UI now prefills the default country from the browser locale on a fresh install.
