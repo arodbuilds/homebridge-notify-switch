@@ -1,41 +1,49 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
-import { GROUPS_SECTION, TELEGRAM_HELP } from '../copy.js';
-import { button, cardFooter, dangerLinkButton, el, paragraph, textField } from '../dom.js';
-import { newGroup, slugify } from '../model.js';
+import { helpToggle, idField } from '../card.js';
+import { GROUPS_SECTION, ID_FIELD, TELEGRAM_HELP } from '../copy.js';
+import { button, cardFooter, dangerLinkButton, disclosure, el, helpText, paragraph, textField } from '../dom.js';
+import { createGroup, slugify, uniqueSlug } from '../model.js';
 import type { UiGroup } from '../model.js';
 
 export function groupTitle(g: UiGroup): string {
   return g.name.trim() || g.id.trim() || 'New group';
 }
 
+/** True when a switch action sends to this group, in which case the id must not follow the name any more. */
+function groupReferenced(app: App, id: string): boolean {
+  return id.length > 0 && app.config.switches.some((s) => s.actions.some((a) => a.groups.includes(id)));
+}
+
 function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   const path = `groups[${index}]`;
+  const others = (): string[] => app.config.groups.filter((other) => other !== g).map((other) => other.id);
   const title = el('span', { class: 'fw-semibold' }, groupTitle(g));
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center' }, title);
+  const card = el('div', { class: 'card mb-3', 'data-path': path });
+  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, g));
   const body = el('div', { class: 'card-body' });
-  let idTouched = g.id.trim().length > 0 && g.id !== slugify(g.name);
-  const idField = textField('ID', g.id, (value) => {
-    g.id = value;
-    idTouched = true;
-    app.changed(true);
-  }, {
-    path: `${path}.id`, required: true, monospace: true, placeholder: 'family',
-    help: 'Short unique identifier switches use to reference this group. Lowercase letters, numbers, dashes, and underscores.',
-  });
-  const idInput = idField.querySelector('input') as HTMLInputElement;
-  body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, textField('Name', g.name, (value) => {
-      g.name = value;
-      title.textContent = groupTitle(g);
-      if (!idTouched) {
-        g.id = slugify(value);
-        idInput.value = g.id;
-      }
+
+  // The id is generated from the name (SPEC section 11.2, item 14) and keeps following it until it is
+  // edited by hand under Advanced or a switch refers to it, so renaming never breaks a switch.
+  let idFollowsName = !groupReferenced(app, g.id.trim()) && (slugify(g.name) === '' || g.id.trim() === uniqueSlug(g.name, others(), 'group'));
+  const id = idField({
+    path: `${path}.id`, value: g.id, help: ID_FIELD.groupHelp, onChange: (value) => {
+      g.id = value;
+      idFollowsName = false;
       app.changed(true);
-    }, { path: `${path}.name`, required: true, placeholder: 'Family', help: 'Display name for this group.' })),
-    el('div', { class: 'ns-span-6' }, idField),
-  ));
+    },
+  });
+  const idInput = id.querySelector('input') as HTMLInputElement;
+
+  body.appendChild(textField('Name', g.name, (value) => {
+    g.name = value;
+    title.textContent = groupTitle(g);
+    if (idFollowsName) {
+      g.id = uniqueSlug(value, others(), 'group');
+      idInput.value = g.id;
+    }
+    app.changed(true);
+  }, { path: `${path}.name`, required: true, placeholder: 'Family' }));
 
   const onChange = (): void => app.changed(true);
   body.appendChild(el('div', { class: 'mb-3' },
@@ -50,14 +58,20 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   body.appendChild(el('div', { class: 'mb-3' },
     el('label', { class: 'form-label' }, 'Telegram chat IDs'),
     telegramList.el,
-    el('div', { class: 'form-text' }, TELEGRAM_HELP.chatIds),
+    helpText(TELEGRAM_HELP.chatIds),
   ));
+  body.appendChild(disclosure('Advanced', [id], { attrs: { 'data-advanced': path } }));
+
   // Footer (SPEC section 11.2, item 11): Remove group on the left, nothing on the right.
   const remove = dangerLinkButton('Remove group', () => {
     app.config.groups.splice(index, 1);
     app.rerender('groups', true);
   });
-  return el('div', { class: 'card mb-3', 'data-path': path }, header, body, cardFooter(remove, null));
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(cardFooter(remove, null));
+  app.watchCard(card, g);
+  return card;
 }
 
 export function renderGroups(app: App, container: HTMLElement): void {
@@ -67,7 +81,9 @@ export function renderGroups(app: App, container: HTMLElement): void {
     container.appendChild(el('div', { class: 'form-text mb-2' }, 'No groups yet.'));
   }
   container.appendChild(button('Add group', () => {
-    app.config.groups.push(newGroup());
+    const g = createGroup(app.config.groups);
+    app.config.groups.push(g);
+    app.addFresh(g);
     app.rerender('groups', true);
   }, 'btn btn-primary btn-sm'));
 }

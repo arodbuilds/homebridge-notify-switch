@@ -333,6 +333,39 @@ export function slugify(name: string): string {
   return name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 }
 
+/**
+ * The slug for `name` (or `fallback` when the name has no usable characters), with a numeric suffix
+ * when another item already uses it: `twilio`, then `twilio-2`, `twilio-3` (SPEC section 11.2, item 14).
+ */
+export function uniqueSlug(name: string, taken: Iterable<string>, fallback: string): string {
+  const used = new Set(Array.from(taken, (id) => id.trim()));
+  const base = slugify(name) || fallback;
+  if (!used.has(base)) {
+    return base;
+  }
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base.slice(0, 64 - String(n).length - 1)}-${n}`;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/** A provider created from the chooser: type fixed, name prefilled, id generated from the name (SPEC section 11.2, item 13). */
+export function createProvider(type: ProviderType, name: string, existing: UiProvider[]): UiProvider {
+  const p = newProvider(type);
+  p.name = name;
+  p.id = uniqueSlug(name, existing.map((other) => other.id), type);
+  return p;
+}
+
+/** A group created by Add group: the id is generated from the name as it is typed until a switch refers to it. */
+export function createGroup(existing: UiGroup[]): UiGroup {
+  const g = newGroup();
+  g.id = uniqueSlug('', existing.map((other) => other.id), 'group');
+  return g;
+}
+
 /** The empty default configuration written by Reset plugin to fresh install (SPEC section 11.2, item 12). */
 export function emptyConfig(): UiConfig {
   return readConfig({ platform: 'NotifySwitch', name: 'Notify Switch', configVersion: 1, providers: [], groups: [], switches: [] });

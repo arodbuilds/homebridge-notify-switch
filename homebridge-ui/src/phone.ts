@@ -109,6 +109,8 @@ export interface PhoneInputOptions {
   /** Called with the E.164 value, or the raw text when it is not a valid number, or '' when cleared. */
   onChange(value: string): void;
   label?: string;
+  /** A control (the row's Remove button) placed beside the number field so it stays on the number's line on phones. */
+  trailing?: HTMLElement;
 }
 
 /** A phone number row: country select plus national number input. Returns the row element. */
@@ -224,8 +226,10 @@ export function phoneInput(opts: PhoneInputOptions): HTMLElement {
     showError();
   }
 
+  // Below 600px the stylesheet puts the country on its own line and keeps the number and the trailing
+  // control (Remove) together on the next one (SPEC section 11.2, item 16).
   return el('div', { class: 'phone-row' },
-    el('div', { class: 'phone-controls' }, select, input),
+    el('div', { class: 'phone-controls' }, select, el('div', { class: 'phone-number-line' }, input, opts.trailing ?? null)),
     feedback,
   );
 }

@@ -48,10 +48,20 @@ export function uniqueId(prefix = 'f'): string {
   return `${prefix}-${idCounter}`;
 }
 
+export interface HelpLinkSpec {
+  text: string;
+  href: string;
+}
+
 export interface FieldOptions {
   /** Validation path this control edits, for example `providers[0].apiKeySid`; used to show inline errors. */
   path?: string;
+  /** One sentence of field help; hidden by the card's "Show help" toggle. */
   help?: string;
+  /** A "Where do I find this?" style link appended to the help sentence. */
+  helpLink?: HelpLinkSpec;
+  /** Extra control rendered on the label row, right aligned (the Variables toggle). */
+  labelExtra?: HTMLElement;
   placeholder?: string;
   type?: string;
   required?: boolean;
@@ -62,13 +72,48 @@ export interface FieldOptions {
   monospace?: boolean;
 }
 
+/** An outlined link that opens in a new tab, styled as a button. */
+export function linkOut(label: string, href: string, cls = 'btn btn-outline-primary btn-sm'): HTMLAnchorElement {
+  return el('a', { class: cls, href, target: '_blank', rel: 'noopener noreferrer', role: 'button' }, label);
+}
+
+/** A plain link to the README that opens in a new tab. */
+export function helpLink(link: HelpLinkSpec): HTMLAnchorElement {
+  return el('a', { class: 'ns-help-link', href: link.href, target: '_blank', rel: 'noopener noreferrer' }, link.text);
+}
+
+/**
+ * One line of field help: a sentence and, optionally, a README link. Carries `ns-help` so the card's
+ * "Show help" toggle can collapse it; status lines and counters do not carry the class and stay visible.
+ */
+export function helpText(text: string, link?: HelpLinkSpec, extra = ''): HTMLElement {
+  return el('div', { class: `form-text ns-help${extra ? ` ${extra}` : ''}` }, text, link ? ' ' : null, link ? helpLink(link) : null);
+}
+
 function wrapField(id: string, label: string, control: HTMLElement, opts: FieldOptions, invalidTarget?: HTMLElement): HTMLElement {
+  const star = opts.required ? el('span', { class: 'text-danger ms-1', 'aria-hidden': 'true' }, '*') : null;
+  const labelNode = el('label', { class: 'form-label', for: id }, label, star);
   return el('div', { class: 'mb-3', 'data-path': opts.path, 'data-invalid-target': invalidTarget ? 'group' : undefined },
-    el('label', { class: 'form-label', for: id }, label, opts.required ? el('span', { class: 'text-danger ms-1', 'aria-hidden': 'true' }, '*') : null),
+    opts.labelExtra ? el('div', { class: 'ns-label-row' }, labelNode, opts.labelExtra) : labelNode,
     control,
-    opts.help ? el('div', { class: 'form-text' }, opts.help) : null,
+    opts.help ? helpText(opts.help, opts.helpLink) : null,
     el('div', { class: 'invalid-feedback' }),
   );
+}
+
+/**
+ * A collapsed disclosure ("Advanced", "Common settings"). The summary is secondary text in the theme's
+ * colour so it stays readable in dark mode (SPEC section 11.2, item 18).
+ */
+export function disclosure(summary: string, body: Node[], opts: { open?: boolean; cls?: string; attrs?: Record<string, string> } = {}): HTMLDetailsElement {
+  const details = el('details', { class: `ns-advanced${opts.cls ? ` ${opts.cls}` : ''}`, ...(opts.attrs ?? {}) },
+    el('summary', { class: 'ns-secondary small' }, summary),
+    el('div', { class: 'mt-2' }, ...body),
+  );
+  if (opts.open) {
+    details.open = true;
+  }
+  return details;
 }
 
 /** A labelled input with optional help text, calling `onChange` with the new string on every input event. */
@@ -147,7 +192,7 @@ export function checkboxField(label: string, checked: boolean, onChange: (checke
   const wrapper = el('div', { class: 'form-check mb-3', 'data-path': opts.path },
     input,
     el('label', { class: 'form-check-label', for: id }, label),
-    opts.help ? el('div', { class: 'form-text' }, opts.help) : null,
+    opts.help ? helpText(opts.help, opts.helpLink) : null,
     el('div', { class: 'invalid-feedback' }),
   );
   return wrapper;
@@ -200,12 +245,13 @@ export function dangerLinkButton(label: string, onClick: () => void): HTMLButton
 
 /**
  * Card footer row (SPEC section 11.2, item 11): the red text button on the left, at most one outlined
- * primary button on the right. `right` may be empty.
+ * primary button on the right. `right` may be empty. The primary side comes first in the markup and the
+ * stylesheet reverses the row, so when the footer wraps on a phone the primary action stays on top.
  */
 export function cardFooter(left: HTMLElement | null, right: HTMLElement | null): HTMLElement {
   return el('div', { class: 'card-footer ns-card-footer' },
-    el('div', { class: 'ns-footer-left' }, left),
     el('div', { class: 'ns-footer-right' }, right),
+    el('div', { class: 'ns-footer-left' }, left),
   );
 }
 

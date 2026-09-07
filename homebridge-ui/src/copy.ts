@@ -1,86 +1,184 @@
+import type { ProviderType } from '../../src/types.js';
+
 /**
- * In-app copy, verbatim from SPEC section 11.3.
+ * In-app copy, verbatim from SPEC section 11.3. Field help is one sentence; anything longer is a
+ * "Where do I find this?" link to the matching README section.
  */
 
-export const GETTING_STARTED = 'Notify Switch creates HomeKit switches that send a message when turned on. Set it up in three steps: '
-  + 'add a Provider (the service that sends messages), create a Recipient Group (who receives them), then create a Switch (what to send). '
-  + 'You only need one provider. After saving, restart Homebridge, then use the switch in a HomeKit automation or scene. '
-  + 'The switch turns itself off after sending.';
+/**
+ * Links into the README on GitHub are written out in full (not built from a base) so the harness can
+ * read every anchor from the built bundle and check that the README section exists.
+ */
+export const README_URL = 'https://github.com/arodbuilds/homebridge-notify-switch';
 
-export const PROVIDERS_SECTION = 'A provider is a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. '
-  + 'SMTP sends email through an account you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. '
-  + 'Add only the providers you plan to use. Use Test connection to confirm credentials before saving.';
+export const WHERE_LINK = 'Where do I find this?';
+
+export interface HelpLink {
+  text: string;
+  href: string;
+}
+
+export const GETTING_STARTED = 'Notify Switch adds switches to the Home app. Turn one on, usually from an automation, and it sends a message, '
+  + 'then turns itself off.';
+
+export const GETTING_STARTED_STEPS = 'Set up in three steps: add a Provider (the service that sends), create a Recipient Group (who receives), '
+  + 'then create a Switch (what to send). You only need one provider. Save, restart Homebridge, and add the switch to a HomeKit automation.';
+
+export const PROVIDERS_SECTION = 'A provider is the service that delivers your messages. Add only the ones you will use.';
+
+/** Provider chooser (SPEC section 11.2, item 13): one tile per type, the display name each creates, and the id base. */
+export const PROVIDER_CHOOSER: Record<ProviderType, { title: string; help: string; name: string }> = {
+  twilio: { title: 'Twilio', help: 'SMS text messages, and email if you have a Twilio-authenticated domain.', name: 'Twilio' },
+  smtp: { title: 'Email (SMTP)', help: 'Send from a mailbox you already have, such as Fastmail, Gmail, iCloud, or Outlook.', name: 'Email' },
+  telegram: { title: 'Telegram', help: 'Free messages through a bot you create. Best for family group chats.', name: 'Telegram' },
+};
+
+export const CHOOSER = {
+  add: 'Add provider',
+  prompt: 'Which service should send your messages?',
+  cancel: 'Cancel',
+};
+
+/** The ID under a card's Advanced disclosure (SPEC section 11.2, item 14). */
+export const ID_FIELD = {
+  label: 'ID',
+  edit: 'Edit',
+  providerHelp: 'How switches refer to this provider in config.json.',
+  groupHelp: 'How switches refer to this group in config.json.',
+};
+
+export const CREDENTIALS_FILE_HELP = 'Optional. A JSON file, relative to the Homebridge storage directory, that holds this provider\'s secrets '
+  + 'so they stay out of config.json.';
+export const CREDENTIALS_FILE_LINK: HelpLink = {
+  text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#keeping-secrets-out-of-configjson-with-credentialsfile',
+};
 
 export const TWILIO_HELP = {
-  accountSid: 'Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC.',
-  apiKey: 'Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. '
-    + 'An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here.',
-  smsSenders: 'Twilio phone numbers you own, from Console > Phone Numbers > Manage > Active numbers. Include the country code. '
-    + 'US long codes must be registered for A2P 10DLC or messages will be filtered.',
+  accountSid: 'Copy from the Twilio Console home page. It starts with AC and is not a secret.',
+  accountSidLink: { text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#twilio-sms-and-email' } as HelpLink,
+  apiKey: 'Create a Standard key in the Twilio Console and paste its SID and secret. The secret is shown once.',
+  apiKeyLink: { text: 'Why not the Auth Token?', href: 'https://github.com/arodbuilds/homebridge-notify-switch#api-keys' } as HelpLink,
+  smsSenders: 'Numbers you own in Twilio. Use Look up numbers to pick from your account.',
+  smsSendersNote: 'US numbers must be registered for A2P 10DLC or carriers will block messages.',
+  smsSendersNoteLink: {
+    text: 'How do I register?', href: 'https://github.com/arodbuilds/homebridge-notify-switch#a2p-10dlc-registration-for-us-numbers',
+  } as HelpLink,
   messagingServiceSid: 'Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG.',
-  emailFrom: 'Optional. Required only to send email through Twilio. The domain must be authenticated at Console > Communications > Email > Domains.',
+  emailFrom: 'Send email from this address through Twilio. Its domain must be verified in the Twilio Console under Email > Domains.',
+  emailFromLink: { text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#email-through-twilio' } as HelpLink,
 };
 
 export const SMTP_HELP = {
-  server: 'Your mail provider\'s outgoing server. Fastmail: smtp.fastmail.com, 465, SSL. Gmail: smtp.gmail.com, 465, SSL. '
-    + 'iCloud: smtp.mail.me.com, 587, STARTTLS. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS.',
+  server: 'Your mail provider\'s outgoing server settings.',
+  commonSettings: 'Common settings',
+  commonSettingsRows: [
+    ['Fastmail', 'smtp.fastmail.com', '465', 'SSL'],
+    ['Gmail', 'smtp.gmail.com', '465', 'SSL'],
+    ['iCloud', 'smtp.mail.me.com', '587', 'STARTTLS'],
+    ['Outlook.com', 'smtp-mail.outlook.com', '587', 'STARTTLS'],
+  ],
   username: 'Usually your full email address.',
-  password: 'Most providers require an app password rather than your login password. Fastmail: Settings > Privacy & Security > App passwords, scope SMTP. '
-    + 'Gmail: Google Account > Security > App passwords. iCloud: appleid.apple.com > Sign-In and Security > App-Specific Passwords.',
-  fromAddress: 'Must be an address your provider allows you to send from.',
+  password: 'Use an app password, not your login password. Most providers require it.',
+  passwordLink: { text: 'Where do I create one?', href: 'https://github.com/arodbuilds/homebridge-notify-switch#app-passwords' } as HelpLink,
+  fromAddress: 'The address messages come from. Your provider must allow sending from it.',
 };
 
 export const TELEGRAM_HELP = {
-  botToken: 'BotFather replies with the token, which looks like 123456789:AAF… Treat it as a password; anyone with the token can send as the bot.',
-  chatIds: 'Chat IDs are numbers, not usernames. Use Find people and groups on the Telegram provider to add them. Group chats have negative IDs.',
+  botToken: 'BotFather sends the token. It looks like 123456789:AAF… Treat it like a password.',
+  botTokenLink: { text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#telegram' } as HelpLink,
+  chatIds: 'Use Find people and groups on your Telegram provider. IDs are numbers, not usernames.',
+  parseMode: 'How Telegram reads the message. Plain text is the safest choice.',
 };
 
-export const GROUPS_SECTION = 'A group is a named list of people. Add phone numbers for SMS, email addresses for email, and chat IDs for Telegram. '
-  + 'Switches send to groups, so you enter each person once here and reuse them everywhere. Phone numbers need a country code; pick it from the dropdown.';
+export const GROUPS_SECTION = 'A group is a list of people. Switches send to groups, so you enter each person once.';
 
-export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on sends every action listed below it, then the switch turns itself off. '
-  + 'Add one action per channel you want to use. Cooldown prevents an automation that fires repeatedly from sending the same message over and over. '
-  + 'The failure sensor is optional; turn it on if you want a HomeKit automation to tell you when a message did not go out.';
+export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on runs every action below it, then the switch turns itself off. '
+  + 'Add one action per channel you want.';
 
 export const SWITCH_HELP = {
-  name: 'Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number. This is the name shown in the Home app.',
+  name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes.',
   cooldownSeconds: 'Minimum seconds between sends for this switch. 0 disables the cooldown.',
   failureMode: 'Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged.',
-  bodySms: 'Up to 160 characters using standard characters. Emoji and some symbols are not allowed because they shorten the limit and can split the message. '
-    + 'Variables: {{switchName}}, {{time}}, {{date}}.',
-  bodyOther: 'Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}.',
+  failureSensor: 'Adds a sensor to this switch that HomeKit automations can watch. It opens when a message fails to send.',
+  failureSensorReset: 'Seconds after a failure before the sensor closes again on its own. 0 keeps it open until the next successful send.',
+  subject: 'Optional. Defaults to the switch name.',
+  bodySms: 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.',
+  bodyOther: 'Plain text.',
+  sender: 'Automatic uses the only sender, or the Messaging Service when one is set.',
+};
+
+/** The "Variables" toggle next to every body and subject field (SPEC section 11.2, item 17). */
+export const VARIABLES = {
+  label: 'Variables',
+  intro: 'Type these anywhere in the message or subject:',
+  items: [
+    ['{{switchName}}', 'the switch name'],
+    ['{{time}}', 'the time, such as 14:05'],
+    ['{{date}}', 'the date, such as 2026-09-07'],
+    ['{{datetime}}', 'date and time together'],
+  ],
+  link: { text: 'More about variables', href: 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables' } as HelpLink,
 };
 
 export const HOMEKIT_USAGE = 'After saving, restart Homebridge. Your switches appear in the Home app. Open Automations, choose a trigger such as a sensor '
   + 'detecting water, and add the switch with Turn On as the action. You can also test by tapping the switch directly.';
 
+/** Per-card help toggle (SPEC section 11.2, item 16). */
+export const HELP_TOGGLE = {
+  show: 'Show help',
+  hide: 'Hide help',
+};
+
+/** Validation messages (SPEC section 11.3): what the value looks like and where to get it. */
+export const VALIDATION = {
+  accountSid: 'That does not look like an Account SID. It starts with AC and is 34 characters; copy it from the Twilio Console.',
+  apiKeySid: 'That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console.',
+  messagingServiceSid: 'That does not look like a Messaging Service SID. It starts with MG and is 34 characters; copy it from the Twilio Console.',
+  botToken: 'That does not look like a bot token. BotFather sends it as numbers, a colon, then letters. Paste the whole thing.',
+  port: 'Port is usually 465 or 587.',
+  switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
+  /** Shown instead of the issue list while every remaining issue is on a card nobody has touched yet (SPEC section 11.2, item 15). */
+  finishNew: (what: string): string => `Fill in the new ${what} to enable Save.`,
+};
+
 /** Telegram onboarding flow (SPEC section 11.2, item 10). */
 export const TELEGRAM_ONBOARDING = {
   botFatherUrl: 'https://t.me/BotFather',
   step1Title: 'Create your bot',
+  step1Intro: 'On your phone, scan this code with the camera to open BotFather in Telegram. On a computer with Telegram installed, '
+    + 'click Open BotFather instead. Then, in the BotFather chat:',
   openBotFather: 'Open BotFather',
+  botFatherCaption: 'Scan to open BotFather',
   step1Instructions: [
     'Send /newbot.',
     'Choose a display name such as Home Alerts.',
-    'Choose a username ending in bot.',
-    'Paste the token below.',
+    'Choose a username ending in bot, for example homealerts_bot.',
+    'BotFather replies with a token. Copy it and paste it below.',
   ],
   step2Title: 'Choose how people receive messages',
   groupTitle: 'Family group chat (recommended)',
   groupText: 'Everyone in the group gets every message. Nobody has to opt in individually.',
-  addToGroup: 'Add bot to a group',
   individualTitle: 'Individual chats',
   individualText: 'Each person opens the bot and taps Start once.',
+  step3GroupTitle: 'Add the bot to your group',
+  addToGroup: 'Add bot to a group',
+  groupCaption: 'Scan to add the bot to a group',
+  groupSentence: 'Open Telegram on your phone and scan, or click the button, then pick your family group or create one. '
+    + 'Everyone in the group will get alerts.',
   step3Title: 'Invite people',
+  inviteCaption: 'Scan to start receiving alerts',
   enlarge: 'Enlarge',
   copyLink: 'Copy link',
   copyInvite: 'Copy invite message',
+  openInTelegram: 'Open in Telegram',
+  share: 'Share',
   inviteMessage: (username: string): string => `Tap this link and press Start to get alerts from our home: https://t.me/${username}?start=join`,
   connectFirst: 'Connect your bot in step 1 to get the links and QR codes.',
   findTitle: 'Find people and groups',
   findHelp: 'Lists everyone who has opened the bot and every group it has been added to. Choose a recipient group, then add people to it.',
   chooseGroup: 'Choose a recipient group first.',
   noGroups: 'Add a recipient group under Recipient Groups first.',
+  afterFind: 'Added people appear in the group\'s Telegram chat IDs list. Save when you\'re done.',
 };
 
 /** Twilio "Look up numbers" (SPEC section 11.2, item 9). */

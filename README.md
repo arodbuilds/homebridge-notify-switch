@@ -77,6 +77,8 @@ The plugin does nothing until it is configured, and it never registers accessori
 
 ## Provider setup guides
 
+In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, or Telegram) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below.
+
 Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), and Telegram asks the bot who it is. Credentials in the form are used for that one request and are not stored until you click Save.
 
 ### Twilio (SMS and email)
@@ -137,6 +139,10 @@ SMTP serves the `email` channel through any mail account. The plugin sends one m
 | iCloud | `smtp.mail.me.com` | 587 | `starttls` |
 | Outlook.com | `smtp-mail.outlook.com` | 587 | `starttls` |
 
+#### App passwords
+
+Every provider below wants an app password rather than your login password: a password created for one program, which you can revoke on its own without changing your account password. The settings UI's "Where do I create one?" link brings you here; pick your provider.
+
 #### Fastmail
 
 1. Open [Settings > Privacy & Security > App passwords](https://app.fastmail.com/settings/security/devices) and click **New app password**.
@@ -175,25 +181,29 @@ Any server that accepts an authenticated SMTP login works, including a mail rela
 
 Telegram serves the `telegram` channel through a bot you create. The Telegram provider card in the settings UI walks you through it in three steps; the same steps are below for the schema form.
 
-**Step 1: Create your bot.** Click **Open BotFather** (or scan the QR code next to it) to open [@BotFather](https://t.me/BotFather) in Telegram, then:
+**Step 1: Create your bot.** On your phone, scan the QR code on the card with the camera to open [@BotFather](https://t.me/BotFather) in Telegram. On a computer with Telegram installed, click **Open BotFather** instead. Then, in the BotFather chat:
 
 1. Send /newbot.
 2. Choose a display name such as Home Alerts.
-3. Choose a username ending in bot.
-4. Paste the token below.
+3. Choose a username ending in bot, for example homealerts_bot.
+4. BotFather replies with a token. Copy it and paste it below.
 
-BotFather replies with the token, which looks like `123456789:AAF…`. Treat it as a password; anyone with the token can send as the bot. As soon as you paste a valid token, the card checks it with Telegram and shows "Connected to @yourbot" or the error.
+The token looks like `123456789:AAF…`. Treat it like a password; anyone with the token can send as the bot. As soon as you paste a valid token, the card checks it with Telegram and shows "Connected to @yourbot" or the error.
 
-**Step 2: Choose how people receive messages.** Pick one of the two cards:
+**Step 2: Choose how people receive messages.** Pick one of the two cards; the choice decides what step 3 shows.
 
-- **Family group chat (recommended)**: everyone in the group gets every message. Nobody has to opt in individually. Click **Add bot to a group** (or scan its QR code) to open Telegram with your bot ready to be added to a group you choose.
+- **Family group chat (recommended)**: everyone in the group gets every message. Nobody has to opt in individually.
 - **Individual chats**: each person opens the bot and taps Start once.
 
-**Step 3: Invite people.** The card shows a QR code that opens the bot with a Start button. **Enlarge** shows it full screen for people in the room to scan, **Copy link** copies the link, and **Copy invite message** copies a ready-to-send text: "Tap this link and press Start to get alerts from our home: https://t.me/yourbot?start=join".
+**Step 3, for a family group: Add the bot to your group.** The card shows a QR code and an **Add bot to a group** button for the same link. Open Telegram on your phone and scan, or click the button, then pick your family group or create one. Everyone in the group will get alerts. **Copy link** copies the link to send to whoever manages the group.
 
-Then click **Find people and groups**. The plugin calls the bot's `getUpdates` and lists everyone who has opened the bot (first name and username) and every group the bot has been added to (the group title; groups appear as soon as the bot joins, before anyone posts). Choose the recipient group in the dropdown and click **Add** next to each person or group. Private chats have positive IDs; groups and channels have negative IDs such as `-1001234567890`.
+**Step 3, for individual chats: Invite people.** The card shows a QR code that opens the bot with a Start button. **Enlarge** shows it full screen for people in the room to scan, **Copy link** copies the link, and **Copy invite message** copies a ready-to-send text: "Tap this link and press Start to get alerts from our home: https://t.me/yourbot?start=join".
 
-`parseMode` is `none` by default, so the body is sent as plain text. Choose `markdown` or `html` only if you write bodies in [Telegram's formatting syntax](https://core.telegram.org/bots/api#formatting-options); a body that does not parse in the selected mode is rejected by Telegram with error 400.
+On a phone or tablet the QR codes are replaced by **Open in Telegram**, **Copy link** and, where the browser offers it, **Share**, because a phone cannot scan its own screen.
+
+Then click **Find people and groups**. The plugin calls the bot's `getUpdates` and lists everyone who has opened the bot (first name and username) and every group the bot has been added to (the group title; groups appear as soon as the bot joins, before anyone posts). Choose the recipient group in the dropdown and click **Add** next to each person or group. Added people appear in the group's Telegram chat IDs list; save when you are done. Private chats have positive IDs; groups and channels have negative IDs such as `-1001234567890`.
+
+`parseMode` is `none` by default and sits under the Telegram card's **Advanced** disclosure, so the body is sent as plain text. Choose `markdown` or `html` only if you write bodies in [Telegram's formatting syntax](https://core.telegram.org/bots/api#formatting-options); a body that does not parse in the selected mode is rejected by Telegram with error 400.
 
 If **Find people and groups** reports error 409, a webhook is set on the bot from another tool, and `getUpdates` cannot be used. Remove it with `deleteWebhook` or create a separate bot for Homebridge. More on bots: [Bots: An introduction for developers](https://core.telegram.org/bots).
 
@@ -205,7 +215,7 @@ A group is a named list of people. Each group has three lists: `sms` (phone numb
 - Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them.
 - A group with no addresses is valid but produces a startup warning if a switch uses it.
 
-Group and provider IDs are short slugs suggested from the name. They are how switches refer to groups, so renaming a group in the UI does not break the switches that use it.
+Group and provider IDs are short slugs generated from the name (`family`, `twilio`, with a numeric suffix such as `twilio-2` when the name is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
 
 ## Switches and actions
 
@@ -486,7 +496,8 @@ Group chat IDs are negative. If a group was upgraded to a supergroup, its ID cha
 ### Settings UI
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
-- **Save is disabled**: the list at the top of the page shows what to fix. Every item names the provider, group, or switch it belongs to.
+- **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to. A card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save."
+- **Help text is hard to read in dark mode**: update the plugin; since 0.1.0-beta.5 secondary text follows the Homebridge UI theme.
 - **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.
 

@@ -110,9 +110,15 @@ export function writePage() {
   return pathToFileURL(file).href;
 }
 
-/** Opens the built settings UI with `config` loaded and the stubbed server. Fails the test on any page error. */
-export async function openSettings(browser, config, { requestScript, viewport = { width: 900, height: 900 }, onPageError } = {}) {
-  const page = await browser.newPage({ viewport });
+/**
+ * Opens the built settings UI with `config` loaded and the stubbed server. Fails the test on any page error.
+ * `hasTouch` emulates a touch device; `dark` renders the page in dark mode the way the Homebridge UI does
+ * (Bootstrap's `data-bs-theme="dark"` on the root and `dark-mode` on the body); `initScript` runs before the page.
+ */
+export async function openSettings(browser, config, {
+  requestScript, viewport = { width: 900, height: 900 }, onPageError, hasTouch = false, dark = false, initScript,
+} = {}) {
+  const page = await browser.newPage({ viewport, hasTouch, colorScheme: dark ? 'dark' : 'light' });
   page.on('pageerror', (err) => {
     if (onPageError) {
       onPageError(err);
@@ -121,7 +127,21 @@ export async function openSettings(browser, config, { requestScript, viewport = 
     }
   });
   await page.addInitScript(homebridgeStub(config, requestScript));
+  if (initScript) {
+    await page.addInitScript(initScript);
+  }
   await page.goto(writePage());
+  if (dark) {
+    // Bootstrap 5.3 themes switch live on the attribute, so this can follow the load. Transitions are
+    // turned off so a colour read right after the switch is the final colour, not a frame in between.
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = '* { transition: none !important; }';
+      document.head.appendChild(style);
+      document.documentElement.setAttribute('data-bs-theme', 'dark');
+      document.body.classList.add('dark-mode');
+    });
+  }
   await page.waitForSelector('#section-settings .form-control');
   return page;
 }
