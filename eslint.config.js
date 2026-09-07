@@ -46,6 +46,7 @@ export default tseslint.config(
         console: 'readonly',
         window: 'readonly',
         document: 'readonly',
+        navigator: 'readonly',
         getComputedStyle: 'readonly',
       },
     },

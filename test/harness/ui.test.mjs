@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
 import { SmtpProvider } from '../../dist/providers/smtp.js';
-import { findChats, lookupTwilio, telegramBot, testProvider, testSend } from '../../dist/ui/handlers.js';
+import { findChats, lookupTwilio, pluginVersion, telegramBot, testProvider, testSend } from '../../dist/ui/handlers.js';
 import { fakeLogger, installFetch, platformConfig, SMTP, storageDir, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
@@ -485,4 +488,10 @@ test('test-provider: credentialsFile is applied from the storage directory, just
   } finally {
     fetch.restore();
   }
+});
+
+test('version: the footer endpoint reports the installed package version from package.json', () => {
+  const pkg = JSON.parse(readFileSync(join(resolve(import.meta.dirname, '..', '..'), 'package.json'), 'utf8'));
+  assert.deepEqual(pluginVersion(), { ok: true, message: '', version: pkg.version });
+  assert.match(pkg.version, /^\d+\.\d+\.\d+/);
 });

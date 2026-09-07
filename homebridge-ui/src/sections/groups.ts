@@ -2,7 +2,7 @@ import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
 import { helpToggle, idField } from '../card.js';
 import { GROUPS_SECTION, ID_FIELD, TELEGRAM_HELP } from '../copy.js';
-import { button, cardFooter, dangerLinkButton, disclosure, el, helpText, paragraph, textField } from '../dom.js';
+import { addButton, cardFooter, dangerLinkButton, disclosure, el, helpText, paragraph, textField } from '../dom.js';
 import { createGroup, slugify, uniqueSlug } from '../model.js';
 import type { UiGroup } from '../model.js';
 
@@ -80,10 +80,11 @@ export function renderGroups(app: App, container: HTMLElement): void {
   if (app.config.groups.length === 0) {
     container.appendChild(el('div', { class: 'form-text mb-2' }, 'No groups yet.'));
   }
-  container.appendChild(button('Add group', () => {
+  // Disabled with the "Add a provider first." hint while there is no provider (SPEC section 11.2, item 19).
+  container.appendChild(addButton('Add group', () => {
     const g = createGroup(app.config.groups);
     app.config.groups.push(g);
     app.addFresh(g);
     app.rerender('groups', true);
-  }, 'btn btn-primary btn-sm'));
+  }, app.config.providers.length > 0));
 }

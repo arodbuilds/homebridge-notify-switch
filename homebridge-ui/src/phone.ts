@@ -52,6 +52,20 @@ export function isCountry(code: string): code is CountryCode {
   return (getCountries() as string[]).includes(code.toUpperCase());
 }
 
+/**
+ * The region of a BCP 47 language tag such as `en-GB`, `pt-BR` or `zh-Hant-TW`, when it is a country the
+ * phone entry knows; undefined for a tag without a region (`de`) or an unknown one. Used to prefill the
+ * default country on first load (SPEC section 11.2, item 21).
+ */
+export function localeCountry(language: string | undefined | null): CountryCode | undefined {
+  if (typeof language !== 'string') {
+    return undefined;
+  }
+  const match = /^[a-z]{2,3}(?:-[a-z]{4})?-([a-z]{2})(?:-|$)/i.exec(language.trim());
+  const region = match?.[1]?.toUpperCase();
+  return region && isCountry(region) ? (region as CountryCode) : undefined;
+}
+
 export function countryOptions(): Array<{ value: string; label: string }> {
   return countries().map((c) => ({ value: c.code, label: `${c.flag} ${c.name} (+${c.dial})` }));
 }

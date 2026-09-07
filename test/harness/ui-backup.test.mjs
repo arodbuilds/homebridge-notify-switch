@@ -156,7 +156,8 @@ test('settings advanced: Reset plugin to fresh install needs RESET typed, then l
     await page.locator('.ns-modal input[type="text"]').fill('RESET');
     await page.locator('.ns-modal').getByRole('button', { name: 'Confirm' }).click();
     assert.equal(await page.locator('.ns-modal').count(), 0);
-    assert.equal(await page.locator('.card').count(), 0, 'no provider, group or switch cards remain');
+    assert.equal(await page.locator('.card[data-path]').count(), 0, 'no provider, group or switch cards remain');
+    assert.equal(await page.locator('.ns-get-started').count(), 1, 'the guided empty state is back');
     await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].providers.length === 0);
     const pushed = await page.evaluate(() => window.__hb.updates.at(-1)[0]);
     assert.equal(pushed.platform, 'NotifySwitch');
@@ -164,7 +165,12 @@ test('settings advanced: Reset plugin to fresh install needs RESET typed, then l
     assert.equal(pushed.configVersion, 1);
     assert.deepEqual([pushed.providers, pushed.groups, pushed.switches], [[], [], []]);
     assert.equal(await page.evaluate(() => window.__hb.save.at(-1)), true, 'Save is enabled for the empty configuration');
-    assert.equal(await page.locator('.issues').isHidden(), true, 'no validation issues for the empty configuration');
+    assert.equal(await page.locator('.issues li').count(), 0, 'no validation issues for the empty configuration');
+    // The Save status area reads the reset line until the next change (SPEC section 11.2, item 19).
+    assert.equal(await page.locator('.issues').isVisible(), true);
+    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Configuration reset. Click Save, then restart Homebridge.');
+    assert.equal(await page.locator('.issues').getAttribute('role'), 'status');
+    assert.equal(await page.getByRole('button', { name: 'Add group' }).isDisabled(), true, 'no provider yet, so Add group is disabled');
   } finally {
     await browser.close();
   }

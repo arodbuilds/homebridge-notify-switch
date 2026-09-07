@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-beta.6] - 2026-09-07
+
+Dark-mode contrast, a guided empty state, and a footer. Runtime behavior does not change, except that the settings UI now prefills the default country from the browser locale on a fresh install.
+
+### Added
+
+- Guided empty state (SPEC section 11.2, item 19): while there are no providers, the Providers section body is a single **Get started** card with the line "Choose how you want to send messages. You can add more providers later." and the three provider chooser tiles inline. The Recipient Groups and Switches sections stay visible, but **Add group** and **Add switch** are disabled, drawn outlined, with the hint "Add a provider first." Once one provider exists the page renders as before; removing the last provider brings the card back. The Save status area at the bottom reads "Nothing to save yet" while there are no providers, groups or switches, and "Configuration reset. Click Save, then restart Homebridge." immediately after a Reset, with Save enabled in both cases.
+- Version and credit footer (SPEC section 11.2, item 20) as the last element of the page: "Notify Switch v{version} · Made by Alex Rodriguez · alex-rodriguez.com · Report an issue". The version comes from the installed package.json through a new `/version` endpoint on the UI server, so it always reflects the installed package. Both links open in a new tab; the site link carries `?ref=notify-switch` and nothing else is tracked.
+- Default country from the browser locale (SPEC section 11.2, item 21): on first load with no saved `defaultCountry`, the dropdown is prefilled from the region of `navigator.language` (`en-GB` gives GB), falling back to US for a locale without a known region. A saved value is never overridden. Startup normalization is unchanged.
+- README **About** section: "Built by Alex Rodriguez. If this plugin is useful to you, say hello at alex-rodriguez.com."
+- Browser tests for the guided empty state, the footer (version from the stubbed server, links, last element, wrapping at 320px) and the locale prefill (`en-GB`, `de`, and a saved value), a handler test for `/version`, and the layout contrast test now also renders an empty configuration.
+
+### Fixed
+
+- Dark-mode contrast, second pass (SPEC section 11.2, item 18). The Homebridge UI marks dark mode inside the settings iframe by adding `dark-mode` and `config-ui-x-dark-mode-{theme}` to the body and colouring the body and cards itself; it never sets Bootstrap's `data-bs-theme` there, so Bootstrap's variables keep their light values and beta.5's `--bs-secondary-color` was near-black text on a near-black page: empty-state lines, checkbox help, field help under Settings and the Advanced disclosure toggles were invisible. The stylesheet now re-declares the theme variables it reads (`--bs-secondary-color`, `--bs-border-color`, `--bs-secondary-bg`, `--bs-link-color` and their companions) with Bootstrap's dark values under the host's body marker, and one rule styles every piece of secondary text (field help, hints, empty-state lines, captions, table captions, disabled buttons, every `details > summary`, the help toggle) with `--bs-secondary-color` falling back to the surrounding text colour. Chooser tiles no longer paint `--bs-body-bg` (white on the dark theme) and sit on the surface the host paints; disabled buttons are drawn on a plain background at full opacity.
+- The headless theme test emulated dark mode with `data-bs-theme="dark"`, which the Homebridge UI does not use, so it passed while the real page was unreadable. It now themes the page the way the host does (the host's body classes and its own body, card, alert, link and primary-button rules from homebridge-config-ui-x 5.29, no `data-bs-theme`) and asserts WCAG AA contrast in dark and light mode on a full configuration and on an empty one: an empty-state line, checkbox help, field help under Settings, the Settings > Advanced summary toggle, the Get started card's caption and tile help, the "Add a provider first." hint, a disabled Add button, the Save status line, a help link and the footer, on top of the elements checked before. Against the beta.5 stylesheet this test fails.
+
+### Changed
+
+- Version bumped to `0.1.0-beta.6`.
+
 ## [0.1.0-beta.5] - 2026-09-07
 
 Usability and copy. Runtime behavior does not change.

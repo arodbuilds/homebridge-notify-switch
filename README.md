@@ -43,6 +43,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Changelog](#changelog)
+- [About](#about)
 
 ## What it does
 
@@ -497,7 +498,7 @@ Group chat IDs are negative. If a group was upgraded to a supergroup, its ID cha
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
 - **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to. A card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save."
-- **Help text is hard to read in dark mode**: update the plugin; since 0.1.0-beta.5 secondary text follows the Homebridge UI theme.
+- **Help text is hard to read in dark mode**: update the plugin; since 0.1.0-beta.6 secondary text follows the Homebridge UI theme, including the way the Homebridge UI marks dark mode inside the settings page.
 - **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.
 
@@ -510,3 +511,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development loop, the test harn
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md).
+
+## About
+
+Built by Alex Rodriguez. If this plugin is useful to you, say hello at [alex-rodriguez.com](https://alex-rodriguez.com/?ref=notify-switch#building).

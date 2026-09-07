@@ -39,6 +39,29 @@ export const CHOOSER = {
   cancel: 'Cancel',
 };
 
+/** Guided empty state (SPEC section 11.2, item 19): the Get started card and the disabled Add buttons. */
+export const GET_STARTED = {
+  title: 'Get started',
+  intro: 'Choose how you want to send messages. You can add more providers later.',
+  addProviderFirst: 'Add a provider first.',
+};
+
+/** The Save status line at the bottom of the page while there is nothing to save (SPEC section 11.2, item 19). */
+export const SAVE_STATUS = {
+  nothing: 'Nothing to save yet',
+  reset: 'Configuration reset. Click Save, then restart Homebridge.',
+};
+
+/** Version and credit footer (SPEC section 11.2, item 20). */
+export const FOOTER = {
+  name: 'Notify Switch',
+  madeBy: 'Made by Alex Rodriguez',
+  site: 'alex-rodriguez.com',
+  siteUrl: 'https://alex-rodriguez.com/?ref=notify-switch#building',
+  issues: 'Report an issue',
+  issuesUrl: 'https://github.com/arodbuilds/homebridge-notify-switch/issues',
+};
+
 /** The ID under a card's Advanced disclosure (SPEC section 11.2, item 14). */
 export const ID_FIELD = {
   label: 'ID',

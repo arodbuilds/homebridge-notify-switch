@@ -2,6 +2,7 @@ import type { Logging } from 'homebridge';
 
 import { PluginLogger } from '../logging.js';
 import { renderAction, sendAction } from '../send.js';
+import { PLUGIN_VERSION } from '../settings.js';
 import { buildTemplateVariables } from '../template.js';
 import type {
   BotIdentity, ChatSummary, Channel, ConnectionTestResult, ProviderDiagnostics, RecipientResult, TwilioLookupResult, ValidationIssue,
@@ -168,6 +169,18 @@ export async function testSend(rawConfig: unknown, switchId: unknown, options: H
   } catch (err) {
     return { ok: false, message: `Test send failed: ${describeError(err)}` };
   }
+}
+
+export interface VersionResult {
+  ok: boolean;
+  message: string;
+  /** The installed package version, read from package.json. */
+  version: string;
+}
+
+/** The installed package version for the page footer (SPEC section 11.2, item 20). */
+export function pluginVersion(): VersionResult {
+  return { ok: true, message: '', version: PLUGIN_VERSION };
 }
 
 /** Reads the `provider` field of a request payload without trusting its shape. */
