@@ -3,7 +3,7 @@
   "displayName": "Notify Switch",
   "type": "module",
   "version": "1.1.1",
-  "description": "Homebridge switches that send SMS, email, or Telegram messages when turned on. Trigger them from HomeKit automations and scenes.",
+  "description": "Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on. Trigger them from HomeKit automations and scenes.",
   "author": {
     "name": "Alex Rodriguez",
     "url": "https://alex-rodriguez.com"

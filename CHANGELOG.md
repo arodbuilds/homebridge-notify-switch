@@ -18,6 +18,7 @@ Email deliverability and documentation. Nothing changes in the configuration for
 - **Twilio email tracking.** This release set out to disable Twilio's open and click tracking on every send, because the tracking pixel got a message scored 5.7 as spam at Fastmail. The Emails API documents no per-message setting for it, so nothing is sent and the README now says that Twilio may add tracking, that the plugin cannot turn it off, and that a household that wants none can use its own SMTP mailbox. The plan is recorded as a future item in SPEC section 15.
 - README: a "Which channel should I use?" section after the intro (email to start, Telegram or ntfy for push, SMS only when the recipient will not install anything); Twilio registration notes under the A2P 10DLC guide (Sole Proprietor 10DLC with its one brand, one campaign, one number and 1 message per second limits; toll-free verification; fees as of September 2026 with a link to Twilio's pricing page); the switch card screenshot placeholder is replaced by `assets/switch-config.png` with a caption.
 - SPEC.md: sections 6.2, 6.3, 11.3, 13, 14 and 15 record the above; status is current as of 1.1.1.
+- The package description on npm now lists ntfy: "Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on. Trigger them from HomeKit automations and scenes."
 - Version 1.1.1.
 
 ### Fixed
