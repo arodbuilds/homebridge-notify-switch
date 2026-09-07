@@ -1,9 +1,11 @@
 import { setSaveEnabled, toastError } from './api.js';
 import type { App, Section } from './app.js';
-import { GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, VALIDATION } from './copy.js';
+import { GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, SAVE_STATUS, VALIDATION } from './copy.js';
 import { clear, el } from './dom.js';
+import { renderFooter } from './footer.js';
 import { exportConfig, readConfig } from './model.js';
 import type { UiConfig } from './model.js';
+import { localeCountry } from './phone.js';
 import { renderGroups } from './sections/groups.js';
 import { renderProviders } from './sections/providers.js';
 import { renderSettings } from './sections/settings.js';
@@ -42,8 +44,13 @@ class Page implements App {
   private otherBlocks: Array<Record<string, unknown>> = [];
   /** Providers, groups and switches added this session whose card nobody has touched yet (SPEC section 11.2, item 15). */
   private readonly fresh = new WeakSet<object>();
+  /** Whether the Providers section last rendered its guided empty state (SPEC section 11.2, item 19). */
+  private providersEmpty: boolean;
+  /** True from a Reset until the next change, so the Save status area reads the reset line (SPEC section 11.2, item 19). */
+  private justReset = false;
 
   constructor(public config: UiConfig, private readonly root: HTMLElement) {
+    this.providersEmpty = config.providers.length === 0;
     root.appendChild(el('p', { class: 'lead-copy' }, GETTING_STARTED));
     root.appendChild(el('p', { class: 'lead-copy' }, GETTING_STARTED_STEPS));
     for (const section of SECTIONS) {
@@ -53,9 +60,12 @@ class Page implements App {
     }
     this.issuesList = el('ul', { class: 'mb-0 ps-3' });
     this.issuesHeading = el('div', { class: 'fw-semibold mb-1' }, 'Fix these before saving:');
+    // The Save status area: the issue list, the "Fill in the new …" line, or "Nothing to save yet".
     this.issuesBox = el('div', { class: 'issues alert alert-warning', role: 'alert', hidden: true }, this.issuesHeading, this.issuesList);
     root.appendChild(this.issuesBox);
     root.appendChild(el('p', { class: 'lead-copy mt-3' }, HOMEKIT_USAGE));
+    // The footer is the last element of the page (SPEC section 11.2, item 20).
+    root.appendChild(renderFooter());
   }
 
   setOtherBlocks(blocks: Array<Record<string, unknown>>): void {
@@ -63,15 +73,18 @@ class Page implements App {
   }
 
   renderAll(): void {
+    this.providersEmpty = this.config.providers.length === 0;
     for (const section of SECTIONS) {
       this.rerender(section.key);
     }
     this.revalidate();
   }
 
-  replaceConfig(config: UiConfig): void {
+  replaceConfig(config: UiConfig, reason?: 'restore' | 'reset'): void {
     this.config = config;
     this.renderAll();
+    this.justReset = reason === 'reset';
+    this.revalidate();
   }
 
   rerender(section: Section, refs = false): void {
@@ -81,6 +94,18 @@ class Page implements App {
     }
     clear(container);
     SECTIONS.find((s) => s.key === section)?.render(this, container);
+    if (section === 'providers') {
+      // The first provider added, or the last one removed: the Groups and Switches sections switch
+      // between their Add buttons and the disabled "Add a provider first." state (SPEC section 11.2, item 19).
+      const empty = this.config.providers.length === 0;
+      if (empty !== this.providersEmpty) {
+        this.providersEmpty = empty;
+        this.rerender('groups');
+        if (!refs) {
+          this.rerender('switches');
+        }
+      }
+    }
     if (refs && section !== 'switches') {
       this.rerender('switches');
     }
@@ -88,6 +113,7 @@ class Page implements App {
   }
 
   changed(refs = false): void {
+    this.justReset = false;
     if (refs) {
       // Provider or group identity changed: the Switches dropdowns must reflect it. Debounced because this runs per keystroke.
       this.scheduleSwitchRefresh();
@@ -176,16 +202,24 @@ class Page implements App {
     for (const issue of visible) {
       this.issuesList.appendChild(el('li', {}, el('strong', {}, `${issue.label}: `), issue.message));
     }
+    const nothingToSave = all.length === 0 && this.config.providers.length === 0 && this.config.groups.length === 0 && this.config.switches.length === 0;
     if (visible.length > 0) {
       this.issuesHeading.textContent = 'Fix these before saving:';
       this.issuesBox.className = 'issues alert alert-warning';
+      this.issuesBox.setAttribute('role', 'alert');
     } else if (held.length > 0) {
       // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
       const kinds = [...new Set(held.map((issue) => fresh.find((card) => issue.path.startsWith(card.path))?.kind ?? 'card'))];
       this.issuesHeading.textContent = VALIDATION.finishNew(kinds.join(' and '));
       this.issuesBox.className = 'issues alert alert-info';
+      this.issuesBox.setAttribute('role', 'status');
+    } else if (nothingToSave) {
+      // An empty configuration is valid; say so, or that a Reset is waiting to be saved (SPEC section 11.2, item 19).
+      this.issuesHeading.textContent = this.justReset ? SAVE_STATUS.reset : SAVE_STATUS.nothing;
+      this.issuesBox.className = 'issues alert alert-secondary';
+      this.issuesBox.setAttribute('role', 'status');
     }
-    this.issuesBox.hidden = all.length === 0;
+    this.issuesBox.hidden = all.length === 0 && !nothingToSave;
     setSaveEnabled(all.length === 0);
   }
 
@@ -229,6 +263,12 @@ class Page implements App {
   }
 }
 
+/** True when the stored platform block carries a defaultCountry of its own. */
+function hasSavedCountry(raw: unknown): boolean {
+  return typeof raw === 'object' && raw !== null && typeof (raw as { defaultCountry?: unknown }).defaultCountry === 'string'
+    && (raw as { defaultCountry: string }).defaultCountry.trim().length > 0;
+}
+
 async function start(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) {
@@ -243,7 +283,13 @@ async function start(): Promise<void> {
     const blocks = await hb.getPluginConfig();
     const index = blocks.findIndex((block) => block && typeof block === 'object' && block.platform === 'NotifySwitch');
     const raw = index >= 0 ? blocks[index] : undefined;
-    const page = new Page(readConfig(raw), root);
+    const config = readConfig(raw);
+    // First load with no saved default country: prefill it from the browser locale, US when the locale
+    // names no known country. A saved value is never overridden (SPEC section 11.2, item 21).
+    if (!hasSavedCountry(raw)) {
+      config.defaultCountry = localeCountry(navigator.language) ?? 'US';
+    }
+    const page = new Page(config, root);
     page.setOtherBlocks(blocks.filter((_, i) => i !== index));
     page.renderAll();
   } catch (err) {

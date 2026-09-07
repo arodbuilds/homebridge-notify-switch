@@ -7,7 +7,8 @@ import type { App } from '../app.js';
 import { helpToggle, variablesToggle } from '../card.js';
 import { SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
-  button, cardFooter, checkboxField, clear, dangerLinkButton, el, linkButton, numberField, paragraph, selectField, statusBox, textField, textareaField,
+  addButton, button, cardFooter, checkboxField, clear, dangerLinkButton, el, linkButton, numberField, paragraph, selectField, statusBox, textField,
+  textareaField,
 } from '../dom.js';
 import { exportConfig, newAction, newSwitch } from '../model.js';
 import type { UiAction, UiProvider, UiSwitch } from '../model.js';
@@ -394,10 +395,11 @@ export function renderSwitches(app: App, container: HTMLElement): void {
   }
   container.appendChild(host);
   container.appendChild(el('div', { class: 'list-feedback', 'data-path': 'switches' }, el('div', { class: 'invalid-feedback' })));
-  container.appendChild(button('Add switch', () => {
+  // Disabled with the "Add a provider first." hint while there is no provider (SPEC section 11.2, item 19).
+  container.appendChild(addButton('Add switch', () => {
     const s = newSwitch();
     app.config.switches.push(s);
     app.addFresh(s);
     app.rerender('switches');
-  }, 'btn btn-primary btn-sm'));
+  }, app.config.providers.length > 0));
 }

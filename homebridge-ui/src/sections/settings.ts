@@ -73,7 +73,7 @@ function advancedPanel(app: App): HTMLElement {
         return;
       }
       clear(restoreStatus);
-      app.replaceConfig(result.config);
+      app.replaceConfig(result.config, 'restore');
       toastSuccess(BACKUP.restored);
     }).catch((err: unknown) => {
       showErrors([`Could not read the file: ${err instanceof Error ? err.message : String(err)}`]);
@@ -85,7 +85,7 @@ function advancedPanel(app: App): HTMLElement {
     let closeModal: () => void = () => undefined;
     const confirm = button(BACKUP.resetConfirm, () => {
       closeModal();
-      app.replaceConfig(emptyConfig());
+      app.replaceConfig(emptyConfig(), 'reset');
       toastSuccess(BACKUP.resetDone);
     }, 'btn btn-danger btn-sm');
     confirm.disabled = true;

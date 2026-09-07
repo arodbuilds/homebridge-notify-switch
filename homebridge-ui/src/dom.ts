@@ -3,6 +3,8 @@
  * Homebridge UI, which injects its stylesheet and theme into the settings iframe.
  */
 
+import { GET_STARTED } from './copy.js';
+
 type Child = Node | string | null | undefined | false;
 
 export function append(parent: Node, ...children: Child[]): void {
@@ -214,6 +216,21 @@ export function button(label: string, onClick: () => void, cls = 'btn btn-outlin
 
 export function paragraph(text: string, cls = 'section-copy'): HTMLElement {
   return el('p', { class: cls }, text);
+}
+
+/**
+ * A section's Add button (Add group, Add switch). While no provider exists it is disabled, drawn as an
+ * outlined button so it reads as disabled on every theme, with the "Add a provider first." hint beside
+ * it (SPEC section 11.2, item 19).
+ */
+export function addButton(label: string, onClick: () => void, enabled: boolean): HTMLElement {
+  const node = button(label, onClick, enabled ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm');
+  if (enabled) {
+    return node;
+  }
+  node.disabled = true;
+  node.title = GET_STARTED.addProviderFirst;
+  return el('div', { class: 'ns-add-row' }, node, el('span', { class: 'form-text ns-add-hint' }, GET_STARTED.addProviderFirst));
 }
 
 /** Inline status line under a button: `kind` picks the Bootstrap alert colour. */

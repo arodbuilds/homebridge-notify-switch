@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { launchOrSkip, openSettings } from './browser.mjs';
+import { HOST_BODY_CLASSES, launchOrSkip, openSettings } from './browser.mjs';
 import { SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
@@ -16,7 +16,8 @@ import { SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
  *     primary on the right, never two primary buttons next to each other, and the primary on top when
  *     the footer wraps;
  *   - 44px touch targets on a touch device;
- *   - secondary text contrast of at least 4.5:1 (WCAG AA) in dark mode and light mode.
+ *   - secondary text contrast of at least 4.5:1 (WCAG AA) in dark mode and light mode, on a full
+ *     configuration and on an empty one (SPEC section 11.2, item 18).
  */
 
 /** A valid configuration whose only switch leaves the family group's Telegram chat uncovered. */
@@ -182,7 +183,7 @@ function effectiveContrast(entry) {
   return contrastRatio(composite(parseColor(entry.color), background), background);
 }
 
-/** One help element per card type, plus the disclosure label, the QR caption and the section intro. */
+/** One help element per card type, plus the disclosure label, the QR caption, a help link, the section intro and the footer. */
 const SECONDARY_TEXT = [
   '.card[data-path^="providers"] .ns-help',
   '.card[data-path^="groups"] .ns-help',
@@ -190,8 +191,33 @@ const SECONDARY_TEXT = [
   '.card[data-path^="providers"] details.ns-advanced > summary',
   '.card[data-path^="providers"] .ns-qr-caption',
   '.card[data-path^="switches"] .ns-help-toggle',
+  '.card[data-path^="providers"] .ns-help-link',
   '.section-copy',
+  '.ns-footer',
+  '.ns-footer a',
 ];
+
+/**
+ * The same kinds on a fresh, empty configuration, where nothing sits inside a provider, group or switch card:
+ * an empty-state line, checkbox help, field help under Settings, the Settings > Advanced summary toggle, the
+ * Get started card's caption and tile help, the "Add a provider first." hint, a disabled Add button and the
+ * Save status line.
+ */
+const EMPTY_SECONDARY_TEXT = [
+  '#section-groups .form-text',
+  '#section-settings .form-check .ns-help',
+  '#section-settings [data-path="name"] .ns-help',
+  '#section-settings details.ns-advanced > summary',
+  '.ns-get-started .ns-get-started-intro',
+  '.ns-get-started .ns-chooser-tile .ns-secondary',
+  '#section-switches .ns-add-hint',
+  '#section-switches .btn:disabled',
+  '.issues .fw-semibold',
+  '.ns-footer',
+];
+
+/** A fresh install: no platform block has been saved yet. */
+const EMPTY_CONFIG = { platform: 'NotifySwitch', name: 'Notify Switch' };
 
 test('settings UI layout: nothing is clipped at the left edge or overflows the iframe, and grids and phone rows stack on a phone', async (t) => {
   const browser = await launchOrSkip(t);
@@ -363,25 +389,41 @@ test('settings UI layout: every button is at least 44px tall on a touch device',
   }
 });
 
-test('settings UI theme: secondary text meets WCAG AA contrast in dark mode and light mode', async (t) => {
+test('settings UI theme: secondary text meets WCAG AA contrast in dark mode and light mode, on a full and an empty configuration', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
   }
   try {
     for (const dark of [true, false]) {
-      const page = await openSettings(browser, CONFIG, { dark });
-      assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-bs-theme')), dark ? 'dark' : null);
-      const entries = await textColors(page, SECONDARY_TEXT);
-      for (const entry of entries) {
-        assert.equal(entry.missing, undefined, `${entry.selector} renders`);
-        const ratio = effectiveContrast(entry);
-        assert.ok(ratio >= 4.5, `${dark ? 'dark' : 'light'} mode: ${entry.selector} ("${entry.text}") has contrast ${ratio.toFixed(2)}:1 (${entry.color})`);
+      for (const [config, selectors] of [[CONFIG, SECONDARY_TEXT], [EMPTY_CONFIG, EMPTY_SECONDARY_TEXT]]) {
+        const page = await openSettings(browser, config, { dark });
+        // The page is themed the way the Homebridge UI does it: body classes, no data-bs-theme on the root.
+        const classes = await page.evaluate(() => [...document.body.classList]);
+        for (const cls of dark ? HOST_BODY_CLASSES.dark : HOST_BODY_CLASSES.light) {
+          assert.ok(classes.includes(cls), `body carries ${cls}`);
+        }
+        assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-bs-theme')), null);
+        const entries = await textColors(page, selectors);
+        for (const entry of entries) {
+          assert.equal(entry.missing, undefined, `${entry.selector} renders`);
+          const ratio = effectiveContrast(entry);
+          assert.ok(ratio >= 4.5,
+            `${dark ? 'dark' : 'light'} mode, ${config === CONFIG ? 'full' : 'empty'} config: ${entry.selector} ("${entry.text}") `
+            + `has contrast ${ratio.toFixed(2)}:1 (${entry.color})`);
+        }
+        // Dark mode is really dark: the page background is darker than the text.
+        const body = parseColor(entries[0].pageBackground).rgb;
+        assert.equal(luminance(body) < 0.5, dark, `page background ${entries[0].pageBackground} matches the theme`);
+        if (config === EMPTY_CONFIG) {
+          // Nothing on the empty page is clipped or overflows on a phone either.
+          await page.setViewportSize({ width: 360, height: 800 });
+          const result = await audit(page);
+          assert.deepEqual(result.offenders, []);
+          assert.ok(result.scrollWidth <= 360);
+        }
+        await page.close();
       }
-      // Dark mode is really dark: the page background is darker than the text.
-      const body = parseColor(entries[0].pageBackground).rgb;
-      assert.equal(luminance(body) < 0.5, dark, `page background ${entries[0].pageBackground} matches the theme`);
-      await page.close();
     }
   } finally {
     await browser.close();

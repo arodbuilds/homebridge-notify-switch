@@ -6,8 +6,8 @@ import { callServer } from '../api.js';
 import type { App } from '../app.js';
 import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
 import {
-  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, ID_FIELD, PROVIDER_CHOOSER, PROVIDERS_SECTION, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING,
-  TWILIO_HELP, TWILIO_LOOKUP,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, PROVIDER_CHOOSER, PROVIDERS_SECTION, SMTP_HELP, TELEGRAM_HELP,
+  TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
   button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpText, linkButton, linkOut, numberField, openModal, paragraph,
@@ -565,6 +565,24 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   return card;
 }
 
+/** The three chooser tiles (SPEC section 11.2, item 13). Picking one creates the provider with its type fixed. */
+function chooserTiles(app: App): HTMLElement {
+  const tiles = PROVIDER_TYPES.map((type) => {
+    const tile = el('button', { type: 'button', class: 'ns-chooser-tile', 'data-type': type },
+      el('span', { class: 'fw-semibold d-block' }, PROVIDER_CHOOSER[type].title),
+      el('span', { class: 'ns-secondary small d-block' }, PROVIDER_CHOOSER[type].help),
+    );
+    tile.addEventListener('click', () => {
+      const p = createProvider(type as ProviderType, PROVIDER_CHOOSER[type].name, app.config.providers);
+      app.config.providers.push(p);
+      app.addFresh(p);
+      app.rerender('providers', true);
+    });
+    return tile;
+  });
+  return el('div', { class: 'ns-chooser-tiles' }, ...tiles);
+}
+
 /**
  * The provider chooser (SPEC section 11.2, item 13): Add provider is replaced by three tiles; picking one
  * creates the card with its type fixed, the name prefilled and the id generated from the name.
@@ -578,36 +596,41 @@ function addProviderControl(app: App): HTMLElement {
   };
   showChooser = (): void => {
     clear(slot);
-    const tiles = PROVIDER_TYPES.map((type) => {
-      const tile = el('button', { type: 'button', class: 'ns-chooser-tile', 'data-type': type },
-        el('span', { class: 'fw-semibold d-block' }, PROVIDER_CHOOSER[type].title),
-        el('span', { class: 'ns-secondary small d-block' }, PROVIDER_CHOOSER[type].help),
-      );
-      tile.addEventListener('click', () => {
-        const p = createProvider(type as ProviderType, PROVIDER_CHOOSER[type].name, app.config.providers);
-        app.config.providers.push(p);
-        app.addFresh(p);
-        app.rerender('providers', true);
-      });
-      return tile;
-    });
+    const tiles = chooserTiles(app);
     slot.appendChild(el('div', { class: 'ns-chooser', role: 'group', 'aria-label': CHOOSER.prompt },
       el('div', { class: 'fw-semibold mb-2' }, CHOOSER.prompt),
-      el('div', { class: 'ns-chooser-tiles' }, ...tiles),
+      tiles,
       el('div', { class: 'mt-2' }, linkButton(CHOOSER.cancel, showButton)),
     ));
-    tiles[0]?.focus();
+    tiles.querySelector<HTMLElement>('.ns-chooser-tile')?.focus();
   };
   showButton();
   return slot;
 }
 
+/**
+ * Guided empty state (SPEC section 11.2, item 19): with no providers, the section body is a single
+ * "Get started" card holding the chooser tiles inline. Once one provider exists the section renders
+ * as usual, with the Add provider button and its chooser.
+ */
+function getStartedCard(app: App): HTMLElement {
+  return el('div', { class: 'card mb-3 ns-get-started', role: 'group', 'aria-label': GET_STARTED.title },
+    el('div', { class: 'card-header fw-semibold' }, GET_STARTED.title),
+    el('div', { class: 'card-body' },
+      el('p', { class: 'mb-0 ns-get-started-intro' }, GET_STARTED.intro),
+      chooserTiles(app),
+    ),
+  );
+}
+
 export function renderProviders(app: App, container: HTMLElement): void {
+  if (app.config.providers.length === 0) {
+    container.appendChild(getStartedCard(app));
+    container.appendChild(el('div', { class: 'list-feedback', 'data-path': 'providers' }, el('div', { class: 'invalid-feedback' })));
+    return;
+  }
   container.appendChild(paragraph(PROVIDERS_SECTION));
   app.config.providers.forEach((p, i) => container.appendChild(providerCard(app, p, i)));
-  if (app.config.providers.length === 0) {
-    container.appendChild(el('div', { class: 'form-text mb-2' }, 'No providers yet. Add one to get started.'));
-  }
   container.appendChild(el('div', { class: 'list-feedback', 'data-path': 'providers' }, el('div', { class: 'invalid-feedback' })));
   container.appendChild(addProviderControl(app));
 }

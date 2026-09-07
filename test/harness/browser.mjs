@@ -21,6 +21,37 @@ const ROOT = resolve(import.meta.dirname, '..', '..');
 const PUBLIC = join(ROOT, 'homebridge-ui', 'public');
 const BOOTSTRAP = require.resolve('bootstrap/dist/css/bootstrap.min.css');
 
+/**
+ * The rules from the Homebridge UI's own stylesheet (homebridge-config-ui-x 5.29, `styles-*.css`) that
+ * paint the plugin settings iframe. The host posts its body classes into the iframe: `config-ui-x-{theme}`
+ * or `config-ui-x-dark-mode-{theme}`, `modal-content`, and `dark-mode` when dark. It never sets Bootstrap's
+ * `data-bs-theme` there, so Bootstrap's variables keep their light values in dark mode; the theme colours
+ * the body, cards, alerts, links and primary buttons with these rules instead. Kept verbatim so a colour
+ * that is unreadable in the real UI is unreadable here too.
+ */
+const HOST_THEME_CSS = `
+.modal-content{border-radius:.7rem!important;border:none;line-height:1.5rem;font-size:.9rem;font-weight:300}
+.config-ui-x-purple.modal-content{background-color:#fff!important;color:#000!important}
+.config-ui-x-purple .alert{color:#000;background-color:#eee;border-color:#ccc}
+.config-ui-x-purple .btn-primary,.config-ui-x-purple .btn-default{background-color:#9c27b0!important;border-color:#9c27b0!important}
+.config-ui-x-purple .form-control::placeholder{color:#cdcdcd!important;opacity:1!important}
+.config-ui-x-dark-mode-purple{background-color:#000}
+.config-ui-x-dark-mode-purple.modal-content{background-color:#242424!important;color:#fff!important}
+.config-ui-x-dark-mode-purple .card{color:#fff;background-color:#2b2b2b!important}
+.config-ui-x-dark-mode-purple .alert{color:#eee;background-color:#2b2b2b;box-shadow:0 0 1px #444;border:none}
+.config-ui-x-dark-mode-purple .alert a{color:#9c27b0}
+.config-ui-x-dark-mode-purple a{color:#9c27b0}
+.config-ui-x-dark-mode-purple .btn-link{color:#9e9e9e!important}
+.config-ui-x-dark-mode-purple .btn-primary,.config-ui-x-dark-mode-purple .btn-default{background-color:#9c27b0!important;border-color:#9c27b0!important}
+.config-ui-x-dark-mode-purple .form-control::placeholder{color:#636363!important;opacity:1!important}
+`;
+
+/** The body classes the Homebridge UI posts into the iframe for its purple theme in light and dark mode. */
+export const HOST_BODY_CLASSES = {
+  light: ['config-ui-x-purple', 'modal-content'],
+  dark: ['config-ui-x-dark-mode-purple', 'modal-content', 'dark-mode'],
+};
+
 const CANDIDATES = [
   process.env.NOTIFY_SWITCH_CHROMIUM,
   process.env.CHROMIUM_PATH,
@@ -101,6 +132,7 @@ export function writePage() {
     <title>Notify Switch settings</title>
     <link rel="stylesheet" href="${pathToFileURL(join(PUBLIC, 'index.css')).href}">
     <link rel="stylesheet" href="${pathToFileURL(BOOTSTRAP).href}">
+    <style>${HOST_THEME_CSS}</style>
   </head>
   <body>
     <div id="app" class="notify-switch-ui"></div>
@@ -113,12 +145,13 @@ export function writePage() {
 /**
  * Opens the built settings UI with `config` loaded and the stubbed server. Fails the test on any page error.
  * `hasTouch` emulates a touch device; `dark` renders the page in dark mode the way the Homebridge UI does
- * (Bootstrap's `data-bs-theme="dark"` on the root and `dark-mode` on the body); `initScript` runs before the page.
+ * (its dark body classes, see HOST_BODY_CLASSES, and no `data-bs-theme` on the root); `locale` sets the
+ * browser language (`navigator.language`); `initScript` runs before the page.
  */
 export async function openSettings(browser, config, {
-  requestScript, viewport = { width: 900, height: 900 }, onPageError, hasTouch = false, dark = false, initScript,
+  requestScript, viewport = { width: 900, height: 900 }, onPageError, hasTouch = false, dark = false, locale, initScript,
 } = {}) {
-  const page = await browser.newPage({ viewport, hasTouch, colorScheme: dark ? 'dark' : 'light' });
+  const page = await browser.newPage({ viewport, hasTouch, colorScheme: dark ? 'dark' : 'light', ...(locale ? { locale } : {}) });
   page.on('pageerror', (err) => {
     if (onPageError) {
       onPageError(err);
@@ -131,17 +164,14 @@ export async function openSettings(browser, config, {
     await page.addInitScript(initScript);
   }
   await page.goto(writePage());
-  if (dark) {
-    // Bootstrap 5.3 themes switch live on the attribute, so this can follow the load. Transitions are
-    // turned off so a colour read right after the switch is the final colour, not a frame in between.
-    await page.evaluate(() => {
-      const style = document.createElement('style');
-      style.textContent = '* { transition: none !important; }';
-      document.head.appendChild(style);
-      document.documentElement.setAttribute('data-bs-theme', 'dark');
-      document.body.classList.add('dark-mode');
-    });
-  }
+  // The host posts its body classes after the page has loaded, so they follow the load here too. Transitions
+  // are turned off so a colour read right after the switch is the final colour, not a frame in between.
+  await page.evaluate((classes) => {
+    const style = document.createElement('style');
+    style.textContent = '* { transition: none !important; }';
+    document.head.appendChild(style);
+    document.body.classList.add(...classes);
+  }, dark ? HOST_BODY_CLASSES.dark : HOST_BODY_CLASSES.light);
   await page.waitForSelector('#section-settings .form-control');
   return page;
 }

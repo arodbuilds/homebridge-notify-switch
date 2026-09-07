@@ -12,8 +12,11 @@ export interface App {
   changed(refs?: boolean): void;
   /** Items were added or removed, or a type changed: re-render the section (and the Switches section when `refs`). */
   rerender(section: Section, refs?: boolean): void;
-  /** Replaces the whole configuration (restore from backup, reset) and re-renders every section. */
-  replaceConfig(config: UiConfig): void;
+  /**
+   * Replaces the whole configuration (restore from backup, reset) and re-renders every section.
+   * `reason: 'reset'` makes the Save status area read the reset line instead of "Nothing to save yet".
+   */
+  replaceConfig(config: UiConfig, reason?: 'restore' | 'reset'): void;
   /**
    * Marks a provider, group or switch that was just added. Its card shows placeholders and no errors
    * until a field in it is touched (SPEC section 11.2, item 15).
