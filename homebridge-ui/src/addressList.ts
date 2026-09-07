@@ -44,6 +44,7 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
       remove.setAttribute('aria-label', `Remove ${CHANNEL_LABEL[opts.channel]} ${i + 1}`);
       let control: HTMLElement;
       if (opts.channel === 'sms') {
+        // The Remove button sits inside the phone row, beside the number field, so a stacked phone row keeps it on the number's line.
         control = phoneInput({
           value,
           defaultCountry: opts.defaultCountry,
@@ -51,6 +52,7 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
             opts.values[i] = next;
             opts.onChange();
           },
+          trailing: remove,
         });
       } else {
         const id = uniqueId('addr');
@@ -71,9 +73,9 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
         });
         control = input;
       }
-      rows.appendChild(el('div', { class: 'address-row', 'data-path': `${opts.path}[${i}]` },
+      rows.appendChild(el('div', { class: `address-row address-row-${opts.channel}`, 'data-path': `${opts.path}[${i}]` },
         el('div', { class: 'address-control' }, control),
-        remove,
+        opts.channel === 'sms' ? null : remove,
         el('div', { class: 'invalid-feedback' }),
       ));
     });

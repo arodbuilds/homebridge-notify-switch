@@ -1,0 +1,239 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { launchOrSkip, openSettings } from './browser.mjs';
+import { TWILIO } from './helpers.mjs';
+
+/**
+ * Card behaviour in the built settings UI (SPEC section 11.2, items 13 to 17): the provider chooser,
+ * ids generated from names and hidden under Advanced with an Edit toggle, fresh cards that show no
+ * errors until touched, the per-card Show help toggle, the Variables toggle, and the rewritten
+ * validation messages.
+ */
+
+const CONFIG = {
+  platform: 'NotifySwitch',
+  name: 'Notify Switch',
+  providers: [TWILIO],
+  groups: [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: [], telegram: [] }],
+  switches: [{
+    id: '6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b',
+    name: 'Water Leak Alert',
+    actions: [{ providerId: 'twilio-main', channel: 'sms', groups: ['family'], body: 'Water detected.' }],
+  }],
+};
+
+async function pushed(page, predicate) {
+  await page.waitForFunction(predicate);
+  return page.evaluate(() => window.__hb.updates.at(-1)[0]);
+}
+
+test('provider chooser: three tiles create a card with the type fixed, the name prefilled and the id generated', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    assert.equal(await page.locator('select option', { hasText: 'Twilio (SMS and email)' }).count(), 0, 'no Type dropdown on provider cards');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    const chooser = page.locator('.ns-chooser');
+    assert.equal(await chooser.count(), 1, 'Add provider opens the chooser instead of a card');
+    assert.equal(await page.locator('.card[data-path^="providers"]').count(), 1, 'no card was created yet');
+    const tiles = chooser.locator('.ns-chooser-tile');
+    assert.deepEqual(await tiles.locator('.fw-semibold').allTextContents(), ['Twilio', 'Email (SMTP)', 'Telegram']);
+    assert.deepEqual(await tiles.locator('.ns-secondary').allTextContents(), [
+      'SMS text messages, and email if you have a Twilio-authenticated domain.',
+      'Send from a mailbox you already have, such as Fastmail, Gmail, iCloud, or Outlook.',
+      'Free messages through a bot you create. Best for family group chats.',
+    ]);
+    await chooser.getByRole('button', { name: 'Cancel' }).click();
+    assert.equal(await page.locator('.ns-chooser').count(), 0, 'Cancel restores the button');
+
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.locator('.ns-chooser-tile[data-type="smtp"]').click();
+    const card = page.locator('.card[data-path="providers[1]"]');
+    assert.equal(await card.count(), 1);
+    assert.equal(await card.locator('.card-header .badge').textContent(), 'smtp', 'the type badge stays in the header');
+    assert.equal(await card.locator('[data-path="providers[1].name"] input').inputValue(), 'Email');
+    assert.equal(await card.locator('select option', { hasText: 'SMTP (email)' }).count(), 0, 'the type cannot be changed');
+    assert.equal(await card.locator('.card-body > [data-path="providers[1].id"]').count(), 0, 'the ID is not in the main form');
+    const advanced = card.locator('details.ns-advanced[data-advanced="providers[1]"]');
+    assert.equal(await advanced.evaluate((node) => node.open), false);
+    const idInput = advanced.locator('[data-path="providers[1].id"] input');
+    assert.equal(await idInput.inputValue(), 'email', 'the id is generated from the name');
+    assert.equal(await idInput.evaluate((node) => node.readOnly), true, 'read-only until Edit is clicked');
+    let config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers.length === 2);
+    assert.equal(config.providers[1].id, 'email');
+    assert.equal(config.providers[1].type, 'smtp');
+    assert.equal(config.providers[1].name, 'Email');
+    // Common settings for SMTP sit under a collapsed expander next to the one-line server help.
+    assert.equal(await card.locator('.ns-server-help').textContent(), 'Your mail provider\'s outgoing server settings.');
+    const common = card.locator('details.ns-common-settings');
+    assert.equal(await common.evaluate((node) => node.open), false);
+    assert.equal(await common.locator('summary').textContent(), 'Common settings');
+    assert.deepEqual(await common.locator('tbody td[data-label="Host"]').allTextContents(),
+      ['smtp.fastmail.com', 'smtp.gmail.com', 'smtp.mail.me.com', 'smtp-mail.outlook.com']);
+
+    // A second Twilio provider gets a numeric suffix; the existing one is twilio-main, so the first is plain twilio.
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.locator('.ns-chooser-tile[data-type="twilio"]').click();
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.locator('.ns-chooser-tile[data-type="twilio"]').click();
+    config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers.length === 4);
+    assert.deepEqual(config.providers.map((p) => p.id), ['twilio-main', 'email', 'twilio', 'twilio-2']);
+    assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio', 'Twilio']);
+    assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'twilio');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('fresh cards: no errors until a field is touched, then errors appear; the id follows the name until referenced or edited', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    assert.equal(await page.locator('.issues').isHidden(), true, 'the loaded configuration is valid');
+    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.locator('.ns-chooser-tile[data-type="twilio"]').click();
+    const card = page.locator('.card[data-path="providers[1]"]');
+    assert.equal(await card.locator('.is-invalid').count(), 0, 'a new card shows no errors');
+    assert.equal(await card.locator('.invalid-feedback:visible').count(), 0);
+    assert.equal(await card.locator('[data-path="providers[1].accountSid"] input').getAttribute('placeholder'), 'AC…', 'placeholders instead');
+    await page.waitForFunction(() => window.__hb.save.at(-1) === false);
+    assert.equal(await page.locator('.issues').isVisible(), true);
+    assert.equal(await page.locator('.issues li').count(), 0, 'no issue is listed for the untouched card');
+    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fill in the new provider to enable Save.');
+    assert.match(await page.locator('.issues').getAttribute('class'), /\balert-info\b/);
+
+    // Touching a field (blur) reveals the errors for the whole card, with the rewritten messages.
+    const accountSid = card.locator('[data-path="providers[1].accountSid"] input');
+    await accountSid.fill('AC12');
+    assert.equal(await card.locator('.is-invalid').count(), 0, 'typing alone does not reveal errors');
+    await accountSid.blur();
+    assert.ok(await card.locator('.is-invalid').count() > 0, 'errors appear after blur');
+    assert.equal(await card.locator('[data-path="providers[1].accountSid"] .invalid-feedback').textContent(),
+      'That does not look like an Account SID. It starts with AC and is 34 characters; copy it from the Twilio Console.');
+    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] .invalid-feedback').textContent(),
+      'That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console.');
+    assert.ok(await page.locator('.issues li').count() > 0, 'the issue list fills in');
+    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:');
+
+    // The id follows the name until the provider is referenced by a switch.
+    const name = card.locator('[data-path="providers[1].name"] input');
+    const idInput = card.locator('[data-path="providers[1].id"] input');
+    await name.fill('Twilio Backup');
+    assert.equal(await idInput.inputValue(), 'twilio-backup');
+    await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers[1]?.id === 'twilio-backup');
+    // The existing provider is referenced by the switch, so renaming it leaves its id alone.
+    const existing = page.locator('.card[data-path="providers[0]"]');
+    await existing.locator('[data-path="providers[0].name"] input').fill('Twilio Main');
+    assert.equal(await existing.locator('[data-path="providers[0].id"] input').inputValue(), 'twilio-main');
+    await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers[0]?.name === 'Twilio Main');
+    assert.equal(await page.evaluate(() => window.__hb.updates.at(-1)[0].providers[0].id), 'twilio-main');
+
+    // Edit under Advanced makes the id editable; a duplicate is still rejected and the disclosure opens to show it.
+    const advanced = card.locator('details.ns-advanced[data-advanced="providers[1]"]');
+    await advanced.locator('summary').click();
+    await advanced.getByRole('button', { name: 'Edit ID' }).click();
+    assert.equal(await idInput.evaluate((node) => node.readOnly), false);
+    await idInput.fill('twilio-main');
+    await idInput.blur();
+    assert.equal(await advanced.locator('[data-path="providers[1].id"] .invalid-feedback').textContent(), 'ID "twilio-main" is used by another provider.');
+    await idInput.fill('backup');
+    await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers[1]?.id === 'backup');
+    await name.fill('Twilio Backup 2');
+    assert.equal(await idInput.inputValue(), 'backup', 'a hand-edited id no longer follows the name');
+    await advanced.locator('summary').click();
+    assert.equal(await advanced.evaluate((node) => node.open), false, 'the disclosure was closed again');
+    // Clear the id while the disclosure is closed (as a stale config.json edit would): the issue opens it.
+    await idInput.evaluate((node) => {
+      node.value = '';
+      node.dispatchEvent(new node.ownerDocument.defaultView.Event('input', { bubbles: true }));
+    });
+    assert.equal(await advanced.evaluate((node) => node.open), true, 'an issue on the ID opens the disclosure');
+    assert.equal(await advanced.locator('[data-path="providers[1].id"] .invalid-feedback').textContent(), 'ID is required.');
+
+    // Groups: Add group creates a fresh card whose id follows the name; the ID is under Advanced too.
+    await page.getByRole('button', { name: 'Add group' }).click();
+    const group = page.locator('.card[data-path="groups[1]"]');
+    assert.equal(await group.locator('.is-invalid').count(), 0);
+    assert.equal(await group.locator('.card-body > .ns-grid [data-path="groups[1].id"], .card-body > [data-path="groups[1].id"]').count(), 0);
+    await group.locator('[data-path="groups[1].name"] input').fill('Neighbours');
+    const groupId = group.locator('details.ns-advanced [data-path="groups[1].id"] input');
+    assert.equal(await groupId.inputValue(), 'neighbours');
+    await pushed(page, () => window.__hb.updates.at(-1)?.[0].groups[1]?.id === 'neighbours');
+    await group.locator('[data-path="groups[1].name"] input').fill('Family');
+    assert.equal(await groupId.inputValue(), 'family-2', 'a name already used gets a numeric suffix');
+
+    // Switches: a new switch card is fresh as well.
+    await page.getByRole('button', { name: 'Add switch' }).click();
+    const sw = page.locator('.card[data-path="switches[1]"]');
+    assert.equal(await sw.locator('.is-invalid').count(), 0);
+    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), '', 'the "add an action" message waits too');
+    await sw.locator('[data-path="switches[1].name"] input').fill('Bad-Name!');
+    await sw.locator('[data-path="switches[1].name"] input').blur();
+    assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(),
+      'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.');
+    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), 'Add at least one action.');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('show help toggle, Variables toggle, and the channel dropdown limited to the provider', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    const card = page.locator('.card[data-path="providers[0]"]');
+    const toggle = card.locator('.card-header .ns-help-toggle');
+    assert.equal(await toggle.textContent(), 'Hide help', 'help is expanded on a wide screen');
+    const help = card.locator('[data-path="providers[0].accountSid"] .ns-help');
+    assert.equal(await help.isVisible(), true);
+    assert.equal(await help.textContent(), 'Copy from the Twilio Console home page. It starts with AC and is not a secret. Where do I find this?');
+    assert.equal(await help.locator('a').getAttribute('href'), 'https://github.com/arodbuilds/homebridge-notify-switch#twilio-sms-and-email');
+    assert.equal(await card.locator('[data-path="providers[0].apiKeySid"] .ns-help a').textContent(), 'Why not the Auth Token?');
+    assert.equal(await card.locator('.ns-senders-note').textContent(),
+      'US numbers must be registered for A2P 10DLC or carriers will block messages. How do I register?');
+    await toggle.click();
+    assert.equal(await toggle.textContent(), 'Show help');
+    assert.equal(await help.isVisible(), false, 'field help collapses');
+    assert.equal(await card.locator('.phone-feedback').first().isVisible(), true, 'status lines stay visible');
+    // The choice is remembered for the card while the page lives, across re-renders.
+    await page.getByRole('button', { name: 'Add group' }).click();
+    assert.equal(await page.locator('.card[data-path="providers[0]"] .ns-help-toggle').textContent(), 'Show help');
+    assert.equal(await page.locator('.card[data-path="groups[0]"] .ns-help-toggle').textContent(), 'Hide help', 'other cards keep their own state');
+
+    // Variables toggle next to the message field lists the four variables; the help itself no longer lists them.
+    const action = page.locator('.action-card').first();
+    const bodyHelp = action.locator('[data-path="switches[0].actions[0].body"] .ns-help');
+    assert.equal(await bodyHelp.textContent(), 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.');
+    const variables = action.getByRole('button', { name: 'Variables' });
+    assert.equal(await variables.count(), 1);
+    assert.equal(await action.locator('.ns-variables').isVisible(), false);
+    await variables.click();
+    assert.equal(await action.locator('.ns-variables').isVisible(), true);
+    assert.deepEqual(await action.locator('.ns-variables code').allTextContents(), ['{{switchName}}', '{{time}}', '{{date}}', '{{datetime}}']);
+    assert.equal(await action.locator('.ns-variables a').getAttribute('href'), 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables');
+    // The channel dropdown offers only what the Twilio provider serves, with no help text.
+    const channel = action.locator('[data-path="switches[0].actions[0].channel"]');
+    assert.deepEqual(await channel.locator('option').allTextContents(), ['SMS', 'Email']);
+    assert.equal(await channel.locator('.ns-help').count(), 0);
+    await page.close();
+
+    // Below 600px help starts collapsed.
+    const phone = await openSettings(browser, CONFIG, { viewport: { width: 360, height: 800 } });
+    assert.equal(await phone.locator('.card[data-path="providers[0]"] .ns-help-toggle').textContent(), 'Show help');
+    assert.equal(await phone.locator('.card[data-path="providers[0]"] [data-path="providers[0].accountSid"] .ns-help').isVisible(), false);
+    await phone.locator('.card[data-path="providers[0]"] .ns-help-toggle').click();
+    assert.equal(await phone.locator('.card[data-path="providers[0]"] [data-path="providers[0].accountSid"] .ns-help').isVisible(), true);
+  } finally {
+    await browser.close();
+  }
+});

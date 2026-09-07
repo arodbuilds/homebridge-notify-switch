@@ -1,6 +1,6 @@
 import { setSaveEnabled, toastError } from './api.js';
 import type { App, Section } from './app.js';
-import { GETTING_STARTED, HOMEKIT_USAGE } from './copy.js';
+import { GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, VALIDATION } from './copy.js';
 import { clear, el } from './dom.js';
 import { exportConfig, readConfig } from './model.js';
 import type { UiConfig } from './model.js';
@@ -24,23 +24,36 @@ const SECTIONS: Array<{ key: Section; title: string; render(app: App, container:
   { key: 'settings', title: 'Settings', render: renderSettings },
 ];
 
+/** True on phones and tablets: the page then gives every button a 44px touch target (SPEC section 11.2, item 16). */
+export function isTouchDevice(): boolean {
+  try {
+    return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+  } catch {
+    return false;
+  }
+}
+
 class Page implements App {
   private readonly containers = new Map<Section, HTMLElement>();
   private readonly issuesBox: HTMLElement;
+  private readonly issuesHeading: HTMLElement;
   private readonly issuesList: HTMLElement;
   private pushTimer: number | undefined;
   private otherBlocks: Array<Record<string, unknown>> = [];
+  /** Providers, groups and switches added this session whose card nobody has touched yet (SPEC section 11.2, item 15). */
+  private readonly fresh = new WeakSet<object>();
 
   constructor(public config: UiConfig, private readonly root: HTMLElement) {
     root.appendChild(el('p', { class: 'lead-copy' }, GETTING_STARTED));
+    root.appendChild(el('p', { class: 'lead-copy' }, GETTING_STARTED_STEPS));
     for (const section of SECTIONS) {
       const container = el('div', { class: 'section-body' });
       this.containers.set(section.key, container);
       root.appendChild(el('section', { class: 'ns-section', id: `section-${section.key}` }, el('h2', { class: 'h5' }, section.title), container));
     }
     this.issuesList = el('ul', { class: 'mb-0 ps-3' });
-    this.issuesBox = el('div', { class: 'issues alert alert-warning', role: 'alert', hidden: true },
-      el('div', { class: 'fw-semibold mb-1' }, 'Fix these before saving:'), this.issuesList);
+    this.issuesHeading = el('div', { class: 'fw-semibold mb-1' }, 'Fix these before saving:');
+    this.issuesBox = el('div', { class: 'issues alert alert-warning', role: 'alert', hidden: true }, this.issuesHeading, this.issuesList);
     root.appendChild(this.issuesBox);
     root.appendChild(el('p', { class: 'lead-copy mt-3' }, HOMEKIT_USAGE));
   }
@@ -83,6 +96,32 @@ class Page implements App {
     this.push();
   }
 
+  addFresh(item: object): void {
+    this.fresh.add(item);
+  }
+
+  watchCard(card: HTMLElement, item: object): void {
+    if (!this.fresh.has(item)) {
+      return;
+    }
+    card.classList.add('ns-fresh');
+    const touch = (): void => {
+      if (!this.fresh.has(item)) {
+        return;
+      }
+      this.fresh.delete(item);
+      card.classList.remove('ns-fresh');
+      this.revalidate();
+    };
+    // Leaving a field (blur) or changing a select or checkbox counts as touching the card; typing alone does not.
+    card.addEventListener('focusout', (event) => {
+      if (event.target instanceof HTMLElement && event.target.matches('input, select, textarea')) {
+        touch();
+      }
+    });
+    card.addEventListener('change', touch);
+  }
+
   private switchRefreshTimer: number | undefined;
 
   private scheduleSwitchRefresh(): void {
@@ -95,7 +134,7 @@ class Page implements App {
       if (container) {
         clear(container);
         renderSwitches(this, container);
-        this.markIssues(validate(this.config));
+        this.markIssues(this.splitIssues(validate(this.config)).visible);
       }
     }, 400);
   }
@@ -113,15 +152,41 @@ class Page implements App {
     }, 150);
   }
 
+  /** The card paths (`providers[2]`) of fresh items, with the kind of each for the "Fill in the new …" line. */
+  private freshCards(): Array<{ path: string; kind: string }> {
+    const out: Array<{ path: string; kind: string }> = [];
+    this.config.providers.forEach((p, i) => this.fresh.has(p) && out.push({ path: `providers[${i}]`, kind: 'provider' }));
+    this.config.groups.forEach((g, i) => this.fresh.has(g) && out.push({ path: `groups[${i}]`, kind: 'group' }));
+    this.config.switches.forEach((s, i) => this.fresh.has(s) && out.push({ path: `switches[${i}]`, kind: 'switch' }));
+    return out;
+  }
+
+  /** Issues on untouched cards are held back from the inline marks and the list; they still keep Save disabled. */
+  private splitIssues(issues: UiIssue[]): { visible: UiIssue[]; held: UiIssue[]; fresh: Array<{ path: string; kind: string }> } {
+    const fresh = this.freshCards();
+    const onFresh = (issue: UiIssue): boolean => fresh.some((card) => issue.path === card.path || issue.path.startsWith(`${card.path}.`));
+    return { visible: issues.filter((issue) => !onFresh(issue)), held: issues.filter(onFresh), fresh };
+  }
+
   private revalidate(): void {
-    const issues = validate(this.config);
-    this.markIssues(issues);
+    const all = validate(this.config);
+    const { visible, held, fresh } = this.splitIssues(all);
+    this.markIssues(visible);
     clear(this.issuesList);
-    for (const issue of issues) {
+    for (const issue of visible) {
       this.issuesList.appendChild(el('li', {}, el('strong', {}, `${issue.label}: `), issue.message));
     }
-    this.issuesBox.hidden = issues.length === 0;
-    setSaveEnabled(issues.length === 0);
+    if (visible.length > 0) {
+      this.issuesHeading.textContent = 'Fix these before saving:';
+      this.issuesBox.className = 'issues alert alert-warning';
+    } else if (held.length > 0) {
+      // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
+      const kinds = [...new Set(held.map((issue) => fresh.find((card) => issue.path.startsWith(card.path))?.kind ?? 'card'))];
+      this.issuesHeading.textContent = VALIDATION.finishNew(kinds.join(' and '));
+      this.issuesBox.className = 'issues alert alert-info';
+    }
+    this.issuesBox.hidden = all.length === 0;
+    setSaveEnabled(all.length === 0);
   }
 
   /** Marks the control for each issue path as invalid and shows the message under it. */
@@ -156,6 +221,10 @@ class Page implements App {
       for (const control of node.querySelectorAll<HTMLElement>(controls)) {
         control.classList.add('is-invalid');
       }
+      // An issue on a field under a collapsed disclosure (the ID under Advanced) would otherwise be invisible.
+      for (let details = node.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
+        details.open = true;
+      }
     }
   }
 }
@@ -164,6 +233,9 @@ async function start(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) {
     return;
+  }
+  if (isTouchDevice()) {
+    document.body.classList.add('ns-touch');
   }
   const hb = window.homebridge;
   hb.showSpinner();

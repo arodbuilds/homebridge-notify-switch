@@ -108,7 +108,7 @@ function advancedPanel(app: App): HTMLElement {
   });
 
   return el('details', { class: 'ns-advanced mt-3', 'data-advanced': 'settings' },
-    el('summary', { class: 'text-muted small' }, BACKUP.summary),
+    el('summary', { class: 'ns-secondary small' }, BACKUP.summary),
     el('div', { class: 'mt-2' },
       el('div', { class: 'mb-3' },
         el('div', { class: 'form-text mb-2 backup-note' }, BACKUP.backupNote),

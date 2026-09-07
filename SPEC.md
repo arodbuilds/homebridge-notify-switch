@@ -323,51 +323,69 @@ Additional behavior beyond the schema form:
 7. Reference pickers: provider and group selectors are dropdowns populated from the current config, not free text.
 8. Uncovered channel warnings: for each switch, the channels present in the groups (and extra recipients) it targets are compared with the channels its actions cover. Each uncovered channel shows a warning on the switch card (copy in section 11.3) with an "Add … action" button, worded per channel, that appends an action for that channel with the first provider that serves it preselected and the targeted groups that hold addresses on that channel selected. This is a warning, not a validation error: the Save button stays enabled. The same check is shared with startup validation (section 10).
 9. Twilio "Look up numbers": a button on the Twilio provider card, enabled once `accountSid`, `apiKeySid` and `apiKeySecret` are filled. Through the UI server it calls GET `/2010-04-01/Accounts/{accountSid}/IncomingPhoneNumbers.json?PageSize=20` and GET `https://messaging.twilio.com/v1/Services?PageSize=20` with the same Basic auth. The result is a dropdown of phone numbers with their friendly names and a separate dropdown of Messaging Services; choosing a number appends it to the senders list (once), choosing a service fills the Messaging Service SID field. When either response reports more than the page holds, the status line ends with "Showing the first 20; enter others manually." When the key may not list numbers (HTTP 401 or 403) the status line reads "This API key cannot list numbers. Enter them manually." (Messaging Services are still listed when that call succeeds). Manual entry remains available. The Messaging Service SID field sits under the card's "Advanced" disclosure together with the credentials file, and the disclosure opens when either is set.
-10. Telegram onboarding: the Telegram provider card is a three-step guided flow (copy in section 11.3). Step 1 "Create your bot" has an "Open BotFather" link button to `https://t.me/BotFather`, a QR code of the same link, four numbered instructions, and the bot token field; once the token matches the token pattern the UI server calls `getMe` and the card shows "Connected to @{username}" or the error. Step 2 "Choose how people receive messages" has two selectable cards, "Family group chat (recommended)" (with an "Add bot to a group" link button to `https://t.me/{username}?startgroup=true` and a QR code of it) and "Individual chats". Step 3 "Invite people" shows a QR code for `https://t.me/{username}?start=join` with an Enlarge button (full-page modal), a "Copy link" button and a "Copy invite message" button. Links and QR codes appear once `getMe` succeeded; before that the steps show "Connect your bot in step 1 to get the links and QR codes." Step 4 is "Find people and groups" (item 5). QR codes are generated as inline SVG in the UI bundle by `qrcode-generator`, a dev-time dependency; the plugin has no new runtime dependency.
+10. Telegram onboarding: the Telegram provider card is a three-step guided flow (copy in section 11.3) followed by Find people and groups. Step 1 "Create your bot" has an intro sentence, an "Open BotFather" link button to `https://t.me/BotFather`, a QR code of the same link captioned "Scan to open BotFather", four numbered instructions, and the bot token field; once the token matches the token pattern the UI server calls `getMe` and the card shows "Connected to @{username}" or the error. Step 2 "Choose how people receive messages" has two selectable cards, "Family group chat (recommended)" and "Individual chats", with no links or QR codes inside them; the choice drives step 3 and the two variants are never shown together. With the group card selected, step 3 is titled "Add the bot to your group" and shows a QR code of `https://t.me/{username}?startgroup=true` captioned "Scan to add the bot to a group", the link as text, an "Add bot to a group" link button, a "Copy link" button and the group sentence from section 11.3. With individual chats selected, step 3 is "Invite people": a QR code for `https://t.me/{username}?start=join` captioned "Scan to start receiving alerts", the link as text, an Enlarge button (full-page modal), "Copy link" and "Copy invite message". Links and QR codes appear once `getMe` succeeded; before that step 3 shows "Connect your bot in step 1 to get the links and QR codes." Step 4 is "Find people and groups" (item 5); once it returns at least one result the line "Added people appear in the group's Telegram chat IDs list. Save when you're done." appears under the results. Parse Mode sits under the card's Advanced disclosure (item 14) and defaults to plain text. QR codes are generated as inline SVG in the UI bundle by `qrcode-generator`, a dev-time dependency; the plugin has no new runtime dependency. On phones and touch devices the QR codes give way to link buttons (item 16).
 11. Card button layout: each switch card has "Add action" as a link-style button directly under the actions list, left aligned, and a footer row with "Remove switch" as a red text button on the left and "Test send" as the only outlined primary button on the right. Clicking Test send replaces the button in place with "Send to {n} recipients now?" ({n} is the number of distinct recipients across the switch's actions, "recipient" when it is 1), a primary "Send" button and a text "Cancel" button; Escape or Cancel restores the original button. Per-recipient results render below the footer with a Dismiss link. Provider cards use the same footer ("Remove provider" left, "Test connection" right, the result below) and group cards too ("Remove group" left, nothing on the right). No two primary buttons are ever adjacent in a card footer; the layout smoke test asserts it.
 12. Settings > Advanced: a disclosure at the bottom of the Settings section, collapsed by default, with three actions. "Download backup" exports the current platform block as `notify-switch-backup-YYYY-MM-DD.json` (local date); the line above the button states that the file contains credentials. "Restore from backup" is a file picker; the file is parsed as JSON, accepted as either a platform block or a whole config.json holding one, and checked against the same rules the form applies (which mirror `config.schema.json` and startup validation) before anything changes; failures are listed under the picker; on success the form state is replaced and Save is enabled. "Reset plugin to fresh install" is a red text button that opens a confirmation modal listing what is removed (all providers, groups, switches, and settings; switches disappear from the Home app after the next restart; credentials files on disk are not touched) with a "Download backup first" button, a text field that must contain `RESET`, and a red Confirm button that is disabled until it does. Confirming replaces the form with the empty default configuration (`platform`, `name`, `configVersion`, empty `providers`, `groups` and `switches`; the exported block also carries the default `defaultCountry`, `masterSwitch` and `debug` values) and enables Save. Startup behavior after saving is in section 4, item 9.
 
+13. Provider chooser: "Add provider" is replaced in place by a chooser: the prompt "Which service should send your messages?", three tiles (Twilio; Email (SMTP); Telegram), each with a title and one line of help (copy in section 11.3), and a "Cancel" text button that restores the button. Picking a tile creates the card with its type fixed (there is no Type dropdown; the type badge stays in the card header), the name prefilled (Twilio, Email, Telegram) and the id generated from the name (twilio, email, telegram, with a numeric suffix such as `twilio-2` when the id is taken).
+14. Hidden ids: provider and group ids are generated from the name and never shown in the main form. Each card's "Advanced" disclosure holds the ID read-only with an "Edit" text button that makes it editable, for people who hand-edit config.json; one-sentence help reads "How switches refer to this provider in config.json." (or group). Format and uniqueness are still validated with the same messages, and an issue on the ID opens the disclosure so it is never invisible. A generated id keeps following the name as it is typed until it is edited by hand or a switch action refers to it, so renaming a provider or group never breaks a switch. A new group starts as `group` (then `group-2`) until it is named. Switch ids stay UUIDs (item 6) and are shown as before.
+15. Validate on blur: a provider, group or switch added in this session is fresh. Its card shows placeholders and no inline errors, and its issues are left out of the issue list, until a control inside the card loses focus or a select or checkbox changes (typing alone does not count); from then on the whole card validates live. Save is still disabled while any issue exists, fresh cards included; while every remaining issue is on a fresh card the issue box shows the info line "Fill in the new provider to enable Save." (or group, or switch, or "provider and group") instead of the list. The Homebridge UI disables its Save button while issues exist, so a Save attempt cannot reveal the errors; touching a field is the only trigger.
+16. Phone-friendly layout: below 600px a phone row stacks, the country dropdown on its own line and the number field with Remove beside it on the next. On viewports below 600px or on touch devices (`(pointer: coarse)`, or `navigator.maxTouchPoints > 0`, which sets `ns-touch` on the body) QR codes, their captions and Enlarge are hidden and "Open in Telegram" (opens the t.me link), "Copy link" and "Share" (Web Share API, hidden when the browser has none) are shown instead. Card footers put the primary action first in the markup and reverse the row, so when a footer wraps the primary action is the top line and Remove drops below it. Every button, text buttons included, is at least 44px tall on touch devices. Each card header has a "Show help" / "Hide help" text button that collapses field help (status lines, counters, the SMS preview and validation messages stay visible); help is expanded at 600px and above and collapsed below, and the choice is remembered per card in memory for the page's lifetime only. The layout smoke test runs at 900, 599, 400 and 360px, asserts no horizontal overflow and stacked phone rows at 360px, the primary action on top of a wrapped footer, 44px targets on a touch device, and dark-mode contrast (item 18).
+17. Message fields: every body and subject field has a "Variables" text button on its label row that toggles a list of `{{switchName}}`, `{{time}}`, `{{date}}` and `{{datetime}}` with a "More about variables" link to the README; the field help no longer lists variables. The Channel dropdown offers only the channels the selected provider serves (a stored channel the provider cannot serve stays selectable, marked "(not served by this provider)", so it can be fixed) and has no help text. Field help is one sentence; where more is needed the sentence ends with a link to the matching README section, usually "Where do I find this?" (section 11.3 lists the links).
+18. Theme contrast: secondary text (help text, hints, captions, disabled buttons, disclosure labels such as Advanced, the help toggle) takes its colour from the Bootstrap theme variables the Homebridge UI injects, `--bs-secondary-color` with `--bs-body-color` as the fallback, never a fixed grey, so it is readable in both light and dark mode. Borders and step badges use `--bs-border-color` and `--bs-secondary-bg` the same way. The headless layout test renders the page in dark mode (and light mode) and asserts that the contrast of at least one help element per card type, the Advanced label, a QR caption and the help toggle against the effective background meets WCAG AA (4.5:1).
+
 ### 11.3 In-app copy
 
-All copy is final in the spec so it can be reviewed before implementation.
+All copy is final in the spec so it can be reviewed before implementation. Field help is one sentence, two at most; anything longer is a link to the README section named, shown after the sentence as "Where do I find this?" unless another link text is given. README links point at `https://github.com/arodbuilds/homebridge-notify-switch#{anchor}`; the harness checks that every anchor used is a heading in README.md.
 
-Getting started (top of page):
+Getting started (top of page, two paragraphs):
 
-"Notify Switch creates HomeKit switches that send a message when turned on. Set it up in three steps: add a Provider (the service that sends messages), create a Recipient Group (who receives them), then create a Switch (what to send). You only need one provider. After saving, restart Homebridge, then use the switch in a HomeKit automation or scene. The switch turns itself off after sending."
+"Notify Switch adds switches to the Home app. Turn one on, usually from an automation, and it sends a message, then turns itself off."
+
+"Set up in three steps: add a Provider (the service that sends), create a Recipient Group (who receives), then create a Switch (what to send). You only need one provider. Save, restart Homebridge, and add the switch to a HomeKit automation."
 
 Providers section:
 
-"A provider is a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through an account you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. Add only the providers you plan to use. Use Test connection to confirm credentials before saving."
+"A provider is the service that delivers your messages. Add only the ones you will use."
+
+Provider chooser (section 11.2, item 13): prompt "Which service should send your messages?", button "Cancel". Tiles:
+
+Twilio: "SMS text messages, and email if you have a Twilio-authenticated domain." Creates a provider named "Twilio".
+Email (SMTP): "Send from a mailbox you already have, such as Fastmail, Gmail, iCloud, or Outlook." Creates a provider named "Email".
+Telegram: "Free messages through a bot you create. Best for family group chats." Creates a provider named "Telegram".
+
+Advanced disclosure (section 11.2, item 14): label "Advanced". ID field label "ID", button "Edit", help "How switches refer to this provider in config.json." on provider cards and "How switches refer to this group in config.json." on group cards. Credentials File help: "Optional. A JSON file, relative to the Homebridge storage directory, that holds this provider's secrets so they stay out of config.json." Link: "Where do I find this?" to `#keeping-secrets-out-of-configjson-with-credentialsfile`.
 
 Twilio field help:
 
-`accountSid`: "Identifies your Twilio account and is not a secret. Found on the Twilio Console home page under Account Info. Starts with AC."
-`apiKeySid` and `apiKeySecret`: "Create a Standard API key at Console > Account > API keys & tokens. The secret is shown once; store it in a password manager. An API key can be revoked without changing your account password, which is why the Auth Token is not accepted here."
-`smsSenders`: "Twilio phone numbers you own, from Console > Phone Numbers > Manage > Active numbers. Include the country code. US long codes must be registered for A2P 10DLC or messages will be filtered."
-`messagingServiceSid`: "Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG."
-`emailFrom`: "Optional. Required only to send email through Twilio. The domain must be authenticated at Console > Communications > Email > Domains."
+`accountSid`: "Copy from the Twilio Console home page. It starts with AC and is not a secret." Link: "Where do I find this?" to `#twilio-sms-and-email`.
+`apiKeySid` and `apiKeySecret`: "Create a Standard key in the Twilio Console and paste its SID and secret. The secret is shown once." Link on the SID field: "Why not the Auth Token?" to `#api-keys`.
+`smsSenders`: "Numbers you own in Twilio. Use Look up numbers to pick from your account." Info line under the list: "US numbers must be registered for A2P 10DLC or carriers will block messages." Link: "How do I register?" to `#a2p-10dlc-registration-for-us-numbers`.
+`messagingServiceSid` (under Advanced): "Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG."
+`emailFrom`: "Send email from this address through Twilio. Its domain must be verified in the Twilio Console under Email > Domains." Link: "Where do I find this?" to `#email-through-twilio`.
 
 SMTP field help:
 
-`host`, `port`, `security`: "Your mail provider's outgoing server. Fastmail: smtp.fastmail.com, 465, SSL. Gmail: smtp.gmail.com, 465, SSL. iCloud: smtp.mail.me.com, 587, STARTTLS. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS."
+`host`, `port`, `security`: "Your mail provider's outgoing server settings." followed by a collapsed "Common settings" expander holding the table Fastmail: smtp.fastmail.com, 465, SSL. Gmail: smtp.gmail.com, 465, SSL. iCloud: smtp.mail.me.com, 587, STARTTLS. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS. (The schema form has no expander, so its `host` description carries the table as text.)
 `username`: "Usually your full email address."
-`password`: "Most providers require an app password rather than your login password. Fastmail: Settings > Privacy & Security > App passwords, scope SMTP. Gmail: Google Account > Security > App passwords. iCloud: appleid.apple.com > Sign-In and Security > App-Specific Passwords."
-`from.address`: "Must be an address your provider allows you to send from."
+`password`: "Use an app password, not your login password. Most providers require it." Link: "Where do I create one?" to `#app-passwords`.
+`from.address`: "The address messages come from. Your provider must allow sending from it."
 
-Telegram field help (schema form):
+Telegram field help:
 
-`botToken`: "Message @BotFather in Telegram, send /newbot, and follow the prompts. BotFather replies with the token. Then open a chat with your new bot and send it any message so it can find you."
+`botToken`: "BotFather sends the token. It looks like 123456789:AAF… Treat it like a password." Link: "Where do I find this?" to `#telegram`. (The schema form, which has no wizard, adds: "To create a bot, message @BotFather in Telegram and send /newbot.")
+`parseMode` (under Advanced): "How Telegram reads the message. Plain text is the safest choice."
 
 Telegram onboarding flow (custom UI, section 11.2, item 10):
 
-Step 1 title: "Create your bot". Button: "Open BotFather" (links to https://t.me/BotFather, with a QR code of the same link). Instructions, numbered: "Send /newbot." "Choose a display name such as Home Alerts." "Choose a username ending in bot." "Paste the token below."
-`botToken` help: "BotFather replies with the token, which looks like 123456789:AAF… Treat it as a password; anyone with the token can send as the bot."
+Step 1 title: "Create your bot". Intro: "On your phone, scan this code with the camera to open BotFather in Telegram. On a computer with Telegram installed, click Open BotFather instead. Then, in the BotFather chat:" Button: "Open BotFather" (links to https://t.me/BotFather, with a QR code of the same link captioned "Scan to open BotFather"). Instructions, numbered: "Send /newbot." "Choose a display name such as Home Alerts." "Choose a username ending in bot, for example homealerts_bot." "BotFather replies with a token. Copy it and paste it below."
 Connection line: "Connected to @{username}" on success; otherwise the error from the UI server.
-Step 2 title: "Choose how people receive messages". Card 1: "Family group chat (recommended)": "Everyone in the group gets every message. Nobody has to opt in individually." Button: "Add bot to a group" (links to https://t.me/{username}?startgroup=true, with a QR code of the same link). Card 2: "Individual chats": "Each person opens the bot and taps Start once."
-Step 3 title: "Invite people". A QR code for https://t.me/{username}?start=join with the buttons "Enlarge", "Copy link", and "Copy invite message". The invite message copied is: "Tap this link and press Start to get alerts from our home: https://t.me/{username}?start=join"
-Before the bot is connected, steps 2 and 3 show: "Connect your bot in step 1 to get the links and QR codes."
-Step 4 title and button: "Find people and groups". Help: "Lists everyone who has opened the bot and every group it has been added to. Choose a recipient group, then add people to it." Group dropdown placeholder: "Choose a recipient group…". Add without a group chosen: "Choose a recipient group first." Add with no groups configured: "Add a recipient group under Recipient Groups first." After adding: "Added to {group name}". No results: "No people or groups found yet. Open the bot and press Start, or add it to a group, then try again. Telegram only keeps recent updates, and a webhook set on the bot hides them."
-Group `telegram` list: "Chat IDs are numbers, not usernames. Use Find people and groups on the Telegram provider to add them. Group chats have negative IDs."
+Step 2 title: "Choose how people receive messages". Card 1: "Family group chat (recommended)": "Everyone in the group gets every message. Nobody has to opt in individually." Card 2: "Individual chats": "Each person opens the bot and taps Start once."
+Step 3 with the group card selected. Title: "Add the bot to your group". QR code for https://t.me/{username}?startgroup=true captioned "Scan to add the bot to a group", the link as text, the button "Add bot to a group" (links to the same URL), the button "Copy link", and the sentence "Open Telegram on your phone and scan, or click the button, then pick your family group or create one. Everyone in the group will get alerts."
+Step 3 with individual chats selected. Title: "Invite people". QR code for https://t.me/{username}?start=join captioned "Scan to start receiving alerts", the link as text, and the buttons "Enlarge", "Copy link", and "Copy invite message". The invite message copied is: "Tap this link and press Start to get alerts from our home: https://t.me/{username}?start=join"
+Phone and touch alternative (section 11.2, item 16), replacing the QR code, caption and Enlarge: buttons "Open in Telegram", "Copy link", "Share" (and "Copy invite message" in the individual variant).
+Before the bot is connected, step 3 shows: "Connect your bot in step 1 to get the links and QR codes."
+Step 4 title and button: "Find people and groups". Help: "Lists everyone who has opened the bot and every group it has been added to. Choose a recipient group, then add people to it." Group dropdown placeholder: "Choose a recipient group…". Add without a group chosen: "Choose a recipient group first." Add with no groups configured: "Add a recipient group under Recipient Groups first." After adding: "Added to {group name}". After results are listed: "Added people appear in the group's Telegram chat IDs list. Save when you're done." No results: "No people or groups found yet. Open the bot and press Start, or add it to a group, then try again. Telegram only keeps recent updates, and a webhook set on the bot hides them."
 
 Twilio "Look up numbers" (section 11.2, item 9):
 
@@ -375,19 +393,40 @@ Button: "Look up numbers". Help: "Lists the phone numbers and Messaging Services
 
 Recipient Groups section:
 
-"A group is a named list of people. Add phone numbers for SMS, email addresses for email, and chat IDs for Telegram. Switches send to groups, so you enter each person once here and reuse them everywhere. Phone numbers need a country code; pick it from the dropdown."
+"A group is a list of people. Switches send to groups, so you enter each person once."
+
+Group `telegram` list: "Use Find people and groups on your Telegram provider. IDs are numbers, not usernames."
 
 Switches section:
 
-"Each switch appears in the Home app. Turning it on sends every action listed below it, then the switch turns itself off. Add one action per channel you want to use. Cooldown prevents an automation that fires repeatedly from sending the same message over and over. The failure sensor is optional; turn it on if you want a HomeKit automation to tell you when a message did not go out."
+"Each switch appears in the Home app. Turning it on runs every action below it, then the switch turns itself off. Add one action per channel you want."
 
 Switch field help:
 
-`name`: "Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number. This is the name shown in the Home app."
+`name`: "Shown in the Home app. Letters, numbers, spaces, and apostrophes."
 `cooldownSeconds`: "Minimum seconds between sends for this switch. 0 disables the cooldown."
 `failureMode`: "Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged."
-`body` (sms): "Up to 160 characters using standard characters. Emoji and some symbols are not allowed because they shorten the limit and can split the message. Variables: {{switchName}}, {{time}}, {{date}}."
-`body` (email and telegram): "Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}."
+`failureSensor`: "Adds a sensor to this switch that HomeKit automations can watch. It opens when a message fails to send."
+`failureSensorResetSeconds`: "Seconds after a failure before the sensor closes again on its own. 0 keeps it open until the next successful send."
+`sender`: "Automatic uses the only sender, or the Messaging Service when one is set."
+`channel`: no help text; the dropdown offers only the channels the selected provider serves.
+`subject`: "Optional. Defaults to the switch name."
+`body` (sms): "Up to 160 plain characters. Emoji and special symbols are not allowed for SMS."
+`body` (email and telegram): "Plain text."
+
+Variables toggle (next to every body and subject field, section 11.2, item 17): button "Variables". Intro: "Type these anywhere in the message or subject:" List: `{{switchName}}` "the switch name"; `{{time}}` "the time, such as 14:05"; `{{date}}` "the date, such as 2026-09-07"; `{{datetime}}` "date and time together". Link: "More about variables" to `#template-variables`.
+
+Help toggle (card header, section 11.2, item 16): "Show help" / "Hide help".
+
+Validation messages (settings UI): each says what the value looks like and where to get it, not the format rule.
+
+Account SID: "That does not look like an Account SID. It starts with AC and is 34 characters; copy it from the Twilio Console."
+API Key SID: "That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console."
+Messaging Service SID: "That does not look like a Messaging Service SID. It starts with MG and is 34 characters; copy it from the Twilio Console."
+Bot token: "That does not look like a bot token. BotFather sends it as numbers, a colon, then letters. Paste the whole thing."
+Port: "Port is usually 465 or 587."
+Switch name (and master switch name): "Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number."
+Fresh cards (section 11.2, item 15): "Fill in the new {provider|group|switch} to enable Save."
 
 Uncovered channel warning (switch card, one per uncovered channel; see section 11.2, item 8):
 

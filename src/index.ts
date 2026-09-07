@@ -1,3 +1,5 @@
+// Copyright 2026 Alex Rodriguez (arodbuilds) https://alex-rodriguez.com
+
 import type { API } from 'homebridge';
 
 import { NotifySwitchPlatform } from './platform.js';

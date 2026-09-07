@@ -1,32 +1,25 @@
 import type { BotIdentity, ChatSummary, ProviderType, TwilioLookupResult } from '../../../src/types.js';
-import { CREDENTIAL_KEYS } from '../../../src/types.js';
+import { PROVIDER_TYPES } from '../../../src/types.js';
 import { BOT_TOKEN_PATTERN } from '../../../src/patterns.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App } from '../app.js';
-import { PROVIDERS_SECTION, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP } from '../copy.js';
+import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
 import {
-  button, cardFooter, clear, copyButton, dangerLinkButton, el, numberField, openModal, paragraph, passwordField, selectField, statusBox, textField,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, ID_FIELD, PROVIDER_CHOOSER, PROVIDERS_SECTION, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING,
+  TWILIO_HELP, TWILIO_LOOKUP,
+} from '../copy.js';
+import {
+  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpText, linkButton, linkOut, numberField, openModal, paragraph,
+  passwordField, selectField, statusBox, textField,
 } from '../dom.js';
-import { exportProvider, newProvider, slugify } from '../model.js';
+import { createProvider, exportProvider, slugify, uniqueSlug } from '../model.js';
 import type { UiProvider } from '../model.js';
 import { qrElement } from '../qr.js';
 import { groupTitle } from './groups.js';
 
-const TYPE_LABELS: Record<ProviderType, string> = { twilio: 'Twilio (SMS and email)', smtp: 'SMTP (email)', telegram: 'Telegram' };
-
 export function providerTitle(p: UiProvider): string {
   return p.name.trim() || p.id.trim() || 'New provider';
-}
-
-function credentialsNote(type: ProviderType): string {
-  return 'Optional. Path, relative to the Homebridge storage directory, of a JSON file whose keys override this provider\'s secret fields '
-    + `(${CREDENTIAL_KEYS[type].join(', ')}). Keeps secrets out of config.json and backups. Read once when Homebridge starts.`;
-}
-
-/** An outlined link that opens in a new tab, styled as a button. */
-function linkOut(label: string, href: string, cls = 'btn btn-outline-primary btn-sm'): HTMLAnchorElement {
-  return el('a', { class: cls, href, target: '_blank', rel: 'noopener noreferrer', role: 'button' }, label);
 }
 
 interface FindChatsResult {
@@ -35,21 +28,25 @@ interface FindChatsResult {
   chats: ChatSummary[];
 }
 
-/** The "Advanced" disclosure: any extra fields for the type first, then the credentials file. Open when something in it is set. */
-function advancedDisclosure(app: App, p: UiProvider, path: string, extra: HTMLElement[], open: boolean): HTMLDetailsElement {
-  const details = el('details', { class: 'mb-3 ns-advanced' },
-    el('summary', { class: 'text-muted small' }, 'Advanced'),
-    el('div', { class: 'mt-2' }, ...extra, textField('Credentials File', p.credentialsFile, (v) => {
-      p.credentialsFile = v;
-      app.changed();
-    }, { path: `${path}.credentialsFile`, monospace: true, placeholder: 'notify-switch-twilio.json', help: credentialsNote(p.type) })),
-  );
-  if (open || p.credentialsFile.trim()) {
-    details.open = true;
-  }
-  return details;
+/** True when a switch action sends through this provider, in which case the id must not follow the name any more. */
+function providerReferenced(app: App, id: string): boolean {
+  return id.length > 0 && app.config.switches.some((s) => s.actions.some((a) => a.providerId === id));
 }
 
+/**
+ * The "Advanced" disclosure (SPEC section 11.2, item 14): the ID first, then any extra fields for the
+ * type, then the credentials file. Open when something optional in it is set.
+ */
+function advancedDisclosure(app: App, p: UiProvider, path: string, id: HTMLElement, extra: HTMLElement[], open: boolean): HTMLDetailsElement {
+  const credentials = textField('Credentials File', p.credentialsFile, (v) => {
+    p.credentialsFile = v;
+    app.changed();
+  }, {
+    path: `${path}.credentialsFile`, monospace: true, placeholder: `notify-switch-${p.type}.json`, help: CREDENTIALS_FILE_HELP, helpLink: CREDENTIALS_FILE_LINK,
+  });
+  const isOpen = open || p.credentialsFile.trim().length > 0;
+  return disclosure('Advanced', [id, ...extra, credentials], { cls: 'mb-3', open: isOpen, attrs: { 'data-advanced': path } });
+}
 
 interface LookupPanel {
   el: HTMLElement;
@@ -108,7 +105,7 @@ function twilioLookup(p: UiProvider, path: string): LookupPanel {
     lookupButton.title = enabled ? '' : 'Enter the Account SID, API Key SID and API Key Secret first.';
   };
   panel.el.appendChild(el('div', { class: 'd-flex flex-wrap align-items-center gap-2' },
-    lookupButton, el('span', { class: 'form-text mt-0' }, TWILIO_LOOKUP.help)));
+    lookupButton, el('span', { class: 'form-text ns-help mt-0' }, TWILIO_LOOKUP.help)));
   panel.el.appendChild(status.el);
   panel.el.appendChild(selects);
   return panel;
@@ -116,7 +113,7 @@ function twilioLookup(p: UiProvider, path: string): LookupPanel {
 
 // ---- Twilio ---------------------------------------------------------------------------------------------
 
-function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement): void {
+function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
   const lookup = twilioLookup(p, path);
   const credentialsReady = (): boolean => p.accountSid.trim().length > 0 && p.apiKeySid.trim().length > 0 && p.apiKeySecret.length > 0;
   const refreshLookup = (): void => lookup.setEnabled(credentialsReady());
@@ -125,12 +122,14 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement):
     p.accountSid = v;
     refreshLookup();
     app.changed();
-  }, { path: `${path}.accountSid`, required: true, monospace: true, placeholder: 'AC…', help: TWILIO_HELP.accountSid }));
+  }, {
+    path: `${path}.accountSid`, required: true, monospace: true, placeholder: 'AC…', help: TWILIO_HELP.accountSid, helpLink: TWILIO_HELP.accountSidLink,
+  }));
   body.appendChild(textField('API Key SID', p.apiKeySid, (v) => {
     p.apiKeySid = v;
     refreshLookup();
     app.changed();
-  }, { path: `${path}.apiKeySid`, required: true, monospace: true, placeholder: 'SK…', help: TWILIO_HELP.apiKey }));
+  }, { path: `${path}.apiKeySid`, required: true, monospace: true, placeholder: 'SK…', help: TWILIO_HELP.apiKey, helpLink: TWILIO_HELP.apiKeyLink }));
   body.appendChild(passwordField('API Key Secret', p.apiKeySecret, (v) => {
     p.apiKeySecret = v;
     refreshLookup();
@@ -152,7 +151,8 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement):
   body.appendChild(el('div', { class: 'mb-3' },
     el('label', { class: 'form-label' }, 'SMS Senders'),
     senders.el,
-    el('div', { class: 'form-text' }, TWILIO_HELP.smsSenders),
+    helpText(TWILIO_HELP.smsSenders),
+    helpText(TWILIO_HELP.smsSendersNote, TWILIO_HELP.smsSendersNoteLink, 'ns-senders-note'),
     lookup.el,
   ));
   refreshLookup();
@@ -161,20 +161,22 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement):
     el('div', { class: 'ns-span-7' }, textField('Email From address', p.emailFrom.address, (v) => {
       p.emailFrom.address = v;
       app.changed(true);
-    }, { path: `${path}.emailFrom.address`, type: 'email', placeholder: 'alerts@example.com', help: TWILIO_HELP.emailFrom })),
+    }, {
+      path: `${path}.emailFrom.address`, type: 'email', placeholder: 'alerts@example.com', help: TWILIO_HELP.emailFrom, helpLink: TWILIO_HELP.emailFromLink,
+    })),
     el('div', { class: 'ns-span-5' }, textField('Email From name', p.emailFrom.name, (v) => {
       p.emailFrom.name = v;
       app.changed();
     }, { path: `${path}.emailFrom.name`, placeholder: 'Home' })),
   ));
 
-  // Advanced: Messaging Service SID and credentials file (SPEC section 11.2, item 9).
+  // Advanced: ID, Messaging Service SID and credentials file (SPEC section 11.2, items 9 and 14).
   const serviceField = textField('Messaging Service SID', p.messagingServiceSid, (v) => {
     p.messagingServiceSid = v;
     app.changed(true);
   }, { path: `${path}.messagingServiceSid`, monospace: true, placeholder: 'MG…', help: TWILIO_HELP.messagingServiceSid });
   const serviceInput = serviceField.querySelector('input') as HTMLInputElement;
-  const advanced = advancedDisclosure(app, p, path, [serviceField], p.messagingServiceSid.trim().length > 0);
+  const advanced = advancedDisclosure(app, p, path, id, [serviceField], p.messagingServiceSid.trim().length > 0);
   lookup.onService = (sid) => {
     p.messagingServiceSid = sid;
     serviceInput.value = sid;
@@ -186,7 +188,18 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement):
 
 // ---- SMTP -----------------------------------------------------------------------------------------------
 
-function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement): void {
+/** The Fastmail, Gmail, iCloud and Outlook settings, collapsed under "Common settings" (SPEC section 11.3). */
+function commonSettings(): HTMLElement {
+  const table = el('table', { class: 'table table-sm mb-0 ns-settings-table' },
+    el('thead', {}, el('tr', {}, el('th', {}, 'Provider'), el('th', {}, 'Host'), el('th', {}, 'Port'), el('th', {}, 'Security'))),
+    el('tbody', {}, ...SMTP_HELP.commonSettingsRows.map(([name, host, port, security]) => el('tr', {},
+      el('td', { 'data-label': 'Provider' }, name), el('td', { class: 'font-monospace', 'data-label': 'Host' }, host),
+      el('td', { 'data-label': 'Port' }, port), el('td', { 'data-label': 'Security' }, security)))),
+  );
+  return disclosure(SMTP_HELP.commonSettings, [table], { cls: 'mb-3 ns-common-settings' });
+}
+
+function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
   body.appendChild(el('div', { class: 'ns-grid' },
     el('div', { class: 'ns-span-6' }, textField('Host', p.host, (v) => {
       p.host = v;
@@ -203,7 +216,8 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement): v
       app.changed();
     }, { path: `${path}.security` })),
   ));
-  body.appendChild(el('div', { class: 'form-text mb-3' }, SMTP_HELP.server));
+  body.appendChild(helpText(SMTP_HELP.server, undefined, 'mb-2 ns-server-help'));
+  body.appendChild(commonSettings());
   body.appendChild(textField('Username', p.username, (v) => {
     p.username = v;
     app.changed();
@@ -211,7 +225,7 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement): v
   body.appendChild(passwordField('Password', p.password, (v) => {
     p.password = v;
     app.changed();
-  }, { path: `${path}.password`, required: true, help: SMTP_HELP.password }));
+  }, { path: `${path}.password`, required: true, help: SMTP_HELP.password, helpLink: SMTP_HELP.passwordLink }));
   body.appendChild(el('div', { class: 'ns-grid' },
     el('div', { class: 'ns-span-7' }, textField('From address', p.from.address, (v) => {
       p.from.address = v;
@@ -222,7 +236,7 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement): v
       app.changed();
     }, { path: `${path}.from.name`, placeholder: 'Home' })),
   ));
-  body.appendChild(advancedDisclosure(app, p, path, [], false));
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false));
 }
 
 // ---- Telegram onboarding (SPEC section 11.2, item 10) ---------------------------------------------------
@@ -235,6 +249,13 @@ function botLink(username: string, query: string): string {
   return `https://t.me/${username}${query}`;
 }
 
+/** The t.me link shown as text under a step's QR code, clickable for people reading on the device that has Telegram. */
+function stepLink(url: string): HTMLAnchorElement {
+  return el('a', {
+    class: 'small font-monospace d-block mb-2 ns-step-link', href: url, target: '_blank', rel: 'noopener noreferrer', 'data-invite-link': url,
+  }, url);
+}
+
 /** getMe results by token, so re-rendering the section does not ask Telegram again. Lives in memory for the page only. */
 const botCache = new Map<string, BotIdentity>();
 
@@ -242,7 +263,7 @@ const botCache = new Map<string, BotIdentity>();
 function findChatsPanel(app: App, p: UiProvider): HTMLElement {
   const copy = TELEGRAM_ONBOARDING;
   const panel = el('div', { class: 'ns-step find-chats', 'data-step': '4' },
-    stepTitle(4, copy.findTitle), el('div', { class: 'form-text mb-2' }, copy.findHelp));
+    stepTitle(4, copy.findTitle), helpText(copy.findHelp, undefined, 'mb-2'));
   const groups = app.config.groups.filter((g) => g.id.trim());
   const groupSelect = el('select', { class: 'form-select form-select-sm w-auto', 'aria-label': 'Recipient group to add people to' });
   groupSelect.appendChild(el('option', { value: '' }, 'Choose a recipient group…'));
@@ -254,10 +275,12 @@ function findChatsPanel(app: App, p: UiProvider): HTMLElement {
   }
   const status = statusBox();
   const results = el('div', { class: 'chat-results' });
+  const afterFind = el('div', { class: 'form-text ns-after-find', hidden: true }, copy.afterFind);
   const controls = el('div', { class: 'd-flex flex-wrap align-items-center gap-2 mb-2' });
   controls.appendChild(groupSelect);
   controls.appendChild(button(copy.findTitle, async () => {
     clear(results);
+    afterFind.hidden = true;
     status.set('info', 'Asking Telegram for recent updates…');
     const result = await callServer<FindChatsResult>('/find-chats', { provider: exportProvider(p) });
     const chats = Array.isArray(result.chats) ? result.chats : [];
@@ -280,18 +303,20 @@ function findChatsPanel(app: App, p: UiProvider): HTMLElement {
       }, 'btn btn-outline-success btn-sm');
       results.appendChild(el('div', { class: 'chat-result d-flex align-items-center gap-2', 'data-chat-id': chat.id },
         el('span', { class: 'font-monospace' }, chat.id),
-        el('span', { class: 'flex-grow-1' }, chat.title, el('span', { class: 'text-muted small ms-1' }, `(${chat.type})`)),
+        el('span', { class: 'flex-grow-1' }, chat.title, el('span', { class: 'ns-secondary small ms-1' }, `(${chat.type})`)),
         add,
       ));
     }
+    afterFind.hidden = chats.length === 0;
   }, 'btn btn-outline-secondary btn-sm'));
   panel.appendChild(controls);
   panel.appendChild(status.el);
   panel.appendChild(results);
+  panel.appendChild(afterFind);
   return panel;
 }
 
-function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement): void {
+function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
   const copy = TELEGRAM_ONBOARDING;
   let username: string | undefined;
   const dependants: Array<(username: string | undefined) => void> = [];
@@ -348,30 +373,81 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
     stepTitle(1, copy.step1Title),
     el('div', { class: 'ns-step-row' },
       el('div', { class: 'ns-step-text' },
+        el('p', { class: 'mb-2 ns-step-intro' }, copy.step1Intro),
         el('div', { class: 'mb-2' }, linkOut(copy.openBotFather, copy.botFatherUrl)),
         el('ol', {}, ...copy.step1Instructions.map((line) => el('li', {}, line))),
       ),
-      qrElement(copy.botFatherUrl, 'QR code for BotFather'),
+      qrBlock(copy.botFatherUrl, 'QR code for BotFather', copy.botFatherCaption),
     ),
     passwordField('Bot Token', p.botToken, (v) => {
       p.botToken = v;
       app.changed();
       scheduleLookup();
-    }, { path: `${path}.botToken`, required: true, help: TELEGRAM_HELP.botToken }),
+    }, { path: `${path}.botToken`, required: true, help: TELEGRAM_HELP.botToken, helpLink: TELEGRAM_HELP.botTokenLink }),
     connection.el,
   );
   body.appendChild(step1);
 
-  // Step 2: group chat or individual chats.
+  // Step 2: group chat or individual chats. The choice decides what step 3 shows.
   let mode: 'group' | 'individual' = 'group';
   const modeCards = el('div', { class: 'ns-mode-cards', role: 'radiogroup', 'aria-label': copy.step2Title });
-  const groupLinks = el('div', { class: 'ns-step-row mt-2' });
-  const makeCard = (key: 'group' | 'individual', title: string, text: string, extra: HTMLElement | null): HTMLElement => {
+  const step3 = el('div', { class: 'ns-step', 'data-step': '3' });
+  const renderStep3 = (): void => {
+    clear(step3);
+    const name = username;
+    if (mode === 'group') {
+      step3.setAttribute('data-mode', 'group');
+      step3.appendChild(stepTitle(3, copy.step3GroupTitle));
+      if (!name) {
+        step3.appendChild(el('div', { class: 'form-text' }, copy.connectFirst));
+        return;
+      }
+      const url = botLink(name, '?startgroup=true');
+      step3.appendChild(el('div', { class: 'ns-step-row' },
+        qrBlock(url, 'QR code to add the bot to a group', copy.groupCaption),
+        el('div', { class: 'ns-step-text' },
+          stepLink(url),
+          el('div', { class: 'ns-invite-actions ns-qr-only' }, linkOut(copy.addToGroup, url), copyButton(copy.copyLink, () => url)),
+          compactLinkActions(url, copy.groupSentence),
+          el('p', { class: 'mt-2 mb-0' }, copy.groupSentence),
+        ),
+      ));
+      return;
+    }
+    step3.setAttribute('data-mode', 'individual');
+    step3.appendChild(stepTitle(3, copy.step3Title));
+    if (!name) {
+      step3.appendChild(el('div', { class: 'form-text' }, copy.connectFirst));
+      return;
+    }
+    const url = botLink(name, '?start=join');
+    const enlarge = button(copy.enlarge, () => {
+      openModal({
+        title: copy.step3Title,
+        body: el('div', {}, qrElement(url, 'QR code to invite people', true), el('div', { class: 'text-center small mt-2 font-monospace' }, url)),
+        wide: true,
+      });
+    }, 'btn btn-outline-secondary btn-sm ns-enlarge');
+    const compact = compactLinkActions(url, copy.inviteMessage(name));
+    compact.appendChild(copyButton(copy.copyInvite, () => copy.inviteMessage(name)));
+    step3.appendChild(el('div', { class: 'ns-step-row' },
+      qrBlock(url, 'QR code to invite people', copy.inviteCaption),
+      el('div', { class: 'ns-step-text' },
+        stepLink(url),
+        el('div', { class: 'ns-invite-actions ns-qr-only' },
+          enlarge,
+          copyButton(copy.copyLink, () => url),
+          copyButton(copy.copyInvite, () => copy.inviteMessage(name)),
+        ),
+        compact,
+      ),
+    ));
+  };
+  const makeCard = (key: 'group' | 'individual', title: string, text: string): HTMLElement => {
     const radio = el('input', { class: 'form-check-input', type: 'radio', name: `${path}.telegram-mode`, id: `${path}.telegram-mode.${key}` });
     const card = el('div', { class: 'ns-mode-card', role: 'radio', 'data-mode': key, tabindex: '0' },
       el('label', { class: 'fw-semibold d-block', for: `${path}.telegram-mode.${key}` }, radio, title),
       el('div', { class: 'small' }, text),
-      extra,
     );
     const select = (): void => {
       mode = key;
@@ -383,6 +459,7 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
           input.checked = active;
         }
       }
+      renderStep3();
     };
     card.addEventListener('click', select);
     card.addEventListener('keydown', (event) => {
@@ -393,60 +470,25 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
     });
     return card;
   };
-  modeCards.appendChild(makeCard('group', copy.groupTitle, copy.groupText, groupLinks));
-  modeCards.appendChild(makeCard('individual', copy.individualTitle, copy.individualText, null));
-  dependants.push((name) => {
-    clear(groupLinks);
-    if (!name) {
-      groupLinks.appendChild(el('div', { class: 'form-text' }, copy.connectFirst));
-      return;
-    }
-    const url = botLink(name, '?startgroup=true');
-    groupLinks.appendChild(el('div', { class: 'ns-step-text' }, linkOut(copy.addToGroup, url)));
-    groupLinks.appendChild(qrElement(url, 'QR code to add the bot to a group'));
-  });
+  modeCards.appendChild(makeCard('group', copy.groupTitle, copy.groupText));
+  modeCards.appendChild(makeCard('individual', copy.individualTitle, copy.individualText));
   body.appendChild(el('div', { class: 'ns-step', 'data-step': '2' }, stepTitle(2, copy.step2Title), modeCards));
-  // Preselect the recommended option.
+  dependants.push(() => renderStep3());
+  body.appendChild(step3);
+  // Preselect the recommended option; this also draws step 3 for the first time.
   modeCards.querySelector<HTMLElement>('[data-mode="group"]')?.click();
-
-  // Step 3: invite people.
-  const invite = el('div', { class: 'ns-step-row' });
-  dependants.push((name) => {
-    clear(invite);
-    if (!name) {
-      invite.appendChild(el('div', { class: 'form-text' }, copy.connectFirst));
-      return;
-    }
-    const url = botLink(name, '?start=join');
-    const enlarge = button(copy.enlarge, () => {
-      openModal({
-        title: copy.step3Title,
-        body: el('div', {}, qrElement(url, 'QR code to invite people', true), el('div', { class: 'text-center small mt-2 font-monospace' }, url)),
-        wide: true,
-      });
-    }, 'btn btn-outline-secondary btn-sm');
-    invite.appendChild(qrElement(url, 'QR code to invite people'));
-    invite.appendChild(el('div', { class: 'ns-step-text' },
-      el('div', { class: 'small font-monospace mb-2', 'data-invite-link': url }, url),
-      el('div', { class: 'ns-invite-actions' },
-        enlarge,
-        copyButton(copy.copyLink, () => url),
-        copyButton(copy.copyInvite, () => copy.inviteMessage(name)),
-      ),
-    ));
-  });
-  body.appendChild(el('div', { class: 'ns-step', 'data-step': '3' }, stepTitle(3, copy.step3Title), invite));
 
   // Find people and groups (SPEC section 11.2, item 5).
   body.appendChild(findChatsPanel(app, p));
 
-  body.appendChild(selectField('Parse Mode', p.parseMode, [
+  // Advanced: ID, Parse Mode (plain text by default) and credentials file.
+  const parseMode = selectField('Parse Mode', p.parseMode, [
     { value: 'none', label: 'None (plain text)' }, { value: 'markdown', label: 'Markdown' }, { value: 'html', label: 'HTML' },
   ], (v) => {
     p.parseMode = v as UiProvider['parseMode'];
     app.changed();
-  }, { path: `${path}.parseMode`, help: 'How Telegram should interpret the message body. Plain text is the safest choice.' }));
-  body.appendChild(advancedDisclosure(app, p, path, [], false));
+  }, { path: `${path}.parseMode`, help: TELEGRAM_HELP.parseMode });
+  body.appendChild(advancedDisclosure(app, p, path, id, [parseMode], p.parseMode !== 'none'));
 
   setUsername(undefined);
   if (BOT_TOKEN_PATTERN.test(p.botToken.trim())) {
@@ -458,54 +500,45 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
 
 function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   const path = `providers[${index}]`;
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center' });
+  const others = (): string[] => app.config.providers.filter((other) => other !== p).map((other) => other.id);
+  const card = el('div', { class: 'card mb-3', 'data-path': path, 'data-type': p.type });
   const title = el('span', { class: 'fw-semibold' }, providerTitle(p));
   const badge = el('span', { class: 'badge text-bg-secondary ms-2' }, p.type);
-  header.appendChild(el('span', {}, title, badge));
+  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' },
+    el('span', {}, title, badge), helpToggle(card, p));
 
   const body = el('div', { class: 'card-body' });
-  let idTouched = p.id.trim().length > 0 && p.id !== slugify(p.name);
-
-  const idField = textField('ID', p.id, (value) => {
-    p.id = value;
-    idTouched = true;
-    app.changed(true);
-  }, {
-    path: `${path}.id`, required: true, monospace: true, placeholder: 'twilio-main',
-    help: 'Short unique identifier switches use to reference this provider. Lowercase letters, numbers, dashes, and underscores.',
+  // The id is generated from the name (SPEC section 11.2, item 14) and keeps following it until it is
+  // edited by hand under Advanced or a switch refers to it, so renaming never breaks a switch.
+  let idFollowsName = !providerReferenced(app, p.id.trim()) && (slugify(p.name) === '' || p.id.trim() === uniqueSlug(p.name, others(), p.type));
+  const id = idField({
+    path: `${path}.id`, value: p.id, help: ID_FIELD.providerHelp, onChange: (value) => {
+      p.id = value;
+      idFollowsName = false;
+      app.changed(true);
+    },
   });
-  const idInput = idField.querySelector('input') as HTMLInputElement;
+  const idInput = id.querySelector('input') as HTMLInputElement;
 
   body.appendChild(textField('Name', p.name, (value) => {
     p.name = value;
     title.textContent = providerTitle(p);
-    if (!idTouched) {
-      p.id = slugify(value);
+    if (idFollowsName) {
+      p.id = uniqueSlug(value, others(), p.type);
       idInput.value = p.id;
     }
     app.changed(true);
-  }, { path: `${path}.name`, required: true, placeholder: 'Twilio', help: 'Display name for this provider.' }));
-  body.appendChild(idField);
-
-  body.appendChild(selectField('Type', p.type, (Object.keys(TYPE_LABELS) as ProviderType[]).map((t) => ({ value: t, label: TYPE_LABELS[t] })), (value) => {
-    // Switching type keeps the identity and drops the other type's fields.
-    const fresh = newProvider(value as ProviderType);
-    fresh.id = p.id;
-    fresh.name = p.name;
-    fresh.credentialsFile = p.credentialsFile;
-    app.config.providers[index] = fresh;
-    app.rerender('providers', true);
-  }, { path: `${path}.type`, help: 'The messaging service this provider connects to.' }));
+  }, { path: `${path}.name`, required: true, placeholder: PROVIDER_CHOOSER[p.type].name }));
 
   switch (p.type) {
   case 'twilio':
-    twilioFields(app, p, path, body);
+    twilioFields(app, p, path, body, id);
     break;
   case 'smtp':
-    smtpFields(app, p, path, body);
+    smtpFields(app, p, path, body, id);
     break;
   case 'telegram':
-    telegramFields(app, p, path, body);
+    telegramFields(app, p, path, body, id);
     break;
   }
 
@@ -524,7 +557,49 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     app.rerender('providers', true);
   });
 
-  return el('div', { class: 'card mb-3', 'data-path': path }, header, body, cardFooter(remove, test), results);
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(cardFooter(remove, test));
+  card.appendChild(results);
+  app.watchCard(card, p);
+  return card;
+}
+
+/**
+ * The provider chooser (SPEC section 11.2, item 13): Add provider is replaced by three tiles; picking one
+ * creates the card with its type fixed, the name prefilled and the id generated from the name.
+ */
+function addProviderControl(app: App): HTMLElement {
+  const slot = el('div', { class: 'ns-add-provider' });
+  let showChooser: () => void = () => undefined;
+  const showButton = (): void => {
+    clear(slot);
+    slot.appendChild(button(CHOOSER.add, () => showChooser(), 'btn btn-primary btn-sm'));
+  };
+  showChooser = (): void => {
+    clear(slot);
+    const tiles = PROVIDER_TYPES.map((type) => {
+      const tile = el('button', { type: 'button', class: 'ns-chooser-tile', 'data-type': type },
+        el('span', { class: 'fw-semibold d-block' }, PROVIDER_CHOOSER[type].title),
+        el('span', { class: 'ns-secondary small d-block' }, PROVIDER_CHOOSER[type].help),
+      );
+      tile.addEventListener('click', () => {
+        const p = createProvider(type as ProviderType, PROVIDER_CHOOSER[type].name, app.config.providers);
+        app.config.providers.push(p);
+        app.addFresh(p);
+        app.rerender('providers', true);
+      });
+      return tile;
+    });
+    slot.appendChild(el('div', { class: 'ns-chooser', role: 'group', 'aria-label': CHOOSER.prompt },
+      el('div', { class: 'fw-semibold mb-2' }, CHOOSER.prompt),
+      el('div', { class: 'ns-chooser-tiles' }, ...tiles),
+      el('div', { class: 'mt-2' }, linkButton(CHOOSER.cancel, showButton)),
+    ));
+    tiles[0]?.focus();
+  };
+  showButton();
+  return slot;
 }
 
 export function renderProviders(app: App, container: HTMLElement): void {
@@ -534,8 +609,5 @@ export function renderProviders(app: App, container: HTMLElement): void {
     container.appendChild(el('div', { class: 'form-text mb-2' }, 'No providers yet. Add one to get started.'));
   }
   container.appendChild(el('div', { class: 'list-feedback', 'data-path': 'providers' }, el('div', { class: 'invalid-feedback' })));
-  container.appendChild(button('Add provider', () => {
-    app.config.providers.push(newProvider());
-    app.rerender('providers', true);
-  }, 'btn btn-primary btn-sm'));
+  container.appendChild(addProviderControl(app));
 }

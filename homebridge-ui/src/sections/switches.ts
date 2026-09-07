@@ -4,6 +4,7 @@ import { PROVIDER_CHANNELS } from '../../../src/types.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App } from '../app.js';
+import { helpToggle, variablesToggle } from '../card.js';
 import { SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   button, cardFooter, checkboxField, clear, dangerLinkButton, el, linkButton, numberField, paragraph, selectField, statusBox, textField, textareaField,
@@ -54,6 +55,12 @@ function coverageWarnings(app: App, s: UiSwitch, rerenderSwitch: () => void): { 
   return { el: box, refresh };
 }
 
+/** A subject or message field with the Variables toggle on its label row and the variable list under the control. */
+function withVariables(field: HTMLElement, box: HTMLElement): HTMLElement {
+  field.querySelector('.form-control')?.insertAdjacentElement('afterend', box);
+  return field;
+}
+
 function actionCard(
   app: App, s: UiSwitch, a: UiAction, switchIndex: number, index: number, rerenderSwitch: () => void, onGroupsChange: () => void,
 ): HTMLElement {
@@ -76,6 +83,7 @@ function actionCard(
   if (a.providerId && !provider) {
     providerOptions.push({ value: a.providerId, label: `${a.providerId} (missing)` });
   }
+  // Only the channels the selected provider serves (SPEC section 11.2, item 17); a stored channel it cannot serve stays selectable so it can be fixed.
   const channels = provider ? PROVIDER_CHANNELS[provider.type] : (['sms', 'email', 'telegram'] as const);
   const channelOptions = channels.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }));
   if (!channels.includes(a.channel)) {
@@ -99,7 +107,7 @@ function actionCard(
       a.recipients = [];
       app.changed();
       rerenderSwitch();
-    }, { path: `${path}.channel`, required: true, help: provider ? undefined : 'Twilio sends SMS and email, SMTP sends email, Telegram sends Telegram.' })),
+    }, { path: `${path}.channel`, required: true })),
   ));
 
   if (provider?.type === 'twilio' && a.channel === 'sms') {
@@ -113,10 +121,7 @@ function actionCard(
     body.appendChild(selectField('Sender', a.sender, senderOptions, (value) => {
       a.sender = value;
       app.changed();
-    }, {
-      path: `${path}.sender`,
-      help: 'One of the provider\'s SMS Senders. Automatic uses the only sender, or the Messaging Service when one is set.',
-    }));
+    }, { path: `${path}.sender`, help: SWITCH_HELP.sender }));
   }
 
   // Groups: a checkbox per configured group, showing how many entries it has for this channel.
@@ -144,7 +149,7 @@ function actionCard(
     groupBox.appendChild(el('div', { class: 'form-check' },
       input,
       el('label', { class: 'form-check-label', for: `${path}.groups.${id}` },
-        groupTitle(g), el('span', { class: 'text-muted small ms-1' }, `(${count} ${CHANNEL_LABELS[a.channel]} ${count === 1 ? 'entry' : 'entries'})`)),
+        groupTitle(g), el('span', { class: 'ns-secondary small ms-1' }, `(${count} ${CHANNEL_LABELS[a.channel]} ${count === 1 ? 'entry' : 'entries'})`)),
     ));
   }
   for (const missing of a.groups.filter((id) => !groups.some((g) => g.id.trim() === id))) {
@@ -170,21 +175,26 @@ function actionCard(
   ));
 
   if (a.channel === 'email') {
-    body.appendChild(textField('Subject', a.subject, (value) => {
+    const variables = variablesToggle();
+    body.appendChild(withVariables(textField('Subject', a.subject, (value) => {
       a.subject = value;
       app.changed();
     }, {
-      path: `${path}.subject`, placeholder: s.name.trim() || 'Defaults to the switch name',
-      help: 'Optional. Defaults to the switch name. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}.',
-    }));
+      path: `${path}.subject`, placeholder: s.name.trim() || 'Defaults to the switch name', help: SWITCH_HELP.subject, labelExtra: variables.extra,
+    }), variables.box));
   }
 
   const counter = a.channel === 'sms' ? smsCounter() : undefined;
+  const variables = variablesToggle();
   const bodyField = textareaField('Message', a.body, (value) => {
     a.body = value;
     counter?.update(value);
     app.changed();
-  }, { path: `${path}.body`, required: true, rows: a.channel === 'sms' ? 3 : 5, help: a.channel === 'sms' ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther });
+  }, {
+    path: `${path}.body`, required: true, rows: a.channel === 'sms' ? 3 : 5, help: a.channel === 'sms' ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther,
+    labelExtra: variables.extra,
+  });
+  withVariables(bodyField, variables.box);
   if (counter) {
     counter.update(a.body);
     bodyField.querySelector('textarea')?.insertAdjacentElement('afterend', counter.el);
@@ -260,7 +270,8 @@ function testSendPanel(app: App, s: UiSwitch): TestSendPanel {
     }
     for (const action of result.actions ?? []) {
       const table = el('table', { class: 'table table-sm mb-2' },
-        el('caption', { class: 'small text-muted caption-top py-1' }, `Action ${action.index + 1}: ${CHANNEL_LABELS[action.channel]} via ${action.providerId}`),
+        el('caption', { class: 'small ns-secondary caption-top py-1' },
+          `Action ${action.index + 1}: ${CHANNEL_LABELS[action.channel]} via ${action.providerId}`),
         el('thead', {}, el('tr', {}, el('th', {}, 'Recipient'), el('th', {}, 'Result'))),
       );
       const tbody = el('tbody');
@@ -300,7 +311,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     host.replaceChild(switchCard(app, s, index, host), card);
   };
   const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center' }, title);
+  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, s));
   const body = el('div', { class: 'card-body' });
 
   body.appendChild(textField('Name', s.name, (value) => {
@@ -308,7 +319,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     title.textContent = switchTitle(s);
     app.changed();
   }, { path: `${path}.name`, required: true, placeholder: 'Water Leak Alert', help: SWITCH_HELP.name }));
-  body.appendChild(el('div', { class: 'form-text mb-3 switch-id', 'data-path': `${path}.id` },
+  body.appendChild(el('div', { class: 'form-text ns-help mb-3 switch-id', 'data-path': `${path}.id` },
     'ID ', el('code', {}, s.id), ' (generated; HomeKit tracks the switch by this id, so you can rename it freely)', el('div', { class: 'invalid-feedback' })));
 
   body.appendChild(el('div', { class: 'ns-grid' },
@@ -331,20 +342,14 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   const resetField = numberField('Failure Sensor Reset (seconds)', s.failureSensorResetSeconds, (value) => {
     s.failureSensorResetSeconds = value;
     app.changed();
-  }, {
-    path: `${path}.failureSensorResetSeconds`, min: 0, max: 86400,
-    help: 'Seconds after a failure before the sensor closes again on its own. 0 keeps it open until the next successful send.',
-  });
+  }, { path: `${path}.failureSensorResetSeconds`, min: 0, max: 86400, help: SWITCH_HELP.failureSensorReset });
   resetField.hidden = !s.failureSensor;
   body.appendChild(el('div', { class: 'ns-grid' },
     el('div', { class: 'ns-span-6' }, checkboxField('Failure Sensor', s.failureSensor, (value) => {
       s.failureSensor = value;
       resetField.hidden = !value;
       app.changed();
-    }, {
-      path: `${path}.failureSensor`,
-      help: 'Adds a contact sensor to this switch that opens when a message fails to send and closes on the next successful send or after the reset time.',
-    })),
+    }, { path: `${path}.failureSensor`, help: SWITCH_HELP.failureSensor })),
     el('div', { class: 'ns-span-6' }, resetField),
   ));
 
@@ -376,6 +381,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   card.appendChild(body);
   card.appendChild(cardFooter(remove, testSend.control));
   card.appendChild(testSend.results);
+  app.watchCard(card, s);
   return card;
 }
 
@@ -389,7 +395,9 @@ export function renderSwitches(app: App, container: HTMLElement): void {
   container.appendChild(host);
   container.appendChild(el('div', { class: 'list-feedback', 'data-path': 'switches' }, el('div', { class: 'invalid-feedback' })));
   container.appendChild(button('Add switch', () => {
-    app.config.switches.push(newSwitch());
+    const s = newSwitch();
+    app.config.switches.push(s);
+    app.addFresh(s);
     app.rerender('switches');
   }, 'btn btn-primary btn-sm'));
 }

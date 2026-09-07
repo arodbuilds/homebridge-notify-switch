@@ -5,6 +5,7 @@ import {
 } from '../../src/patterns.js';
 import { PROVIDER_CHANNELS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
+import { VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
 import type { UiAction, UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
 
@@ -51,7 +52,7 @@ function checkHapName(issues: Issues, name: string, path: string, label: string)
   } else if (value.length > HAP_NAME_MAX_LENGTH) {
     issues.add(path, label, `Name must be ${HAP_NAME_MAX_LENGTH} characters or fewer.`);
   } else if (!HAP_NAME_PATTERN.test(value)) {
-    issues.add(path, label, 'Name may contain only letters, numbers, spaces and apostrophes, and must start and end with a letter or number.');
+    issues.add(path, label, VALIDATION.switchName);
   }
 }
 
@@ -100,10 +101,10 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
   switch (p.type) {
   case 'twilio':
     if (!(fromFile && !p.accountSid.trim()) && !ACCOUNT_SID_PATTERN.test(p.accountSid.trim())) {
-      issues.add(`${path}.accountSid`, label, 'Account SID must start with AC followed by 32 hexadecimal characters.');
+      issues.add(`${path}.accountSid`, label, VALIDATION.accountSid);
     }
     if (!(fromFile && !p.apiKeySid.trim()) && !API_KEY_SID_PATTERN.test(p.apiKeySid.trim())) {
-      issues.add(`${path}.apiKeySid`, label, 'API Key SID must start with SK followed by 32 hexadecimal characters.');
+      issues.add(`${path}.apiKeySid`, label, VALIDATION.apiKeySid);
     }
     if (!fromFile && !p.apiKeySecret) {
       issues.add(`${path}.apiKeySecret`, label, 'API Key Secret is required.');
@@ -114,7 +115,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
       }
     });
     if (p.messagingServiceSid.trim() && !MESSAGING_SERVICE_SID_PATTERN.test(p.messagingServiceSid.trim())) {
-      issues.add(`${path}.messagingServiceSid`, label, 'Messaging Service SID must start with MG followed by 32 hexadecimal characters.');
+      issues.add(`${path}.messagingServiceSid`, label, VALIDATION.messagingServiceSid);
     }
     if (p.emailFrom.address.trim() && !EMAIL_PATTERN.test(p.emailFrom.address.trim())) {
       issues.add(`${path}.emailFrom.address`, label, 'Email From address is not a valid email address.');
@@ -128,7 +129,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
       issues.add(`${path}.host`, label, 'Host is required.');
     }
     if (!Number.isInteger(p.port) || p.port < 1 || p.port > 65535) {
-      issues.add(`${path}.port`, label, 'Port must be a whole number between 1 and 65535.');
+      issues.add(`${path}.port`, label, VALIDATION.port);
     }
     if (!fromFile && !p.username.trim()) {
       issues.add(`${path}.username`, label, 'Username is required.');
@@ -142,7 +143,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Set<strin
     break;
   case 'telegram':
     if (!(fromFile && !p.botToken.trim()) && !BOT_TOKEN_PATTERN.test(p.botToken.trim())) {
-      issues.add(`${path}.botToken`, label, 'Bot token does not look right: expected digits, a colon, then at least 30 characters.');
+      issues.add(`${path}.botToken`, label, VALIDATION.botToken);
     }
     break;
   }
