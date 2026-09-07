@@ -4,7 +4,7 @@ import { phoneInput } from './phone.js';
 
 /**
  * An editable list of addresses for one channel: phone rows for sms, email inputs for email,
- * chat id inputs for telegram. Mutates `values` in place and reports every change.
+ * chat id inputs for telegram, topic inputs for ntfy. Mutates `values` in place and reports every change.
  *
  * Layout (SPEC section 11.2, item 15): each row is a block holding a flex line with the control and
  * its Remove button, and the validation message below that line on its own. An error never sits in
@@ -24,10 +24,15 @@ export interface AddressListOptions {
   emptyText?: string;
 }
 
-const CHANNEL_LABEL: Record<Channel, string> = { sms: 'phone number', email: 'email address', telegram: 'chat ID' };
+const CHANNEL_LABEL: Record<Channel, string> = { sms: 'phone number', email: 'email address', telegram: 'chat ID', ntfy: 'topic' };
 
 /** Placeholders read as examples, never as values (SPEC section 11.2, item 15). */
-const PLACEHOLDER: Record<Exclude<Channel, 'sms'>, string> = { email: 'e.g. name@example.com', telegram: 'e.g. 123456789 or -1001234567890' };
+const PLACEHOLDER: Record<Exclude<Channel, 'sms'>, string> = {
+  email: 'e.g. name@example.com', telegram: 'e.g. 123456789 or -1001234567890', ntfy: 'e.g. home-alerts-x7q2',
+};
+
+/** Keyboard hint per channel; a topic name takes the plain keyboard. */
+const INPUT_MODE: Record<Exclude<Channel, 'sms'>, string | undefined> = { email: 'email', telegram: 'numeric', ntfy: undefined };
 
 export interface AddressListHandle {
   el: HTMLElement;
@@ -71,7 +76,7 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
           id,
           class: 'form-control',
           type: opts.channel === 'email' ? 'email' : 'text',
-          inputmode: opts.channel === 'telegram' ? 'numeric' : 'email',
+          inputmode: INPUT_MODE[opts.channel],
           autocomplete: 'off',
           spellcheck: 'false',
           placeholder: PLACEHOLDER[opts.channel],

@@ -126,6 +126,15 @@ export const TELEGRAM = {
   parseMode: 'none',
 };
 
+export const NTFY = {
+  id: 'ntfy-home',
+  type: 'ntfy',
+  name: 'ntfy',
+  server: 'https://ntfy.sh',
+  auth: 'token',
+  token: 'tk_secret_access_token_value',
+};
+
 /** A platform block with one switch whose actions are given by the caller. */
 export function platformConfig({ providers, groups, actions, debug = false }) {
   return {
@@ -133,7 +142,7 @@ export function platformConfig({ providers, groups, actions, debug = false }) {
     name: 'Notify Switch',
     debug,
     providers,
-    groups: groups ?? [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: ['123456789'] }],
+    groups: groups ?? [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: ['123456789'], ntfy: ['home-alerts'] }],
     switches: [{
       id: '6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b',
       name: 'Water Leak Alert',

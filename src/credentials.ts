@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
+import { quoteValue } from './text.js';
 import type { ProviderType } from './types.js';
 import { CREDENTIAL_KEYS } from './types.js';
 
@@ -10,7 +11,9 @@ export { CREDENTIAL_KEYS };
  * Optional `credentialsFile` on a provider (SPEC section 12, item 2): a JSON file, relative to the
  * Homebridge storage directory, whose keys override the provider's secret fields. Read once at
  * startup. A missing or malformed file is a blocking validation error. Nothing here ever logs or
- * returns file content beyond the values themselves, which the caller merges into the provider.
+ * returns file content beyond the values themselves, which the caller merges into the provider: an
+ * error or warning names the path and, at most, a key name (quoted with control characters escaped
+ * and cut to 64 characters), never a value and never the parse error's excerpt of the text.
  */
 
 export interface CredentialsFileResult {
@@ -79,7 +82,7 @@ export function loadCredentialsFile(credentialsFile: string, type: ProviderType,
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (!allowed.includes(key)) {
-      warnings.push(`key "${key}" in "${path}" is not a secret field of ${type} providers and was ignored (accepted: ${allowed.join(', ')})`);
+      warnings.push(`key ${quoteValue(key, 64)} in "${path}" is not a secret field of ${type} providers and was ignored (accepted: ${allowed.join(', ')})`);
       continue;
     }
     if (typeof value !== 'string') {

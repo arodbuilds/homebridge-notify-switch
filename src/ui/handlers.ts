@@ -2,7 +2,7 @@ import type { Logging } from 'homebridge';
 
 import { PluginLogger } from '../logging.js';
 import { renderAction, sendAction } from '../send.js';
-import { PLUGIN_VERSION } from '../settings.js';
+import { MAX_SWITCH_ID_LENGTH, PLUGIN_VERSION } from '../settings.js';
 import { buildTemplateVariables } from '../template.js';
 import type {
   BotIdentity, ChatSummary, Channel, ConnectionTestResult, ProviderDiagnostics, RecipientResult, TwilioLookupResult, ValidationIssue,
@@ -142,7 +142,7 @@ export async function lookupTwilio(rawProvider: unknown, options: HandlerOptions
  */
 export async function testSend(rawConfig: unknown, switchId: unknown, options: HandlerOptions = {}): Promise<TestSendResult> {
   try {
-    if (typeof switchId !== 'string' || switchId.length === 0) {
+    if (typeof switchId !== 'string' || switchId.length === 0 || switchId.length > MAX_SWITCH_ID_LENGTH) {
       return { ok: false, message: 'No switch selected.' };
     }
     const result = await validateConfig(rawConfig, silentLogger(), { storagePath: options.storagePath });

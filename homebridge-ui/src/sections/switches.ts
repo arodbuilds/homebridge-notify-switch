@@ -1,11 +1,11 @@
 import { addActionLabel, uncoveredChannels, uncoveredChannelWarning } from '../../../src/coverage.js';
-import type { Channel, RecipientResult } from '../../../src/types.js';
-import { PROVIDER_CHANNELS } from '../../../src/types.js';
+import type { Channel, NtfyPriority, RecipientResult } from '../../../src/types.js';
+import { CHANNELS, PROVIDER_CHANNELS } from '../../../src/types.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { helpToggle, variablesToggle } from '../card.js';
-import { PROVIDER_TYPE_LABEL, REMOVE, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   addButton, button, cardFooter, checkboxField, clear, dangerLinkButton, el, inlineConfirm, linkButton, numberField, outlineButton, paragraph,
   selectField, statusBox, textField, textareaField,
@@ -17,7 +17,12 @@ import type { UiIssue } from '../validate.js';
 import { groupTitle } from './groups.js';
 import { providerTitle } from './providers.js';
 
-const CHANNEL_LABELS: Record<Channel, string> = { sms: 'SMS', email: 'Email', telegram: 'Telegram' };
+const CHANNEL_LABELS: Record<Channel, string> = { sms: 'SMS', email: 'Email', telegram: 'Telegram', ntfy: 'ntfy' };
+
+/** The Tags field holds a comma separated list; the model keeps the tags as an array. */
+function parseTags(text: string): string[] {
+  return text.split(/[,\s]+/).map((tag) => tag.trim()).filter((tag) => tag.length > 0);
+}
 
 function switchTitle(s: UiSwitch): string {
   return s.name.trim() || 'New switch';
@@ -88,7 +93,7 @@ function actionCard(
     providerOptions.push({ value: a.providerId, label: `${a.providerId} (missing)` });
   }
   // Only the channels the selected provider serves (SPEC section 11.2, item 17); a stored channel it cannot serve stays selectable so it can be fixed.
-  const channels = provider ? PROVIDER_CHANNELS[provider.type] : (['sms', 'email', 'telegram'] as const);
+  const channels = provider ? PROVIDER_CHANNELS[provider.type] : CHANNELS;
   const channelOptions = channels.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }));
   if (!channels.includes(a.channel)) {
     channelOptions.push({ value: a.channel, label: `${CHANNEL_LABELS[a.channel]} (not served by this provider)` });
@@ -179,21 +184,37 @@ function actionCard(
     }).el,
   ));
 
-  if (a.channel === 'email') {
+  if (a.channel === 'email' || a.channel === 'ntfy') {
+    // The email subject, or the ntfy notification title (SPEC section 5.5, item 7); both default to the switch name.
     const variables = variablesToggle();
     const name = s.name.trim();
-    body.appendChild(withVariables(textField('Subject', a.subject, (value) => {
+    body.appendChild(withVariables(textField(a.channel === 'ntfy' ? 'Title' : 'Subject', a.subject, (value) => {
       a.subject = value;
       app.changed();
     }, {
-      path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name', help: SWITCH_HELP.subject,
-      labelExtra: variables.extra,
+      path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
+      help: a.channel === 'ntfy' ? NTFY_HELP.title : SWITCH_HELP.subject, labelExtra: variables.extra,
     }), variables.box));
+  }
+  if (a.channel === 'email') {
     // Recipients see each other in To unless this is checked (SPEC section 6.2 and 6.3).
     body.appendChild(checkboxField(SWITCH_HELP.bcc, a.bcc, (value) => {
       a.bcc = value;
       app.changed();
     }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp }));
+  }
+  if (a.channel === 'ntfy') {
+    // Priority and tags (SPEC section 5.5, items 10 and 11) side by side.
+    body.appendChild(el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-4' }, selectField(NTFY_HELP.priorityLabel, a.priority, NTFY_HELP.priorityOptions, (value) => {
+        a.priority = value as NtfyPriority;
+        app.changed();
+      }, { path: `${path}.priority`, help: NTFY_HELP.priority })),
+      el('div', { class: 'ns-span-8' }, textField(NTFY_HELP.tagsLabel, a.tags.join(', '), (value) => {
+        a.tags = parseTags(value);
+        app.changed();
+      }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags })),
+    ));
   }
 
   const counter = a.channel === 'sms' ? smsCounter() : undefined;

@@ -26,6 +26,29 @@ export const PROVIDER_MAX_RETRY_AFTER_MS = 60000;
 /** Per-provider in-flight concurrency cap (SPEC section 6, rule 3). */
 export const PROVIDER_CONCURRENCY = 5;
 
+// ---- Size bounds (SPEC section 12, item 12) -----------------------------------------------------------
+
+/** Bytes of a provider's HTTP response body that are read; anything past this is dropped. */
+export const MAX_RESPONSE_BYTES = 1024 * 1024;
+
+/** Distinct recipients one action may resolve to, after deduplication. */
+export const MAX_RECIPIENTS_PER_ACTION = 100;
+
+/** Entries in any address list: a group's lists, an action's extra recipients, a provider's sms senders. */
+export const MAX_LIST_ENTRIES = 200;
+
+/** Actions on one switch. */
+export const MAX_ACTIONS_PER_SWITCH = 20;
+
+/** Providers, groups and switches, each. */
+export const MAX_ITEMS = 100;
+
+/** Distinct chats "Find people and groups" lists from one getUpdates call (SPEC section 11.2, item 5). */
+export const MAX_LISTED_CHATS = 100;
+
+/** Length of the `switchId` a Test send request may carry (a UUID is 36 characters). */
+export const MAX_SWITCH_ID_LENGTH = 64;
+
 function readVersion(): string {
   try {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: unknown };

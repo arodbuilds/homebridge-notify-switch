@@ -28,7 +28,7 @@ async function pushed(page, predicate) {
   return page.evaluate(() => window.__hb.updates.at(-1)[0]);
 }
 
-test('provider chooser: three tiles create a card with the type fixed, the name prefilled and the id generated', async (t) => {
+test('provider chooser: four tiles create a card with the type fixed, the name prefilled and the id generated', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
@@ -41,11 +41,12 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     assert.equal(await chooser.count(), 1, 'Add provider opens the chooser instead of a card');
     assert.equal(await page.locator('.card[data-path^="providers"]').count(), 1, 'no card was created yet');
     const tiles = chooser.locator('.ns-chooser-tile');
-    assert.deepEqual(await tiles.locator('.fw-semibold').allTextContents(), ['Twilio', 'Email (SMTP)', 'Telegram']);
+    assert.deepEqual(await tiles.locator('.fw-semibold').allTextContents(), ['Twilio', 'Email (SMTP)', 'Telegram', 'ntfy']);
     assert.deepEqual(await tiles.locator('.ns-secondary').allTextContents(), [
       'SMS text messages, and email if you have a Twilio-authenticated domain.',
       'Send from a mailbox you already have, such as Fastmail, Gmail, iCloud, or Outlook.',
       'Free messages through a bot you create. Best for family group chats.',
+      'Free push notifications to the ntfy app. No account needed for public topics.',
     ]);
     await chooser.getByRole('button', { name: 'Cancel' }).click();
     assert.equal(await page.locator('.ns-chooser').count(), 0, 'Cancel restores the button');
@@ -90,7 +91,7 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio', 'Twilio']);
     assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'Twilio');
 
-    // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in three equal columns (SPEC section 11.2, item 13).
+    // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in four equal columns (SPEC section 11.2, item 13).
     await page.getByRole('button', { name: 'Add provider' }).click();
     assert.match(await page.locator('.ns-chooser').getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-outline-secondary\b/);
     const tileBoxes = async () => page.locator('.ns-chooser .ns-chooser-tile').evaluateAll((nodes) => nodes.map((node) => {
@@ -99,13 +100,17 @@ test('provider chooser: three tiles create a card with the type fixed, the name 
     }));
     const tilesWidth = Math.round((await page.locator('.ns-chooser .ns-chooser-tiles').boundingBox()).width);
     let boxes = await tileBoxes();
-    assert.equal(new Set(boxes.map((b) => b.top)).size, 1, 'three across at 900px');
+    assert.equal(new Set(boxes.map((b) => b.top)).size, 1, 'four across at 900px');
     assert.ok(boxes.every((b) => Math.abs(b.width - boxes[0].width) <= 1), `equal columns: ${boxes.map((b) => b.width).join(', ')}`);
-    assert.ok(Math.abs(boxes[2].left + boxes[2].width - boxes[0].left - tilesWidth) <= 1, 'the tiles fill the card width');
+    const last = boxes[boxes.length - 1];
+    assert.ok(Math.abs(last.left + last.width - boxes[0].left - tilesWidth) <= 1, 'the tiles fill the card width');
+    await page.setViewportSize({ width: 700, height: 900 });
+    boxes = await tileBoxes();
+    assert.equal(new Set(boxes.map((b) => b.top)).size, 2, 'two rows between 600px and 768px');
     await page.setViewportSize({ width: 400, height: 900 });
     boxes = await tileBoxes();
     assert.equal(new Set(boxes.map((b) => b.left)).size, 1, 'stacked below 600px');
-    assert.ok(boxes[0].top < boxes[1].top && boxes[1].top < boxes[2].top);
+    assert.ok(boxes[0].top < boxes[1].top && boxes[1].top < boxes[2].top && boxes[2].top < boxes[3].top);
     await page.setViewportSize({ width: 900, height: 900 });
   } finally {
     await browser.close();

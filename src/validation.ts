@@ -1,27 +1,39 @@
 import { DIAL_CODES, normalizePhone } from './countries.js';
 import type { PluginLogger } from './logging.js';
 import {
-  COUNTRY_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH, HAP_NAME_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN, UUID_PATTERN,
+  COUNTRY_PATTERN, DISPLAY_NAME_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH, HAP_NAME_PATTERN, NTFY_MAX_TAGS, NTFY_TAG_PATTERN, NTFY_TOPIC_PATTERN,
+  SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN, UUID_PATTERN,
 } from './patterns.js';
 import { CHANNEL_ACTION_LABEL, CHANNEL_ADDRESS_NOUN, uncoveredChannels } from './coverage.js';
 import { loadCredentialsFile } from './credentials.js';
 import { createProvider } from './providers/index.js';
+import { findForbiddenKey } from './safeKeys.js';
+import { MAX_ACTIONS_PER_SWITCH, MAX_ITEMS, MAX_LIST_ENTRIES, MAX_RECIPIENTS_PER_ACTION } from './settings.js';
 import { stripLineBreaks } from './template.js';
+import { quoteValue } from './text.js';
 import type {
-  ActionConfig, Channel, EmailIdentity, FailureMode, GroupConfig, MasterSwitchConfig, NotifySwitchConfig, Provider, ProviderConfig,
-  ProviderType, ResolvedAction, ResolvedSwitch, SmtpSecurity, SwitchConfig, TelegramParseMode, TwilioProviderConfig, ValidationIssue,
+  ActionConfig, Channel, EmailIdentity, FailureMode, GroupConfig, MasterSwitchConfig, NotifySwitchConfig, NtfyAuth, NtfyPriority, Provider,
+  ProviderConfig, ProviderType, ResolvedAction, ResolvedSwitch, SmtpSecurity, SwitchConfig, TelegramParseMode, TwilioProviderConfig, ValidationIssue,
 } from './types.js';
-import { CHANNELS, FAILURE_MODES, PROVIDER_CHANNELS, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES } from './types.js';
+import {
+  CHANNELS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_CHANNELS, PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS,
+  TELEGRAM_PARSE_MODES,
+} from './types.js';
 
 /**
  * Startup validation (SPEC section 10). Runs in code, independent of config.schema.json, and reports
  * every issue in one pass with its field path. Blocking issues mean the platform registers nothing.
+ * Configuration values quoted in a message go through `quoteValue`, so a value can never shape the
+ * log line it is reported on (SPEC section 12, item 12).
  */
 
 export const DEFAULT_MASTER_SWITCH_NAME = 'Notifications Enabled';
 export const DEFAULT_COUNTRY = 'US';
 export const DEFAULT_FAILURE_SENSOR_RESET_SECONDS = 300;
 export const MAX_COOLDOWN_SECONDS = 86400;
+
+/** The name rule for providers and groups (SPEC section 5), as a startup warning. */
+export const DISPLAY_NAME_WARNING = 'has characters that are not allowed; use letters, numbers, spaces, and punctuation, up to 64 characters';
 
 export interface ValidationResult {
   issues: ValidationIssue[];
@@ -131,7 +143,8 @@ function readEnum<T extends string>(c: Collector, obj: Raw, key: string, path: s
   return value as T;
 }
 
-function readStringArray(c: Collector, obj: Raw, key: string, path: string): string[] {
+/** A list of strings, blank entries dropped, cut to `max` entries with an error past that (SPEC section 12, item 12). */
+function readStringArray(c: Collector, obj: Raw, key: string, path: string, max = MAX_LIST_ENTRIES): string[] {
   const value = obj[key];
   if (value === undefined || value === null) {
     return [];
@@ -140,8 +153,11 @@ function readStringArray(c: Collector, obj: Raw, key: string, path: string): str
     c.error(`${path}.${key}`, 'must be a list');
     return [];
   }
+  if (value.length > max) {
+    c.error(`${path}.${key}`, `has ${value.length} entries; the limit is ${max}`);
+  }
   const out: string[] = [];
-  value.forEach((item, i) => {
+  value.slice(0, max).forEach((item, i) => {
     if (typeof item !== 'string') {
       c.error(`${path}.${key}[${i}]`, 'must be a string');
     } else if (item.trim() !== '') {
@@ -194,7 +210,7 @@ function didYouMean(value: string, candidates: Iterable<string>): string {
       bestDistance = distance;
     }
   }
-  return best !== undefined && bestDistance <= Math.max(2, Math.floor(value.length / 3)) ? ` (did you mean "${best}"?)` : '';
+  return best !== undefined && bestDistance <= Math.max(2, Math.floor(value.length / 3)) ? ` (did you mean ${quoteValue(best)}?)` : '';
 }
 
 function checkId(c: Collector, id: string | undefined, path: string, seen: Set<string>, kind: string): boolean {
@@ -206,11 +222,18 @@ function checkId(c: Collector, id: string | undefined, path: string, seen: Set<s
     return false;
   }
   if (seen.has(id)) {
-    c.error(`${path}.id`, `duplicate ${kind} id "${id}"`);
+    c.error(`${path}.id`, `duplicate ${kind} id ${quoteValue(id)}`);
     return false;
   }
   seen.add(id);
   return true;
+}
+
+/** The provider and group name rule (SPEC section 5): a warning, never an error, so an existing configuration keeps starting. */
+function checkDisplayName(c: Collector, name: string | undefined, path: string): void {
+  if (name !== undefined && !DISPLAY_NAME_PATTERN.test(name)) {
+    c.warn(path, DISPLAY_NAME_WARNING);
+  }
 }
 
 function normalizePhoneList(c: Collector, values: string[], path: string, defaultCountry: string): string[] {
@@ -218,11 +241,11 @@ function normalizePhoneList(c: Collector, values: string[], path: string, defaul
   values.forEach((value, i) => {
     const normalized = normalizePhone(value, defaultCountry);
     if (!normalized.value) {
-      c.error(`${path}[${i}]`, `"${value}" is not a valid phone number; use E.164 such as +16785550100`);
+      c.error(`${path}[${i}]`, `${quoteValue(value)} is not a valid phone number; use E.164 such as +16785550100`);
       return;
     }
     if (normalized.changed) {
-      c.notice(`${path}[${i}]: normalized "${value}" to "${normalized.value}" using defaultCountry ${defaultCountry}`);
+      c.notice(`${path}[${i}]: normalized ${quoteValue(value)} to "${normalized.value}" using defaultCountry ${defaultCountry}`);
     }
     if (out.includes(normalized.value)) {
       c.warn(`${path}[${i}]`, `duplicate entry "${normalized.value}" ignored`);
@@ -237,11 +260,11 @@ function checkList(c: Collector, values: string[], path: string, pattern: RegExp
   const out: string[] = [];
   values.forEach((value, i) => {
     if (!pattern.test(value)) {
-      c.error(`${path}[${i}]`, `"${value}" is not ${describe}`);
+      c.error(`${path}[${i}]`, `${quoteValue(value)} is not ${describe}`);
       return;
     }
     if (out.includes(value)) {
-      c.warn(`${path}[${i}]`, `duplicate entry "${value}" ignored`);
+      c.warn(`${path}[${i}]`, `duplicate entry ${quoteValue(value)} ignored`);
       return;
     }
     out.push(value);
@@ -257,6 +280,8 @@ function normalizeAddressList(c: Collector, values: string[], path: string, chan
     return checkList(c, values, path, EMAIL_PATTERN, 'a valid email address');
   case 'telegram':
     return checkList(c, values, path, TELEGRAM_CHAT_ID_PATTERN, 'a Telegram chat id (digits only, negative for group chats)');
+  case 'ntfy':
+    return checkList(c, values, path, NTFY_TOPIC_PATTERN, 'an ntfy topic name (letters, digits, dashes and underscores, up to 64 characters)');
   }
 }
 
@@ -275,6 +300,11 @@ function checkHapName(c: Collector, name: string | undefined, path: string): boo
   return true;
 }
 
+/** Number of addresses a group holds across every channel. */
+function groupAddressCount(group: GroupConfig): number {
+  return CHANNELS.reduce((sum, channel) => sum + group[channel].length, 0);
+}
+
 // ---- Section readers --------------------------------------------------------
 
 function readProvider(
@@ -288,6 +318,7 @@ function readProvider(
   const idOk = checkId(c, id, path, seen, 'provider');
   const type = readEnum<ProviderType>(c, rawProvider, 'type', path, PROVIDER_TYPES, undefined);
   const name = readString(c, rawProvider, 'name', path, { required: true });
+  checkDisplayName(c, name, `${path}.name`);
   if (!idOk || !id || !type || !name) {
     return undefined;
   }
@@ -304,7 +335,7 @@ function readProvider(
       c.error(`${path}.credentialsFile`, loaded.error);
     } else if (loaded.values) {
       raw = { ...rawProvider, ...loaded.values };
-      c.notice(`${path}.credentialsFile: using ${Object.keys(loaded.values).join(', ')} from "${credentialsFile}"`);
+      c.notice(`${path}.credentialsFile: using ${Object.keys(loaded.values).join(', ')} from ${quoteValue(credentialsFile)}`);
     }
   }
 
@@ -342,6 +373,18 @@ function readProvider(
       botToken: readString(c, raw, 'botToken', path, { required: true }) ?? '',
       parseMode: readEnum<TelegramParseMode>(c, raw, 'parseMode', path, TELEGRAM_PARSE_MODES, 'none') ?? 'none',
     };
+  case 'ntfy': {
+    // The provider instance validates the server URL and which credentials the auth mode needs.
+    const auth = readEnum<NtfyAuth>(c, raw, 'auth', path, NTFY_AUTHS, 'none') ?? 'none';
+    return {
+      id, type, name, credentialsFile,
+      server: readString(c, raw, 'server', path, { default: NTFY_DEFAULT_SERVER }) ?? NTFY_DEFAULT_SERVER,
+      auth,
+      token: readString(c, raw, 'token', path),
+      username: readString(c, raw, 'username', path),
+      password: typeof raw.password === 'string' && raw.password.length > 0 ? raw.password : undefined,
+    };
+  }
   }
 }
 
@@ -353,6 +396,7 @@ function readGroup(c: Collector, raw: unknown, path: string, seen: Set<string>, 
   const id = readString(c, raw, 'id', path, { required: true });
   const idOk = checkId(c, id, path, seen, 'group');
   const name = readString(c, raw, 'name', path, { required: true });
+  checkDisplayName(c, name, `${path}.name`);
   if (!idOk || !id || !name) {
     return undefined;
   }
@@ -361,7 +405,22 @@ function readGroup(c: Collector, raw: unknown, path: string, seen: Set<string>, 
     sms: normalizeAddressList(c, readStringArray(c, raw, 'sms', path), `${path}.sms`, 'sms', defaultCountry),
     email: normalizeAddressList(c, readStringArray(c, raw, 'email', path), `${path}.email`, 'email', defaultCountry),
     telegram: normalizeAddressList(c, readStringArray(c, raw, 'telegram', path), `${path}.telegram`, 'telegram', defaultCountry),
+    ntfy: normalizeAddressList(c, readStringArray(c, raw, 'ntfy', path), `${path}.ntfy`, 'ntfy', defaultCountry),
   };
+}
+
+/** ntfy tags (SPEC section 5.5, item 11): up to 8, each a short word or emoji short code. */
+function readTags(c: Collector, raw: Raw, path: string): string[] {
+  const tags = readStringArray(c, raw, 'tags', path, NTFY_MAX_TAGS);
+  const out: string[] = [];
+  tags.forEach((tag, i) => {
+    if (!NTFY_TAG_PATTERN.test(tag)) {
+      c.error(`${path}.tags[${i}]`, `${quoteValue(tag)} is not a tag; use letters, digits, dashes, underscores and plus signs, up to 32 characters`);
+    } else if (!out.includes(tag)) {
+      out.push(tag);
+    }
+  });
+  return out;
 }
 
 function readAction(c: Collector, raw: unknown, path: string, defaultCountry: string): ActionConfig | undefined {
@@ -380,12 +439,22 @@ function readAction(c: Collector, raw: unknown, path: string, defaultCountry: st
   if (sender && channel !== 'sms') {
     c.warn(`${path}.sender`, `only applies to the sms channel and is ignored for ${channel}`);
   }
-  if (subject && channel !== 'email') {
-    c.warn(`${path}.subject`, `only applies to the email channel and is ignored for ${channel}`);
+  if (subject && !SUBJECT_CHANNELS.includes(channel)) {
+    c.warn(`${path}.subject`, `only applies to the email and ntfy channels and is ignored for ${channel}`);
   }
   const bcc = readBoolean(c, raw, 'bcc', path, false);
   if (bcc && channel !== 'email') {
     c.warn(`${path}.bcc`, `only applies to the email channel and is ignored for ${channel}`);
+  }
+  const priority = readEnum<NtfyPriority>(c, raw, 'priority', path, NTFY_PRIORITIES, 'default') ?? 'default';
+  const tags = readTags(c, raw, path);
+  if (channel !== 'ntfy') {
+    if (raw.priority !== undefined && raw.priority !== null && raw.priority !== '') {
+      c.warn(`${path}.priority`, `only applies to the ntfy channel and is ignored for ${channel}`);
+    }
+    if (Array.isArray(raw.tags) && raw.tags.length > 0) {
+      c.warn(`${path}.tags`, `only applies to the ntfy channel and is ignored for ${channel}`);
+    }
   }
   return {
     providerId,
@@ -393,9 +462,11 @@ function readAction(c: Collector, raw: unknown, path: string, defaultCountry: st
     sender: channel === 'sms' && sender ? (normalizePhone(sender, defaultCountry).value ?? sender) : undefined,
     groups: readStringArray(c, raw, 'groups', path),
     recipients: normalizeAddressList(c, readStringArray(c, raw, 'recipients', path), `${path}.recipients`, channel, defaultCountry),
-    subject: channel === 'email' && subject ? stripLineBreaks(subject) : undefined,
+    subject: SUBJECT_CHANNELS.includes(channel) && subject ? stripLineBreaks(subject) : undefined,
     body,
     bcc: channel === 'email' && bcc ? true : undefined,
+    priority: channel === 'ntfy' ? priority : undefined,
+    tags: channel === 'ntfy' && tags.length > 0 ? tags : undefined,
   };
 }
 
@@ -412,7 +483,7 @@ function readSwitch(c: Collector, raw: unknown, path: string, seenIds: Set<strin
       c.error(`${path}.id`, 'must be a UUID such as 6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b');
       idOk = false;
     } else if (seenIds.has(key)) {
-      c.error(`${path}.id`, `duplicate switch id "${id}"`);
+      c.error(`${path}.id`, `duplicate switch id ${quoteValue(id)}`);
       idOk = false;
     } else {
       seenIds.add(key);
@@ -434,7 +505,10 @@ function readSwitch(c: Collector, raw: unknown, path: string, seenIds: Set<strin
   if (!Array.isArray(rawActions) || rawActions.length === 0) {
     c.error(`${path}.actions`, 'must contain at least one action');
   } else {
-    rawActions.forEach((item, i) => {
+    if (rawActions.length > MAX_ACTIONS_PER_SWITCH) {
+      c.error(`${path}.actions`, `has ${rawActions.length} actions; the limit is ${MAX_ACTIONS_PER_SWITCH}`);
+    }
+    rawActions.slice(0, MAX_ACTIONS_PER_SWITCH).forEach((item, i) => {
       const action = readAction(c, item, `${path}.actions[${i}]`, defaultCountry);
       if (action) {
         actions.push(action);
@@ -472,10 +546,10 @@ function resolveSmsSender(c: Collector, action: ActionConfig, provider: TwilioPr
       return { sender: action.sender, ok: true };
     }
     if (senders.length === 1) {
-      c.warn(`${path}.sender`, `"${action.sender}" is not in provider "${provider.id}" smsSenders; using its only sender ${senders[0]}`);
+      c.warn(`${path}.sender`, `${quoteValue(action.sender)} is not in provider "${provider.id}" smsSenders; using its only sender ${senders[0]}`);
       return { sender: senders[0], ok: true };
     }
-    c.error(`${path}.sender`, `"${action.sender}" is not one of provider "${provider.id}" smsSenders`);
+    c.error(`${path}.sender`, `${quoteValue(action.sender)} is not one of provider "${provider.id}" smsSenders`);
     return { ok: false };
   }
   if (senders.length === 1) {
@@ -507,7 +581,7 @@ async function resolveSwitch(
     const actionPath = `${path}.actions[${index}]`;
     const providerConfig = providers.get(action.providerId);
     if (!providerConfig) {
-      c.error(`${actionPath}.providerId`, `no provider with id "${action.providerId}"${didYouMean(action.providerId, providers.keys())}`);
+      c.error(`${actionPath}.providerId`, `no provider with id ${quoteValue(action.providerId)}${didYouMean(action.providerId, providers.keys())}`);
       continue;
     }
     usedProviders.add(providerConfig.id);
@@ -541,12 +615,12 @@ async function resolveSwitch(
     for (const [g, groupId] of action.groups.entries()) {
       const group = groups.get(groupId);
       if (!group) {
-        c.error(`${actionPath}.groups[${g}]`, `no group with id "${groupId}"${didYouMean(groupId, groups.keys())}`);
+        c.error(`${actionPath}.groups[${g}]`, `no group with id ${quoteValue(groupId)}${didYouMean(groupId, groups.keys())}`);
         continue;
       }
       referencedGroups.add(group.id);
       const list = group[action.channel];
-      if (list.length === 0 && (group.sms.length + group.email.length + group.telegram.length) > 0) {
+      if (list.length === 0 && groupAddressCount(group) > 0) {
         c.warn(`${actionPath}.groups[${g}]`, `group "${group.id}" has no ${action.channel} addresses`);
       }
       for (const address of list) {
@@ -562,6 +636,8 @@ async function resolveSwitch(
     }
     if (recipients.length === 0) {
       c.error(actionPath, `no recipients resolve for ${action.channel}; add a group with ${action.channel} addresses or list recipients directly`);
+    } else if (recipients.length > MAX_RECIPIENTS_PER_ACTION) {
+      c.error(actionPath, `resolves to ${recipients.length} recipients; the limit is ${MAX_RECIPIENTS_PER_ACTION} per action`);
     }
 
     actions.push({
@@ -570,9 +646,11 @@ async function resolveSwitch(
       channel: action.channel,
       sender,
       recipients,
-      subject: action.channel === 'email' ? (action.subject ?? sw.name) : undefined,
+      subject: SUBJECT_CHANNELS.includes(action.channel) ? (action.subject ?? sw.name) : undefined,
       body: action.body,
       bcc: action.channel === 'email' && action.bcc ? true : undefined,
+      priority: action.channel === 'ntfy' ? (action.priority ?? 'default') : undefined,
+      tags: action.channel === 'ntfy' ? action.tags : undefined,
     });
   }
 
@@ -587,19 +665,44 @@ async function resolveSwitch(
 
 // ---- Entry point ------------------------------------------------------------
 
+/** Reads one of the three top-level lists, cut to `MAX_ITEMS` with an error past that. */
+function readList(c: Collector, raw: Raw, key: string): unknown[] | undefined {
+  const value = raw[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    c.error(key, 'must be a list');
+    return undefined;
+  }
+  if (value.length > MAX_ITEMS) {
+    c.error(key, `has ${value.length} entries; the limit is ${MAX_ITEMS}`);
+    return value.slice(0, MAX_ITEMS);
+  }
+  return value;
+}
+
 async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger, options: ValidateOptions): Promise<ValidationResult> {
   if (!isRaw(rawConfig)) {
     c.error('', 'platform configuration is missing');
+    return { issues: c.issues, notices: c.notices };
+  }
+  // A key named __proto__, constructor or prototype anywhere in the block is never accepted (SPEC section 12, item 12).
+  const forbidden = findForbiddenKey(rawConfig);
+  if (forbidden !== undefined) {
+    c.error(forbidden, 'is not an allowed key name');
     return { issues: c.issues, notices: c.notices };
   }
   const raw = rawConfig;
   const root = 'platform';
 
   const name = readString(c, raw, 'name', root, { required: true }) ?? 'Notify Switch';
+  // Homebridge prefixes every log line with this name, so it follows the same rule as provider and group names.
+  checkDisplayName(c, name, `${root}.name`);
   const configVersion = readInteger(c, raw, 'configVersion', root, { fallback: 1, min: 1, max: 1 });
   let defaultCountry = (readString(c, raw, 'defaultCountry', root, { default: DEFAULT_COUNTRY }) ?? DEFAULT_COUNTRY).toUpperCase();
   if (!COUNTRY_PATTERN.test(defaultCountry) || !DIAL_CODES[defaultCountry]) {
-    c.error(`${root}.defaultCountry`, `"${defaultCountry}" is not a known ISO 3166-1 alpha-2 country code`);
+    c.error(`${root}.defaultCountry`, `${quoteValue(defaultCountry)} is not a known ISO 3166-1 alpha-2 country code`);
     defaultCountry = DEFAULT_COUNTRY;
   }
   const debug = readBoolean(c, raw, 'debug', root, false);
@@ -619,13 +722,12 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   // Providers
   const providerConfigs = new Map<string, ProviderConfig>();
   const providerIds = new Set<string>();
-  if (raw.providers !== undefined && raw.providers !== null && !Array.isArray(raw.providers)) {
-    c.error('providers', 'must be a list');
-  } else if (!Array.isArray(raw.providers) || raw.providers.length === 0) {
+  const rawProviders = readList(c, raw, 'providers');
+  if (!rawProviders || rawProviders.length === 0) {
     // Not an error: a fresh install or a reset configuration has no providers (SPEC section 10).
     c.warn('providers', 'no providers configured');
   } else {
-    raw.providers.forEach((item, i) => {
+    rawProviders.forEach((item, i) => {
       const provider = readProvider(c, item, `providers[${i}]`, providerIds, defaultCountry, options.storagePath);
       if (provider) {
         providerConfigs.set(provider.id, provider);
@@ -635,7 +737,7 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
 
   const providerInstances = new Map<string, Provider>();
   const providerPaths = new Map<string, string>();
-  for (const [i, item] of (Array.isArray(raw.providers) ? raw.providers : []).entries()) {
+  for (const [i, item] of (rawProviders ?? []).entries()) {
     const id = isRaw(item) && typeof item.id === 'string' ? item.id.trim() : undefined;
     const config = id ? providerConfigs.get(id) : undefined;
     if (!config) {
@@ -656,31 +758,27 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   const groups = new Map<string, GroupConfig>();
   const groupPaths = new Map<string, string>();
   const groupIds = new Set<string>();
-  if (raw.groups !== undefined && raw.groups !== null) {
-    if (!Array.isArray(raw.groups)) {
-      c.error('groups', 'must be a list');
-    } else {
-      raw.groups.forEach((item, i) => {
-        const group = readGroup(c, item, `groups[${i}]`, groupIds, defaultCountry);
-        if (group) {
-          groups.set(group.id, group);
-          groupPaths.set(group.id, `groups[${i}]`);
-        }
-      });
-    }
+  const rawGroups = readList(c, raw, 'groups');
+  if (rawGroups) {
+    rawGroups.forEach((item, i) => {
+      const group = readGroup(c, item, `groups[${i}]`, groupIds, defaultCountry);
+      if (group) {
+        groups.set(group.id, group);
+        groupPaths.set(group.id, `groups[${i}]`);
+      }
+    });
   }
 
   // Switches
   const switchConfigs: Array<{ config: SwitchConfig; path: string }> = [];
   const switchIds = new Set<string>();
   const switchNames = new Set<string>();
-  if (raw.switches !== undefined && raw.switches !== null && !Array.isArray(raw.switches)) {
-    c.error('switches', 'must be a list');
-  } else if (!Array.isArray(raw.switches) || raw.switches.length === 0) {
+  const rawSwitches = readList(c, raw, 'switches');
+  if (!rawSwitches || rawSwitches.length === 0) {
     // Valid, with nothing to register: startup removes every cached accessory (SPEC section 4, item 9).
     c.warn('switches', 'no switches configured; every cached accessory will be removed');
   } else {
-    raw.switches.forEach((item, i) => {
+    rawSwitches.forEach((item, i) => {
       const sw = readSwitch(c, item, `switches[${i}]`, switchIds, switchNames, defaultCountry);
       if (sw) {
         switchConfigs.push({ config: sw, path: `switches[${i}]` });
@@ -697,7 +795,7 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   }
 
   for (const [id, group] of groups) {
-    if (referencedGroups.has(id) && group.sms.length + group.email.length + group.telegram.length === 0) {
+    if (referencedGroups.has(id) && groupAddressCount(group) === 0) {
       c.warn(groupPaths.get(id) ?? 'groups', `group "${id}" has no addresses`);
     }
   }
@@ -746,6 +844,11 @@ export interface ProviderValidationResult {
 export async function validateProvider(rawProvider: unknown, log: PluginLogger, options: ValidateOptions = {}): Promise<ProviderValidationResult> {
   const c = new Collector();
   try {
+    const forbidden = findForbiddenKey(rawProvider, 'provider');
+    if (forbidden !== undefined) {
+      c.error(forbidden, 'is not an allowed key name');
+      return { issues: c.issues };
+    }
     const config = readProvider(c, rawProvider, 'provider', new Set(), DEFAULT_COUNTRY, options.storagePath);
     if (!config || c.hasErrors) {
       return { issues: c.issues };

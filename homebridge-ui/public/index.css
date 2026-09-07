@@ -478,13 +478,19 @@ mark.sms-bad {
   display: none;
 }
 
-/* Provider chooser (SPEC section 11.2, item 13): three tiles in equal columns that fill the card width,
-   stacked below 600px. */
+/* Provider chooser (SPEC section 11.2, item 13): four tiles in equal columns that fill the card width,
+   two by two between 600px and 768px, stacked below 600px. */
 .ns-chooser-tiles {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
   width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  .ns-chooser-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 599.98px) {

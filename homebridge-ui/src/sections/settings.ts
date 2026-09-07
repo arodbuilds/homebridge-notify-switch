@@ -2,7 +2,7 @@ import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
 import { BACKUP } from '../copy.js';
 import { button, checkboxField, clear, dangerLinkButton, el, openModal, selectField, textField } from '../dom.js';
-import { backupBlock, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, readConfig } from '../model.js';
+import { backupBlock, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, MAX_BACKUP_BYTES, readConfig } from '../model.js';
 import type { UiConfig } from '../model.js';
 import { countryOptions } from '../phone.js';
 import { validate } from '../validate.js';
@@ -34,16 +34,24 @@ function downloadBackup(app: App, withoutCredentials = false): void {
  * Checks a backup's text before anything changes: JSON, then the platform block shape, then the same
  * rules the form applies (which mirror config.schema.json and startup validation). Returns the config
  * to load, or the list of problems. A backup without credentials (`credentialsRemoved: true`) is accepted
- * with its secret fields empty; `emptied` lists their paths so the form can show their errors.
+ * with its secret fields empty; `emptied` lists their paths so the form can show their errors. A file over
+ * `MAX_BACKUP_BYTES` is refused before it is parsed, and so is one holding a `__proto__`, `constructor` or
+ * `prototype` key at any level (SPEC section 12, item 12).
  */
 export function checkBackup(text: string): { config?: UiConfig; errors: string[]; emptied: string[] } {
+  if (text.length > MAX_BACKUP_BYTES) {
+    return { errors: [BACKUP.restoreTooLarge], emptied: [] };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
     return { errors: [`Not valid JSON: ${err instanceof Error ? err.message : String(err)}`], emptied: [] };
   }
-  const { block, error } = backupBlock(parsed);
+  const { block, error, forbiddenKey } = backupBlock(parsed);
+  if (forbiddenKey !== undefined) {
+    return { errors: [BACKUP.restoreForbiddenKey(forbiddenKey)], emptied: [] };
+  }
   if (!block) {
     return { errors: [error ?? 'The file is not a Notify Switch backup.'], emptied: [] };
   }
@@ -74,6 +82,12 @@ function advancedPanel(app: App): HTMLElement {
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) {
+      return;
+    }
+    // The size is checked before the file is read, so an oversized file never reaches the parser.
+    if (file.size > MAX_BACKUP_BYTES) {
+      fileInput.value = '';
+      showErrors([BACKUP.restoreTooLarge]);
       return;
     }
     file.text().then((text) => {

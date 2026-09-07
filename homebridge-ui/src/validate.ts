@@ -1,9 +1,10 @@
 import { firstNonGsm7Character, SMS_MAX_LENGTH } from '../../src/gsm7.js';
 import {
-  ACCOUNT_SID_PATTERN, API_KEY_SID_PATTERN, BOT_TOKEN_PATTERN, E164_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH, HAP_NAME_PATTERN,
-  MESSAGING_SERVICE_SID_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN, UUID_PATTERN,
+  ACCOUNT_SID_PATTERN, API_KEY_SID_PATTERN, BOT_TOKEN_PATTERN, DISPLAY_NAME_PATTERN, E164_PATTERN, EMAIL_PATTERN, HAP_NAME_MAX_LENGTH,
+  HAP_NAME_PATTERN, MESSAGING_SERVICE_SID_PATTERN, NTFY_MAX_TAGS, NTFY_TAG_PATTERN, NTFY_TOPIC_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN,
+  UUID_PATTERN,
 } from '../../src/patterns.js';
-import { PROVIDER_CHANNELS } from '../../src/types.js';
+import { CHANNELS, PROVIDER_CHANNELS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
 import { VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
@@ -30,7 +31,14 @@ export interface UiIssue {
 
 const EMAIL_MAX_LENGTH = 10000;
 const TELEGRAM_MAX_LENGTH = 4096;
+const NTFY_MAX_LENGTH = 4096;
 const MAX_SECONDS = 86400;
+
+/** The same bounds startup validation enforces (SPEC section 12, item 12). */
+const MAX_RECIPIENTS_PER_ACTION = 100;
+const MAX_LIST_ENTRIES = 200;
+const MAX_ACTIONS_PER_SWITCH = 20;
+const MAX_ITEMS = 100;
 
 class Issues {
   readonly list: UiIssue[] = [];
@@ -63,6 +71,22 @@ function checkHapName(issues: Issues, name: string, path: string, label: string,
   }
 }
 
+/** Provider, group and platform names (SPEC section 5): printable characters, no angle brackets, 1 to 64 characters. */
+function checkDisplayName(issues: Issues, name: string, path: string, label: string, what = 'Name'): void {
+  const value = name.trim();
+  if (!value) {
+    issues.add(path, label, `${what} is required.`);
+  } else if (!DISPLAY_NAME_PATTERN.test(value)) {
+    issues.add(path, label, VALIDATION.name);
+  }
+}
+
+function checkListSize(issues: Issues, values: string[], path: string, label: string, what: string): void {
+  if (values.length > MAX_LIST_ENTRIES) {
+    issues.add(path, label, `${what} has ${values.length} entries; the limit is ${MAX_LIST_ENTRIES}.`);
+  }
+}
+
 function checkAddress(issues: Issues, channel: Channel, value: string, path: string, label: string, what: string): boolean {
   const text = value.trim();
   switch (channel) {
@@ -84,6 +108,22 @@ function checkAddress(issues: Issues, channel: Channel, value: string, path: str
       return false;
     }
     return true;
+  case 'ntfy':
+    if (!NTFY_TOPIC_PATTERN.test(text)) {
+      issues.add(path, label, VALIDATION.ntfyTopic(text));
+      return false;
+    }
+    return true;
+  }
+}
+
+/** True when `value` is an http or https URL without credentials, query or fragment. */
+function isServerUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
   }
 }
 
@@ -102,9 +142,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
   } else {
     seen.set(id, path);
   }
-  if (!p.name.trim()) {
-    issues.add(`${path}.name`, label, 'Name is required.');
-  }
+  checkDisplayName(issues, p.name, `${path}.name`, label);
   // With a credentialsFile the secret fields may come from the file, which the UI cannot read (SPEC section 12, item 2).
   const fromFile = p.credentialsFile.trim().length > 0;
   switch (p.type) {
@@ -118,6 +156,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
     if (!fromFile && !p.apiKeySecret) {
       issues.add(`${path}.apiKeySecret`, label, 'API Key Secret is required.');
     }
+    checkListSize(issues, p.smsSenders, `${path}.smsSenders`, label, 'SMS senders');
     p.smsSenders.forEach((sender, s) => {
       if (!E164_PATTERN.test(sender.trim())) {
         issues.add(`${path}.smsSenders[${s}]`, label, `SMS sender "${sender.trim()}" is not a valid phone number.`);
@@ -155,6 +194,24 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
       issues.add(`${path}.botToken`, label, VALIDATION.botToken);
     }
     break;
+  case 'ntfy':
+    if (!isServerUrl(p.server.trim())) {
+      issues.add(`${path}.server`, label, VALIDATION.ntfyServer);
+    }
+    if (p.auth === 'token' && !fromFile && !p.token.trim()) {
+      issues.add(`${path}.token`, label, 'Access token is required.');
+    }
+    if (p.auth === 'basic') {
+      if (!fromFile && !p.username.trim()) {
+        issues.add(`${path}.username`, label, 'Username is required.');
+      } else if (p.username.includes(':')) {
+        issues.add(`${path}.username`, label, 'Username must not contain a colon.');
+      }
+      if (!fromFile && !p.password) {
+        issues.add(`${path}.password`, label, 'Password is required.');
+      }
+    }
+    break;
   }
 }
 
@@ -172,13 +229,13 @@ function checkGroup(issues: Issues, g: UiGroup, i: number, seen: Map<string, str
   } else {
     seen.set(id, path);
   }
-  if (!g.name.trim()) {
-    issues.add(`${path}.name`, label, 'Name is required.');
-  }
-  for (const channel of ['sms', 'email', 'telegram'] as const) {
+  checkDisplayName(issues, g.name, `${path}.name`, label);
+  const what: Record<Channel, string> = { sms: 'Phone number', email: 'Email', telegram: 'Chat ID', ntfy: 'Topic' };
+  for (const channel of CHANNELS) {
+    checkListSize(issues, g[channel], `${path}.${channel}`, label, `The ${channel} list`);
     g[channel].forEach((value, k) => {
       if (value.trim()) {
-        checkAddress(issues, channel, value, `${path}.${channel}[${k}]`, label, channel === 'sms' ? 'Phone number' : channel === 'email' ? 'Email' : 'Chat ID');
+        checkAddress(issues, channel, value, `${path}.${channel}[${k}]`, label, what[channel]);
       }
     });
   }
@@ -212,6 +269,24 @@ function checkBody(issues: Issues, channel: Channel, body: string, path: string,
       issues.add(path, label, `Telegram message is ${length} characters; the limit is ${TELEGRAM_MAX_LENGTH}.`);
     }
     break;
+  case 'ntfy':
+    if (length > NTFY_MAX_LENGTH) {
+      issues.add(path, label, `ntfy message is ${length} characters; the limit is ${NTFY_MAX_LENGTH}.`);
+    }
+    break;
+  }
+}
+
+/** ntfy tags (SPEC section 5.5, item 11): at most 8, each a short word or emoji short code. */
+function checkTags(issues: Issues, tags: string[], path: string, label: string): void {
+  const values = tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
+  if (values.length > NTFY_MAX_TAGS) {
+    issues.add(path, label, VALIDATION.ntfyTags);
+    return;
+  }
+  const bad = values.find((tag) => !NTFY_TAG_PATTERN.test(tag));
+  if (bad !== undefined) {
+    issues.add(path, label, VALIDATION.ntfyTag(bad));
   }
 }
 
@@ -241,27 +316,39 @@ function checkAction(issues: Issues, config: UiConfig, a: UiAction, path: string
       `Provider "${provider.name.trim() || provider.id}" needs an Email From address before it can send email.`, viaProvider);
   }
 
-  let recipients = 0;
+  // Distinct recipients, the way startup resolves them, so the per-action bound matches (SPEC section 12, item 12).
+  const recipients = new Set<string>();
   a.groups.forEach((groupId, g) => {
     const group = config.groups.find((entry) => entry.id.trim() === groupId && groupId);
     if (!group) {
       issues.add(`${path}.groups[${g}]`, label, `Group "${groupId}" does not exist.`);
       return;
     }
-    recipients += group[a.channel].filter((v) => v.trim().length > 0).length;
+    for (const value of group[a.channel]) {
+      if (value.trim().length > 0) {
+        recipients.add(value.trim());
+      }
+    }
   });
+  checkListSize(issues, a.recipients, `${path}.recipients`, label, 'The extra recipients list');
   a.recipients.forEach((value, r) => {
     if (!value.trim()) {
       return;
     }
     if (checkAddress(issues, a.channel, value, `${path}.recipients[${r}]`, label, 'Extra recipient')) {
-      recipients += 1;
+      recipients.add(value.trim());
     }
   });
-  if (recipients === 0) {
+  if (recipients.size === 0) {
     // Recipient coverage belongs to the Groups checkboxes and the extra recipients list alike.
     const message = `Nobody would receive this ${a.channel} action. Pick a group with ${a.channel} entries or add an extra recipient.`;
     issues.add(`${path}.groups`, label, message, [`${path}.recipients`]);
+  } else if (recipients.size > MAX_RECIPIENTS_PER_ACTION) {
+    issues.add(`${path}.groups`, label, `This action reaches ${recipients.size} recipients; the limit is ${MAX_RECIPIENTS_PER_ACTION} per action.`,
+      [`${path}.recipients`]);
+  }
+  if (a.channel === 'ntfy') {
+    checkTags(issues, a.tags, `${path}.tags`, label);
   }
   checkBody(issues, a.channel, a.body, `${path}.body`, label);
 }
@@ -295,15 +382,16 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   if (s.actions.length === 0) {
     // A new switch has no action field to touch yet; the name is the field the user fills in first.
     issues.add(`${path}.actions`, label, 'Add at least one action.', [`${path}.name`]);
+  } else if (s.actions.length > MAX_ACTIONS_PER_SWITCH) {
+    issues.add(`${path}.actions`, label, `A switch can have at most ${MAX_ACTIONS_PER_SWITCH} actions.`);
   }
   s.actions.forEach((action, k) => checkAction(issues, config, action, `${path}.actions[${k}]`, `${label}, action ${k + 1}`));
 }
 
 export function validate(config: UiConfig): UiIssue[] {
   const issues = new Issues();
-  if (!config.name.trim()) {
-    issues.add('name', 'Settings', 'Platform name is required.');
-  }
+  // Homebridge prefixes every log line with the platform name, so it follows the provider and group name rule.
+  checkDisplayName(issues, config.name, 'name', 'Settings', 'Platform name');
   if (!isCountry(config.defaultCountry)) {
     issues.add('defaultCountry', 'Settings', 'Default country is not a known country code.');
   }
@@ -312,6 +400,11 @@ export function validate(config: UiConfig): UiIssue[] {
   }
 
   // No providers or no switches is valid (a fresh install, or after Reset plugin to fresh install); startup then registers nothing.
+  for (const [key, what] of [['providers', 'providers'], ['groups', 'groups'], ['switches', 'switches']] as const) {
+    if (config[key].length > MAX_ITEMS) {
+      issues.add(key, 'Settings', `At most ${MAX_ITEMS} ${what} are allowed.`);
+    }
+  }
   const providerIds = new Map<string, string>();
   config.providers.forEach((p, i) => checkProvider(issues, p, i, providerIds));
 

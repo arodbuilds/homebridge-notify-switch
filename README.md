@@ -9,7 +9,7 @@ Do not claim it. Once the plugin is verified, replace this comment with the badg
 [![npm](https://img.shields.io/npm/v/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
 [![Build and Lint](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml/badge.svg)](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml)
 
-A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Turn a switch on from a HomeKit automation or scene, it sends one or more preset messages by SMS, email, or Telegram, and it turns itself back off. Any HomeKit event can notify people.
+A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Turn a switch on from a HomeKit automation or scene, it sends one or more preset messages by SMS, email, Telegram, or ntfy push notification, and it turns itself back off. Any HomeKit event can notify people.
 
 > **Status:** The configuration format is stable and covered by the full specification in [SPEC.md](https://github.com/arodbuilds/homebridge-notify-switch/blob/latest/SPEC.md). Please report problems in the [issue tracker](https://github.com/arodbuilds/homebridge-notify-switch/issues).
 
@@ -22,6 +22,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
   - [Twilio (SMS and email)](#twilio-sms-and-email)
   - [SMTP (email through your own mailbox)](#smtp-email-through-your-own-mailbox)
   - [Telegram](#telegram)
+  - [ntfy](#ntfy)
 - [Recipient groups](#recipient-groups)
 - [Switches and actions](#switches-and-actions)
 - [Using switches in HomeKit automations](#using-switches-in-homekit-automations)
@@ -42,8 +43,8 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 
 Notify Switch is built from three things you configure once in the Homebridge UI:
 
-1. **Provider**: a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through a mailbox you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create.
-2. **Recipient group**: a named list of people, with phone numbers for SMS, email addresses for email, and chat IDs for Telegram. You enter each person once and reuse the group everywhere.
+1. **Provider**: a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through a mailbox you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. ntfy sends push notifications to the free ntfy app through a topic name you choose.
+2. **Recipient group**: a named list of people, with phone numbers for SMS, email addresses for email, chat IDs for Telegram, and topic names for ntfy. You enter each person once and reuse the group everywhere.
 3. **Switch**: a HomeKit switch with one or more actions. Each action sends one message body through one provider on one channel to one or more groups.
 
 Every switch is always off in the Home app. When something turns it on, every action fires in parallel, the results are logged, and one second later the switch turns itself off. You only need one provider, one group, and one switch to start.
@@ -69,9 +70,9 @@ The plugin does nothing until it is configured, and it never registers accessori
 
 ## Provider setup guides
 
-In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, or Telegram) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below.
+In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, Telegram, or ntfy) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below.
 
-Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), and Telegram asks the bot who it is. Credentials in the form are used for that one request and are not stored until you click Save.
+Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), Telegram asks the bot who it is, and ntfy checks the server's health and, when credentials are set, that it accepts them. Credentials in the form are used for that one request and are not stored until you click Save.
 
 ### Twilio (SMS and email)
 
@@ -213,13 +214,36 @@ Then click **Find people and groups**. The plugin calls the bot's `getUpdates` a
 
 If **Find people and groups** reports error 409, a webhook is set on the bot from another tool, and `getUpdates` cannot be used. Remove it with `deleteWebhook` or create a separate bot for Homebridge. More on bots: [Bots: An introduction for developers](https://core.telegram.org/bots).
 
+### ntfy
+
+ntfy serves the `ntfy` channel: free push notifications to the [ntfy app](https://ntfy.sh) on your phone, with no account needed for public topics on ntfy.sh. In the settings UI pick the **ntfy** tile; the card explains the same steps.
+
+1. Install the app: [iOS](https://apps.apple.com/us/app/ntfy/id1625396347), [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) (also on [F-Droid](https://f-droid.org/en/packages/io.heckel.ntfy/)), or use the [web app](https://ntfy.sh/app).
+2. In the app, subscribe to a topic name of your choosing, for example `home-alerts-x7q2`. Letters, numbers, dashes and underscores, up to 64 characters.
+3. Add that topic to a recipient group under **ntfy topics**, and give a switch an **ntfy** action.
+
+**Anyone who knows the topic name can read it, and can publish to it.** Topics on ntfy.sh are public: there is no password on a topic, only its name. Pick something unguessable (a word plus random characters), or reserve the topic with an access token so only you can publish to it.
+
+| Field | Value |
+| --- | --- |
+| `server` | `https://ntfy.sh` unless you run [your own server](https://docs.ntfy.sh/install/). Must start with `http://` or `https://`; a path is allowed for a server behind a prefix. |
+| `auth` | `none` (default), `token`, or `basic`. |
+| `token` | The access token when `auth` is `token`. Recommended: in the ntfy app or web app, sign in, open **Account > Access tokens**, create one, and reserve your topic under **Reserved topics** so nobody else can publish to it. A token can be revoked on its own. |
+| `username`, `password` | Your ntfy account login when `auth` is `basic`. A token is safer. |
+
+Each ntfy action has a **Title** (defaults to the switch name), a **Priority** (`min`, `low`, `default`, `high`, `urgent`; `high` and `urgent` can break through Do Not Disturb, `min` shows no notification) and up to eight **Tags** such as `warning` or `house`, which the app shows as emoji when they are [emoji short codes](https://docs.ntfy.sh/emojis/). Bodies are plain text up to 4,096 characters; ntfy.sh limits a message to 4,096 bytes, so a body full of emoji may be a little shorter.
+
+**Test connection** checks the server's health and, when credentials are set, that the server accepts them; it publishes nothing. **Test send** on a switch publishes for real.
+
 ## Recipient groups
 
-A group is a named list of people. Each group has three lists: `sms` (phone numbers), `email` (email addresses), and `telegram` (chat IDs). A switch's action sends to whichever list matches its channel, so one `Family` group can serve an SMS action and an email action at the same time.
+A group is a named list of people. Each group has four lists: `sms` (phone numbers), `email` (email addresses), `telegram` (chat IDs), and `ntfy` (topic names). A switch's action sends to whichever list matches its channel, so one `Family` group can serve an SMS action and an email action at the same time.
 
 - Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
-- Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them.
+- Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them. ntfy topics are the names subscribed in the ntfy app (letters, numbers, dashes and underscores); see the [topic-name warning](#ntfy).
 - A group with no addresses is valid but produces a startup warning if a switch uses it.
+
+Provider and group names may hold letters, numbers, spaces, and punctuation, up to 64 characters; control characters and angle brackets are not allowed. The settings UI enforces this, and a name in `config.json` that breaks the rule is reported as a startup warning naming the field.
 
 Group and provider IDs are short slugs generated from the name (`family`, `twilio`, with a numeric suffix such as `twilio-2` when the name is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
 
@@ -241,15 +265,17 @@ Each action has:
 | Field | Meaning |
 | --- | --- |
 | `providerId` | The provider to send through. |
-| `channel` | `sms`, `email`, or `telegram`. Must be a channel that provider serves. |
+| `channel` | `sms`, `email`, `telegram`, or `ntfy`. Must be a channel that provider serves. |
 | `sender` | SMS only. One of the provider's `smsSenders`. Omit it when the provider has one number or uses a Messaging Service. |
 | `groups` | Recipient groups to send to. |
 | `recipients` | Extra individual addresses for this channel, on top of the groups. At least one address must come from `groups` or `recipients`. |
-| `subject` | Email only. Defaults to the switch name. Line breaks are removed. |
+| `subject` | Email and ntfy. The email subject or the ntfy notification title. Defaults to the switch name. Line breaks are removed. |
 | `bcc` | Email only, default `false`. **Hide recipients from each other (BCC)**: recipients go in `Bcc` and the from address in `To`. A message to a single recipient always uses `To`. |
-| `body` | The message. SMS: 1 to 160 characters from the GSM-7 set, so no emoji; the settings UI shows a live character and segment counter and highlights characters SMS cannot carry. Email: up to 10,000 characters of plain text. Telegram: up to 4,096 characters. |
+| `priority` | ntfy only. `min`, `low`, `default` (the default), `high`, or `urgent`. |
+| `tags` | ntfy only. Up to 8 tags of letters, numbers, dashes, underscores and plus signs; emoji short codes show as icons in the app. |
+| `body` | The message. SMS: 1 to 160 characters from the GSM-7 set, so no emoji; the settings UI shows a live character and segment counter and highlights characters SMS cannot carry. Email: up to 10,000 characters of plain text. Telegram: up to 4,096 characters. ntfy: up to 4,096 characters. |
 
-Recipients from every group plus `recipients` are merged and deduplicated before sending. Each SMS and each Telegram message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
+Recipients from every group plus `recipients` are merged and deduplicated before sending; an action may reach at most 100 recipients. Each SMS, Telegram and ntfy message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
 
 The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends its actions to the real recipients and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
 
@@ -403,6 +429,7 @@ The file's keys override the provider's secret fields:
 | `twilio` | `accountSid`, `apiKeySid`, `apiKeySecret` |
 | `smtp` | `username`, `password` |
 | `telegram` | `botToken` |
+| `ntfy` | `token`, `username`, `password` |
 
 Example: `notify-switch-twilio.json` in the storage directory containing `{ "apiKeySecret": "..." }`, with `"credentialsFile": "notify-switch-twilio.json"` on the Twilio provider. Any secret field still present in `config.json` is used for keys the file does not set, and a key that is not a secret field of that provider type is ignored with a warning.
 
@@ -426,9 +453,9 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 ## Security notes
 
 - **Homebridge UI backups contain `config.json`.** A backup archive includes every provider password, API key secret, and bot token you configured inline. Store backups as you would a password file and delete old ones. [`credentialsFile`](#keeping-secrets-out-of-configjson-with-credentialsfile) keeps secrets out of the backup.
-- Twilio accepts API keys only, never the Auth Token, so a leaked key can be revoked without touching the account. SMTP setups should use an app password that you can revoke on its own. A Telegram bot token only controls that bot; revoke it with BotFather's `/revoke`.
-- Credentials are never written to the log at any level. Phone numbers and email addresses are partially masked at info level (`+1678***0101`, `a***@example.com`), and message bodies are logged only when `debug` is on. Provider errors are reduced to a code and a short message before logging.
-- The settings UI's **Test connection**, **Look up numbers**, **Find people and groups**, and **Test send** use the credentials from the form in memory for that one request and never store, log, or return them. They only connect to the mail host you configured and to Twilio's and Telegram's APIs.
+- Twilio accepts API keys only, never the Auth Token, so a leaked key can be revoked without touching the account. SMTP setups should use an app password that you can revoke on its own. A Telegram bot token only controls that bot; revoke it with BotFather's `/revoke`. An ntfy access token can be revoked on its own under the account's access tokens; prefer it over the account password, and remember that a topic name is the only thing protecting a public ntfy topic.
+- Credentials are never written to the log at any level. Phone numbers, email addresses, chat IDs and topic names are partially masked at info level (`+1678***0101`, `a***@example.com`), and message bodies are logged only when `debug` is on. Provider errors are reduced to a code and a short message before logging, and every log line has control characters escaped, so nothing in a configuration value or a provider's reply can forge a log line.
+- The settings UI's **Test connection**, **Look up numbers**, **Find people and groups**, and **Test send** use the credentials from the form in memory for that one request and never store, log, or return them. They only connect to the mail host and the ntfy server you configured and to Twilio's and Telegram's APIs.
 - **Download backup** writes the same credentials into the file you download. Treat it like `config.json`. **Download backup without credentials** leaves every secret out; that is the file to share.
 - TLS certificate verification cannot be disabled.
 - Email subjects and from names have line breaks removed. Telegram bodies are sent as plain text unless you choose a `parseMode`.
@@ -501,13 +528,24 @@ Temporary replies (421, 450, 451, 452) and rate limits are retried once after 2 
 
 Group chat IDs are negative. If a group was upgraded to a supergroup, its ID changed; run **Find people and groups** again.
 
+### ntfy
+
+| Code | Meaning | Fix |
+| --- | --- | --- |
+| 401, 403 | `ntfy rejected the credentials for topic …` | The token or password is wrong, or the topic is reserved by someone else (or by you, with a different token). Create a token under **Account > Access tokens** and reserve the topic with the same account. On ntfy.sh a 403 on a topic you did not reserve means another account did. |
+| 404 | `ntfy server not found` | The `server` URL is wrong. It must be the server's base address, such as `https://ntfy.sh`, not a topic URL. |
+| 413 | The message is too large | ntfy.sh accepts 4,096 bytes per message. Shorten the body. |
+| 429 | Rate limited | ntfy.sh limits how many messages a client may publish; the plugin honors `Retry-After` once. Reduce recipients or add a cooldown. |
+| `HTTP 200 without a message id` | The server answered, but not like ntfy | The URL points at a web page or a proxy in front of the server. Use the server's base address. |
+
+Notifications arrive but the phone does not show them: check the app's notification settings for the topic and, for `high` and `urgent`, that the app is allowed to break through Do Not Disturb. **Test connection** succeeding while nothing arrives usually means the app is subscribed to a different topic name; the names are case sensitive.
+
 ### Settings UI
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
 - **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to and is a link that takes you to the field. A field shows its error only after you leave it (or jump to it from the list), and a card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save." With more than three items the list collapses to "{n} fields need attention"; click **Show all**.
 - **"You have unsaved changes from earlier" appears at the top**: you closed the settings without saving last time. **Restore** brings those changes back into the form (every field is checked at once); **Discard** forgets them. The draft is kept in your browser for 24 hours and is cleared once the same configuration has been saved, or when you reset the plugin.
 - **The default country was wrong on first load**: on a fresh install the settings UI guesses it from your browser's language, else from the Homebridge host's time zone, else United States. Pick the right one under Settings; once saved it is never changed for you.
-- **Help text is hard to read in dark mode**: update the plugin; secondary text follows the Homebridge UI theme, including the way the Homebridge UI marks dark mode inside the settings page.
 - **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.
 

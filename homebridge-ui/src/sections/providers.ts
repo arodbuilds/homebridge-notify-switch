@@ -1,4 +1,4 @@
-import type { BotIdentity, ChatSummary, ProviderType, TwilioLookupResult } from '../../../src/types.js';
+import type { BotIdentity, ChatSummary, NtfyAuth, ProviderType, TwilioLookupResult } from '../../../src/types.js';
 import { PROVIDER_TYPES } from '../../../src/types.js';
 import { BOT_TOKEN_PATTERN } from '../../../src/patterns.js';
 import { addressList } from '../addressList.js';
@@ -6,12 +6,12 @@ import { callServer } from '../api.js';
 import type { App } from '../app.js';
 import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
 import {
-  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, PROVIDER_CHOOSER, PROVIDER_NAME_HELP, PROVIDER_TYPE_LABEL,
-  PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
+  PROVIDER_TYPE_LABEL, PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
-  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, linkOut, numberField, openModal,
-  outlineButton, paragraph, passwordField, selectField, setHelp, statusBox, textField, uniqueId,
+  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpLink, helpText, inlineConfirm, linkButton, linkOut, numberField,
+  openModal, outlineButton, paragraph, passwordField, selectField, setHelp, statusBox, textField, uniqueId,
 } from '../dom.js';
 import { createProvider, exportProvider, slugify, uniqueSlug } from '../model.js';
 import type { UiProvider } from '../model.js';
@@ -356,6 +356,12 @@ function stepLink(url: string): HTMLAnchorElement {
 /** getMe results by token, so re-rendering the section does not ask Telegram again. Lives in memory for the page only. */
 const botCache = new Map<string, BotIdentity>();
 
+/**
+ * The UI server already limits the username to this shape; the page checks again before it builds a link or a QR
+ * code from it, so nothing but a bot username can ever be embedded (SPEC section 11.2, item 10).
+ */
+const BOT_USERNAME_PATTERN = /^[A-Za-z0-9_]{5,32}$/;
+
 /** Find people and groups: getUpdates results with an Add button that appends the id to the chosen recipient group. */
 function findChatsPanel(app: App, p: UiProvider): HTMLElement {
   const copy = TELEGRAM_ONBOARDING;
@@ -438,7 +444,7 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
     const seq = (lookupSeq += 1);
     const apply = (result: BotIdentity): void => {
       connection.set(result.ok ? 'success' : 'danger', result.message);
-      setUsername(result.ok && typeof result.username === 'string' ? result.username : undefined);
+      setUsername(result.ok && typeof result.username === 'string' && BOT_USERNAME_PATTERN.test(result.username) ? result.username : undefined);
     };
     const cached = botCache.get(token);
     if (cached) {
@@ -593,6 +599,51 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
   }
 }
 
+// ---- ntfy (SPEC section 11.2, item 24) ------------------------------------------------------------------
+
+function ntfyFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
+  body.appendChild(el('p', { class: 'ns-card-intro ns-help mb-3' }, NTFY_HELP.intro, ' ', helpLink(NTFY_HELP.introLink)));
+  body.appendChild(textField('Server', p.server, (v) => {
+    p.server = v;
+    app.changed();
+  }, { path: `${path}.server`, required: true, monospace: true, placeholder: 'e.g. https://ntfy.sh', help: NTFY_HELP.server }));
+
+  // The credential fields for the chosen auth mode; the others stay in the model but out of the form.
+  const token = passwordField('Access token', p.token, (v) => {
+    p.token = v;
+    app.changed();
+  }, { path: `${path}.token`, required: true, help: NTFY_HELP.token, helpLink: NTFY_HELP.authLink });
+  const username = textField('Username', p.username, (v) => {
+    p.username = v;
+    app.changed();
+  }, { path: `${path}.username`, required: true, autocomplete: 'off', help: NTFY_HELP.username });
+  const password = passwordField('Password', p.password, (v) => {
+    p.password = v;
+    app.changed();
+  }, { path: `${path}.password`, required: true, help: NTFY_HELP.password });
+  let applyAuth: () => void = () => undefined;
+  const authField = selectField(NTFY_HELP.authLabel, p.auth, NTFY_HELP.authOptions, (v) => {
+    p.auth = v as NtfyAuth;
+    applyAuth();
+    app.changed();
+  }, { path: `${path}.auth`, help: NTFY_HELP.auth[p.auth], helpLink: NTFY_HELP.authLink });
+  applyAuth = (): void => {
+    setHelp(authField, NTFY_HELP.auth[p.auth], NTFY_HELP.authLink);
+    token.hidden = p.auth !== 'token';
+    username.hidden = p.auth !== 'basic';
+    password.hidden = p.auth !== 'basic';
+    body.setAttribute('data-auth', p.auth);
+  };
+  body.appendChild(authField);
+  body.appendChild(token);
+  body.appendChild(el('div', { class: 'ns-grid ns-basic-auth' },
+    el('div', { class: 'ns-span-6' }, username),
+    el('div', { class: 'ns-span-6' }, password),
+  ));
+  applyAuth();
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false));
+}
+
 // ---- Shared ---------------------------------------------------------------------------------------------
 
 function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
@@ -637,6 +688,9 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   case 'telegram':
     telegramFields(app, p, path, body, id);
     break;
+  case 'ntfy':
+    ntfyFields(app, p, path, body, id);
+    break;
   }
 
   // Footer (SPEC section 11.2, item 11): Remove provider on the left, Test connection on the right; the result below.
@@ -671,7 +725,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   return card;
 }
 
-/** The three chooser tiles (SPEC section 11.2, item 13). Picking one creates the provider with its type fixed. */
+/** The chooser tiles, one per provider type (SPEC section 11.2, item 13). Picking one creates the provider with its type fixed. */
 function chooserTiles(app: App): HTMLElement {
   const tiles = PROVIDER_TYPES.map((type) => {
     const tile = el('button', { type: 'button', class: 'ns-chooser-tile', 'data-type': type },
@@ -690,7 +744,7 @@ function chooserTiles(app: App): HTMLElement {
 }
 
 /**
- * The provider chooser (SPEC section 11.2, item 13): Add provider is replaced by three tiles; picking one
+ * The provider chooser (SPEC section 11.2, item 13): Add provider is replaced by the tiles; picking one
  * creates the card with its type fixed, the name prefilled and the id generated from the name.
  */
 function addProviderControl(app: App): HTMLElement {

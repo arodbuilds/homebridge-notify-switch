@@ -2,30 +2,42 @@
  * Configuration and provider types shared across the plugin (SPEC sections 5 and 6).
  */
 
-export type ProviderType = 'twilio' | 'smtp' | 'telegram';
-export type Channel = 'sms' | 'email' | 'telegram';
+export type ProviderType = 'twilio' | 'smtp' | 'telegram' | 'ntfy';
+export type Channel = 'sms' | 'email' | 'telegram' | 'ntfy';
 export type FailureMode = 'any' | 'all' | 'off';
 export type SmtpSecurity = 'ssl' | 'starttls' | 'none';
 export type TelegramParseMode = 'none' | 'markdown' | 'html';
+export type NtfyAuth = 'none' | 'token' | 'basic';
+export type NtfyPriority = 'min' | 'low' | 'default' | 'high' | 'urgent';
 
-export const PROVIDER_TYPES: readonly ProviderType[] = ['twilio', 'smtp', 'telegram'];
-export const CHANNELS: readonly Channel[] = ['sms', 'email', 'telegram'];
+export const PROVIDER_TYPES: readonly ProviderType[] = ['twilio', 'smtp', 'telegram', 'ntfy'];
+export const CHANNELS: readonly Channel[] = ['sms', 'email', 'telegram', 'ntfy'];
 export const FAILURE_MODES: readonly FailureMode[] = ['any', 'all', 'off'];
 export const SMTP_SECURITIES: readonly SmtpSecurity[] = ['ssl', 'starttls', 'none'];
 export const TELEGRAM_PARSE_MODES: readonly TelegramParseMode[] = ['none', 'markdown', 'html'];
+export const NTFY_AUTHS: readonly NtfyAuth[] = ['none', 'token', 'basic'];
+export const NTFY_PRIORITIES: readonly NtfyPriority[] = ['min', 'low', 'default', 'high', 'urgent'];
+
+/** The ntfy server used when a provider names none (SPEC section 5.2). */
+export const NTFY_DEFAULT_SERVER = 'https://ntfy.sh';
 
 /** Channels each provider type serves (SPEC section 3, item 2). */
 export const PROVIDER_CHANNELS: Readonly<Record<ProviderType, readonly Channel[]>> = {
   twilio: ['sms', 'email'],
   smtp: ['email'],
   telegram: ['telegram'],
+  ntfy: ['ntfy'],
 };
+
+/** Channels whose actions carry a `subject` (the email subject, or the ntfy notification title). */
+export const SUBJECT_CHANNELS: readonly Channel[] = ['email', 'ntfy'];
 
 /** Secret fields each provider type accepts from a `credentialsFile` (SPEC section 12, item 2). */
 export const CREDENTIAL_KEYS: Readonly<Record<ProviderType, readonly string[]>> = {
   twilio: ['accountSid', 'apiKeySid', 'apiKeySecret'],
   smtp: ['username', 'password'],
   telegram: ['botToken'],
+  ntfy: ['token', 'username', 'password'],
 };
 
 export interface EmailIdentity {
@@ -67,7 +79,19 @@ export interface TelegramProviderConfig extends ProviderConfigBase {
   parseMode: TelegramParseMode;
 }
 
-export type ProviderConfig = TwilioProviderConfig | SmtpProviderConfig | TelegramProviderConfig;
+export interface NtfyProviderConfig extends ProviderConfigBase {
+  type: 'ntfy';
+  /** Base URL of the ntfy server, http or https, without a trailing slash. */
+  server: string;
+  auth: NtfyAuth;
+  /** Access token, required when `auth` is `token`. */
+  token?: string;
+  /** Required when `auth` is `basic`. */
+  username?: string;
+  password?: string;
+}
+
+export type ProviderConfig = TwilioProviderConfig | SmtpProviderConfig | TelegramProviderConfig | NtfyProviderConfig;
 
 export interface GroupConfig {
   id: string;
@@ -75,6 +99,7 @@ export interface GroupConfig {
   sms: string[];
   email: string[];
   telegram: string[];
+  ntfy: string[];
 }
 
 export interface ActionConfig {
@@ -84,10 +109,15 @@ export interface ActionConfig {
   sender?: string;
   groups: string[];
   recipients: string[];
+  /** Email subject, or the ntfy notification title (SPEC section 5.5, item 7). */
   subject?: string;
   body: string;
   /** Email only. Hide recipients from each other: they go in Bcc and the from address in To (SPEC section 6.2 and 6.3). Default false. */
   bcc?: boolean;
+  /** ntfy only (SPEC section 5.5, item 10). Default `default`. */
+  priority?: NtfyPriority;
+  /** ntfy only (SPEC section 5.5, item 11). */
+  tags?: string[];
 }
 
 export interface SwitchConfig {
@@ -129,10 +159,15 @@ export interface ResolvedAction {
   /** Resolved sms sender. Undefined means "use the provider's Messaging Service". */
   sender?: string;
   recipients: string[];
+  /** Email subject or ntfy title, defaulted to the switch name. */
   subject?: string;
   body: string;
   /** Email only: recipients in Bcc instead of To. */
   bcc?: boolean;
+  /** ntfy only. */
+  priority?: NtfyPriority;
+  /** ntfy only. */
+  tags?: string[];
 }
 
 export interface ResolvedSwitch extends Omit<SwitchConfig, 'actions'> {
@@ -152,6 +187,7 @@ export interface SendRequest {
   channel: Channel;
   sender?: string;
   recipients: string[];
+  /** Email subject or ntfy title, already rendered and stripped of line breaks. */
   subject?: string;
   body: string;
   /**
@@ -159,6 +195,10 @@ export interface SendRequest {
    * address in To, so they do not see each other. Otherwise every recipient is in To (SPEC section 6.2 and 6.3).
    */
   bcc?: boolean;
+  /** ntfy only (SPEC section 6.5). */
+  priority?: NtfyPriority;
+  /** ntfy only (SPEC section 6.5). */
+  tags?: string[];
 }
 
 export interface RecipientResult {
