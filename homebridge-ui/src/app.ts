@@ -8,9 +8,23 @@ export interface ValidationListener extends HTMLElement {
   nsOnValidate?(issues: UiIssue[]): void;
 }
 
+/**
+ * A stored configuration the editor cannot represent (SPEC section 11.2, item 26): a switch with more than one
+ * action on the same channel. The page keeps the block as loaded for the backups and shows the upgrade notice;
+ * nothing is pushed or saved until Reset plugin to fresh install replaces it.
+ */
+export interface LegacyConfig {
+  /** The platform block exactly as `getPluginConfig` returned it. */
+  block: Record<string, unknown>;
+  /** The names of the switches that cannot be shown. */
+  switches: string[];
+}
+
 /** What a section needs from the page: the shared config and a way to report changes. */
 export interface App {
   config: UiConfig;
+  /** Set while the loaded configuration cannot be represented; cleared by Reset (SPEC section 11.2, item 26). */
+  readonly legacy?: LegacyConfig;
   /**
    * A value changed. The config is pushed to the Homebridge UI and revalidated.
    * `refs` means provider or group ids, names, types or senders changed, so the Switches section re-renders its dropdowns.

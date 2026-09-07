@@ -9,7 +9,7 @@ import type { Channel } from '../../src/types.js';
 import { defaultNeeded, providersForChannel, servesChannel } from '../../src/defaults.js';
 import { DEFAULTS, VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
-import { channelRecipients, enabledChannels, presentChannels, switchProviderId } from './model.js';
+import { channelRecipients, channelUnserved, enabledChannels, presentChannels, switchProviderId } from './model.js';
 import type { UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
 
 /**
@@ -388,7 +388,7 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   } else if (enabled.length === 0) {
     issues.add(`${path}.channels`, label, VALIDATION.noChannels, [`${path}.groups`]);
   }
-  if (enabled.length + s.extraActions.length > MAX_ACTIONS_PER_SWITCH) {
+  if (enabled.length > MAX_ACTIONS_PER_SWITCH) {
     issues.add(`${path}.channels`, label, `A switch can have at most ${MAX_ACTIONS_PER_SWITCH} actions.`);
   }
   for (const channel of enabled) {
@@ -396,6 +396,12 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
     if (recipients.size > MAX_RECIPIENTS_PER_ACTION) {
       issues.add(`${path}.channels.${channel}`, label, VALIDATION.tooMany(channel, recipients.size, MAX_RECIPIENTS_PER_ACTION),
         [`${path}.groups`, `${path}.recipients.${channel}`]);
+    }
+    if (channelUnserved(config, channel)) {
+      // A stored action whose channel no provider serves any more (SPEC section 11.2, item 8): kept, and blocking
+      // Save as it would block startup, until a provider is added or the channel is unticked.
+      issues.add(`${path}.channels.${channel}`, label, VALIDATION.noProviderForChannel(channel));
+      continue;
     }
     checkSwitchProvider(issues, config, s, channel, path, label);
   }

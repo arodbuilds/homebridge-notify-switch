@@ -113,8 +113,6 @@ export interface UiSwitch {
   /** ntfy only. */
   priority: NtfyPriority;
   tags: string[];
-  /** Actions past the first per channel in config.json, kept as loaded and written back unchanged. */
-  extraActions: UiAction[];
 }
 
 export interface UiConfig {
@@ -214,7 +212,6 @@ export function newSwitch(): UiSwitch {
     groups: [], recipients: perChannel(() => []), channels: perChannel(() => false), order: [],
     body: '', subject: '', customize: false, bodies: perChannel(() => ''), subjects: perChannel(() => ''),
     providers: perChannel(() => ''), sender: '', bcc: false, priority: 'default', tags: [],
-    extraActions: [],
   };
 }
 
@@ -267,20 +264,49 @@ function readAction(raw: unknown): UiAction {
 }
 
 /**
- * Derives the editor shape from a switch's `actions` (SPEC section 11.2, item 8). The first action per channel
+ * The switches of a stored platform block that hold more than one action on the same channel, by name (or
+ * "Switch {n}" while unnamed). The editor shows one action per channel, so such a configuration, written by a
+ * 1.0.x action list or by hand, is not represented at all: the page shows the upgrade notice instead and
+ * offers only the backups and Reset (SPEC section 11.2, item 26). Startup validation runs it unchanged.
+ */
+export function legacySwitches(raw: unknown): string[] {
+  const r = isRaw(raw) ? raw : {};
+  const out: string[] = [];
+  if (!Array.isArray(r.switches)) {
+    return out;
+  }
+  r.switches.forEach((item: unknown, index: number) => {
+    if (!isRaw(item) || !Array.isArray(item.actions)) {
+      return;
+    }
+    const seen = new Set<string>();
+    for (const action of item.actions) {
+      const channel = isRaw(action) && typeof action.channel === 'string' ? action.channel : '';
+      if (seen.has(channel)) {
+        out.push(str(item.name).trim() || `Switch ${index + 1}`);
+        return;
+      }
+      seen.add(channel);
+    }
+  });
+  return out;
+}
+
+/**
+ * Derives the editor shape from a switch's `actions` (SPEC section 11.2, item 8). The action per channel
  * fills that channel: its groups join the switch's group list, its extra recipients and provider override are
  * kept per channel, and its body and subject go to the shared fields when every channel agrees, or to the
  * per-channel fields with Customize on when they differ. A provider that is the channel's platform default
- * is stored as no override, so switching the default later moves the switch with it. Actions past the first
- * per channel are kept aside and written back unchanged.
+ * is stored as no override, so switching the default later moves the switch with it; one that no provider
+ * resolves to (the provider was removed) stays as the override, so the action is written back as it was until
+ * the channel is unticked. A second action on the same channel never reaches this function: `legacySwitches`
+ * keeps such a configuration out of the editor.
  */
 export function switchFromActions(s: UiSwitch, actions: UiAction[], providers: UiProvider[], defaults: DefaultProviders): UiSwitch {
   const first: Partial<Record<Channel, UiAction>> = {};
   s.order = [];
-  s.extraActions = [];
   for (const action of actions) {
     if (first[action.channel]) {
-      s.extraActions.push(action);
       continue;
     }
     first[action.channel] = action;
@@ -501,18 +527,30 @@ export function channelRecipients(config: UiConfig, s: UiSwitch, channel: Channe
   return out;
 }
 
+/** True when no provider can send on `channel`: none of its type, or a Twilio provider without a from address for email (SPEC section 5.7). */
+export function channelUnserved(config: UiConfig, channel: Channel): boolean {
+  return providersForChannel(config.providers, channel).length === 0;
+}
+
 /**
  * The channels Send by lists (SPEC section 11.2, item 8): those with somebody to reach and a provider that can send
- * on them. A channel with nobody to reach, or nobody to send through, is not listed and gets no action.
+ * on them, plus a ticked channel that no provider serves any more (a stored action whose provider was removed),
+ * which stays listed, disabled with a note, until it is unticked. A channel with nobody to reach is not listed
+ * and gets no action.
  */
 export function presentChannels(config: UiConfig, s: UiSwitch): Channel[] {
-  return CHANNELS.filter((channel) => channelRecipients(config, s, channel).size > 0 && providersForChannel(config.providers, channel).length > 0);
+  return CHANNELS.filter((channel) => channelRecipients(config, s, channel).size > 0 && (!channelUnserved(config, channel) || s.channels[channel]));
 }
 
 /** The channels the switch sends on (present and ticked), in the order its actions are written: the stored order first, new channels after. */
 export function enabledChannels(s: UiSwitch, config: UiConfig): Channel[] {
   const enabled = presentChannels(config, s).filter((channel) => s.channels[channel]);
   return [...s.order.filter((channel) => enabled.includes(channel)), ...enabled.filter((channel) => !s.order.includes(channel))];
+}
+
+/** The ticked channels of the switch that no provider serves (SPEC section 11.2, item 8): kept as stored, written back unchanged. */
+export function unservedChannels(config: UiConfig, s: UiSwitch): Channel[] {
+  return enabledChannels(s, config).filter((channel) => channelUnserved(config, channel));
 }
 
 /** The provider id a channel of the switch sends through: the override, else the platform default (SPEC section 5.7). */
@@ -523,10 +561,10 @@ export function switchProviderId(s: UiSwitch, channel: Channel, config: UiConfig
 /**
  * The `actions` array config.json keeps for a switch (SPEC section 5.4): one action per enabled channel with
  * the switch's groups, that channel's extra recipients, the shared or per-channel body and subject, and the
- * provider from the override or the platform default; then any actions kept aside on load.
+ * provider from the override or the platform default.
  */
 export function switchActions(s: UiSwitch, config: UiConfig): Raw[] {
-  const out = enabledChannels(s, config).map((channel) => exportAction({
+  return enabledChannels(s, config).map((channel) => exportAction({
     providerId: switchProviderId(s, channel, config),
     channel,
     sender: channel === 'sms' ? s.sender : '',
@@ -538,7 +576,6 @@ export function switchActions(s: UiSwitch, config: UiConfig): Raw[] {
     priority: s.priority,
     tags: [...s.tags],
   }));
-  return [...out, ...s.extraActions.map(exportAction)];
 }
 
 /** The platform block as written to config.json. */
@@ -605,20 +642,34 @@ export function secretFields(p: UiProvider): string[] {
 }
 
 /**
+ * A stored platform block with every secret field emptied and `credentialsRemoved: true`, without going through
+ * the editor model, so a configuration the editor cannot represent (SPEC section 11.2, item 26) is backed up
+ * as it is. Each provider's secret fields follow its type, auth mode and credentials file as in `secretFields`.
+ */
+export function blockWithoutCredentials(block: Raw): Raw {
+  const out: Raw = { ...block };
+  if (Array.isArray(block.providers)) {
+    out.providers = block.providers.map((item: unknown) => {
+      if (!isRaw(item)) {
+        return item;
+      }
+      const raw: Raw = { ...item };
+      for (const key of secretFields(readProvider(item))) {
+        raw[key] = '';
+      }
+      return raw;
+    });
+  }
+  out.credentialsRemoved = true;
+  return out;
+}
+
+/**
  * The platform block for a backup without credentials: the same JSON as `exportConfig`, with every secret
  * field replaced by an empty string and a top-level `credentialsRemoved: true` so Restore knows what to expect.
  */
 export function exportConfigWithoutCredentials(config: UiConfig): Raw {
-  const out = exportConfig(config);
-  out.providers = config.providers.map((p) => {
-    const raw = exportProvider(p);
-    for (const key of secretFields(p)) {
-      raw[key] = '';
-    }
-    return raw;
-  });
-  out.credentialsRemoved = true;
-  return out;
+  return blockWithoutCredentials(exportConfig(config));
 }
 
 /** The field paths (`providers[0].apiKeySecret`) of the secret fields that are empty in `config`. */

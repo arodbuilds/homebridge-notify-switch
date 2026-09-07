@@ -831,3 +831,28 @@ body.ns-touch .ns-modal .btn-close {
   height: 20px;
   flex: 0 0 auto;
 }
+
+/* A ticked channel no provider serves any more (SPEC section 11.2, item 8): shown as disabled, with the note under
+   it, until it is unticked. The box itself stays usable so the stored action can be dropped. */
+.ns-send-by-unserved .form-check-label {
+  opacity: 0.65;
+}
+
+.ns-send-by-note {
+  margin-top: 0;
+}
+
+/* The upgrade notice for a configuration the editor cannot represent (SPEC section 11.2, item 26): the first
+   element of the page. Display is set without `!important` so the `hidden` attribute can still hide it. */
+.ns-legacy-notice {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+/* Every section is disabled while the notice shows, except the backups and Reset; the disabled controls carry the
+   Bootstrap disabled look, and the section copy is dimmed to match. */
+.ns-locked > .section-copy,
+.ns-locked .card-header,
+.ns-locked .ns-help {
+  opacity: 0.65;
+}

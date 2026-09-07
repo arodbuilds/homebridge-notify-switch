@@ -34,8 +34,7 @@ interface FindChatsResult {
 
 /** True when a switch names this provider, in which case the id must not follow the name any more. */
 function providerReferenced(app: App, id: string): boolean {
-  return id.length > 0 && app.config.switches.some((s) => CHANNELS.some((channel) => s.providers[channel] === id)
-    || s.extraActions.some((a) => a.providerId === id));
+  return id.length > 0 && app.config.switches.some((s) => CHANNELS.some((channel) => s.providers[channel] === id));
 }
 
 /** A provider's id changed (Edit under Advanced): a platform default that named it follows (SPEC section 5.7). */

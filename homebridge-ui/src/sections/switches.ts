@@ -5,12 +5,12 @@ import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { helpToggle, variablesToggle } from '../card.js';
-import { CHANNEL_TITLE, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { CHANNEL_TITLE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
   statusBox, textField, textareaField,
 } from '../dom.js';
-import { channelRecipients, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId } from '../model.js';
+import { channelRecipients, channelUnserved, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels } from '../model.js';
 import type { UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
 import type { UiIssue } from '../validate.js';
@@ -283,11 +283,21 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
         refresh();
       });
       const count = channelRecipients(app.config, s, channel).size;
-      channelRows.appendChild(el('div', { class: 'form-check', 'data-path': `${path}.channels.${channel}`, 'data-channel': channel },
+      const row = el('div', { class: 'form-check', 'data-path': `${path}.channels.${channel}`, 'data-channel': channel },
         input,
-        el('label', { class: 'form-check-label', for: `${path}.channels.${channel}` }, SWITCH_EDITOR.channelOption(channel, count)),
-        el('div', { class: 'invalid-feedback' }),
-      ));
+        el('label', { class: 'form-check-label', for: `${path}.channels.${channel}` }, SWITCH_EDITOR.channelOption(channel, count)));
+      if (channelUnserved(app.config, channel)) {
+        // A stored action whose channel no provider serves any more (SPEC section 11.2, item 8): shown disabled with the
+        // note, which doubles as its validation message, so it is not repeated in a feedback line. The box stays
+        // usable so the action can be dropped by unticking it.
+        const noteId = `${path}.channels.${channel}.note`;
+        row.classList.add('ns-send-by-unserved');
+        row.appendChild(el('div', { class: 'form-text ns-send-by-note', id: noteId }, SWITCH_EDITOR.noProviderNote(channel)));
+        input.setAttribute('aria-describedby', noteId);
+      } else {
+        row.appendChild(el('div', { class: 'invalid-feedback' }));
+      }
+      channelRows.appendChild(row);
     }
   };
   channelBox.appendChild(el('label', { class: 'form-label' }, SWITCH_EDITOR.sendByLabel));
@@ -419,14 +429,12 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
       app.changed();
     }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags })),
   );
-  const extraActions = el('div', { class: 'ns-extra-actions' });
-  for (const channel of [...new Set(s.extraActions.map((a) => a.channel))]) {
-    extraActions.appendChild(el('div', { class: 'form-text' }, SWITCH_EDITOR.extraActions(channel)));
-  }
-  const advancedOpen = s.customize || CHANNELS.some((channel) => s.providers[channel] !== '') || s.sender !== '' || s.bcc || s.priority !== 'default'
-    || s.tags.length > 0 || s.extraActions.length > 0;
+  // An override that names a provider nobody can resolve on a channel no provider serves is the stored action's
+  // provider (SPEC section 5.7, item 7); it is kept, not shown, so it does not open Advanced on its own.
+  const overrideShown = (channel: Channel): boolean => s.providers[channel] !== '' && !channelUnserved(app.config, channel);
+  const advancedOpen = s.customize || CHANNELS.some(overrideShown) || s.sender !== '' || s.bcc || s.priority !== 'default' || s.tags.length > 0;
   const advanced = disclosure(SWITCH_EDITOR.advanced, [
-    customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy, extraActions,
+    customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy,
   ], { open: advancedOpen, attrs: { 'data-advanced': path } });
   root.appendChild(advanced);
 
@@ -434,6 +442,9 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   refresh = (): void => {
     renderChannels();
     const enabled = enabledChannels(s, app.config);
+    // A ticked channel no provider serves keeps its stored action but takes no part in the preview or in Advanced.
+    const unserved = unservedChannels(app.config, s);
+    const served = enabled.filter((channel) => !unserved.includes(channel));
     const hasSubject = enabled.some((channel) => SUBJECT_CHANNELS.includes(channel));
     sharedBody.setSms(enabled.includes('sms'));
     sharedBody.el.hidden = s.customize;
@@ -448,15 +459,15 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
       const override = overrides[channel];
       if (override) {
         const candidates = providersForChannel(app.config.providers, channel).length;
-        override.hidden = !enabled.includes(channel) || (candidates < 2 && s.providers[channel] === '');
+        override.hidden = !served.includes(channel) || (candidates < 2 && s.providers[channel] === '');
       }
     }
     if (senderField) {
-      senderField.hidden = !enabled.includes('sms');
+      senderField.hidden = !served.includes('sms');
     }
-    bcc.hidden = !enabled.includes('email');
-    ntfy.hidden = !enabled.includes('ntfy');
-    const parts = enabled.map((channel) => ({
+    bcc.hidden = !served.includes('email');
+    ntfy.hidden = !served.includes('ntfy');
+    const parts = served.map((channel) => ({
       channel, provider: providerName(app, switchProviderId(s, channel, app.config)), count: channelRecipients(app.config, s, channel).size,
     })).filter((part) => part.count > 0);
     preview.textContent = parts.length > 0 ? SWITCH_EDITOR.preview(parts) : SWITCH_EDITOR.previewNone;
@@ -543,6 +554,11 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
 
 export function renderSwitches(app: App, container: HTMLElement): void {
   container.appendChild(paragraph(SWITCHES_SECTION));
+  if (app.legacy) {
+    // A configuration the editor cannot represent is not shown at all (SPEC section 11.2, item 26).
+    container.appendChild(el('div', { class: 'form-text mb-2 ns-legacy-switches' }, LEGACY.switches(app.legacy.switches)));
+    return;
+  }
   const host = el('div');
   app.config.switches.forEach((s, i) => host.appendChild(switchCard(app, s, i, host)));
   if (app.config.switches.length === 0) {

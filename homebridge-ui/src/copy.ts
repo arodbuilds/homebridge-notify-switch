@@ -214,8 +214,21 @@ export const SWITCH_EDITOR = {
   platformDefault: (name: string): string => `Platform default (${name})`,
   providerHelp: 'For this switch only. The default for every switch is under Settings.',
   missingProvider: (id: string): string => `${id} (missing)`,
-  extraActions: (channel: Channel): string =>
-    `config.json has more than one ${CHANNEL_WORD[channel]} action on this switch. The extra ones are kept as they are.`,
+  /** Under a ticked channel that no provider serves any more; the action stays as stored until the box is unticked. */
+  noProviderNote: (channel: Channel): string => `No provider configured for ${CHANNEL_WORD[channel]}; add one or untick to remove.`,
+};
+
+/**
+ * A configuration the editor cannot represent: a switch with more than one action on the same channel
+ * (SPEC section 11.2, item 26). The notice sits at the top of the page and every section is disabled except
+ * the two backups and Reset.
+ */
+export const LEGACY = {
+  notice: 'Warning: upgrading to 1.1 requires reconfiguring this plugin. Download a backup for reference, then use Reset plugin to fresh install '
+    + 'under Advanced and set up your switches again.',
+  /** In place of the switch cards. */
+  switches: (names: string[]): string => `Not shown: ${names.join(', ')}. ${names.length === 1 ? 'This switch has' : 'These switches have'} `
+    + 'more than one action on the same channel, which this version cannot edit.',
 };
 
 /** Platform defaults per channel (SPEC section 5.7 and section 11.2, item 25). */
@@ -291,6 +304,8 @@ export const VALIDATION = {
   missingGroup: (id: string): string => `Group "${id}" does not exist.`,
   missingProvider: (id: string): string => `Provider "${id}" does not exist.`,
   noProvider: (channel: Channel): string => `No provider can send ${CHANNEL_WORD[channel]}. Add one under Providers.`,
+  /** On the Send by checkbox of a stored channel no provider serves; the same text as the note under it. */
+  noProviderForChannel: (channel: Channel): string => SWITCH_EDITOR.noProviderNote(channel),
   wrongProvider: (name: string, type: string, channel: Channel): string => `Provider "${name}" is ${type}, which cannot send ${CHANNEL_WORD[channel]}.`,
   twilioEmailFrom: (name: string): string => `Provider "${name}" needs an Email From address before it can send email.`,
 };
@@ -392,6 +407,9 @@ export const BACKUP = {
   restoreFailed: 'The backup could not be loaded:',
   restoreTooLarge: 'The file is larger than 1 MB, which a Notify Switch backup never is.',
   restoreForbiddenKey: (path: string): string => `The file contains a key named "${path}", which is not allowed.`,
+  /** A backup with more than one action on the same channel (SPEC section 11.2, item 26) cannot be shown, so it is not loaded. */
+  restoreLegacy: (names: string[]): string => `The file has more than one action on the same channel on ${names.map((name) => `"${name}"`).join(', ')}, `
+    + 'which this version cannot edit. Set the switch up again instead.',
   restored: 'Backup loaded. Review the form, then click Save.',
   restoredWithoutCredentials: 'Backup loaded. Enter the credentials it left out, then click Save.',
   reset: 'Reset plugin to fresh install',

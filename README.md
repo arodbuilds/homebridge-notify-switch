@@ -254,7 +254,7 @@ Each switch appears in the Home app under its `name`. Turning it on sends your m
 In the settings UI a switch card has four parts:
 
 1. **Recipients.** Tick the groups to send to. Each group shows what it holds per channel, for example `Family: 3 SMS, 1 email, 2 ntfy`. Under **Extra recipients** you can add individual phone numbers, email addresses, Telegram chat IDs or ntfy topics for people outside the groups.
-2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default, each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on, or that no provider can send, is not listed.
+2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default, each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
 3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)).
 4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
 
@@ -297,7 +297,7 @@ In `config.json` a switch holds an `actions` array, one action per channel it se
 
 Recipients from every group plus `recipients` are merged and deduplicated before sending; an action may reach at most 100 recipients. Each SMS, Telegram and ntfy message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
 
-A hand-written configuration with several actions on the same channel still works: the settings UI edits the first one per channel and keeps the others as they are. A switch that sends to a group with addresses on a channel it has no action for is reported once at startup as a warning, because those people receive nothing; in the settings UI that channel simply shows unticked under **Send by**.
+A configuration with several actions on the same channel on one switch (two SMS messages from one switch, say, as 1.0.x allowed) still starts and sends every action, but the settings UI cannot show it: it displays a warning that upgrading to 1.1 requires reconfiguring the plugin and offers only **Download backup**, **Download backup without credentials** and **Reset plugin to fresh install** until the reset is done. Download a backup for reference, reset, and set the switches up again, using two switches where you had two messages on one channel. A switch that sends to a group with addresses on a channel it has no action for is reported once at startup as a warning, because those people receive nothing; in the settings UI that channel simply shows unticked under **Send by**.
 
 ### Platform defaults
 

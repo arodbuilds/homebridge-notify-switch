@@ -1,11 +1,11 @@
 import { setSaveEnabled, toastError } from './api.js';
-import type { App, Section, ValidationListener } from './app.js';
-import { DRAFT, GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, ISSUES, SAVE_STATUS, VALIDATION } from './copy.js';
+import type { App, LegacyConfig, Section, ValidationListener } from './app.js';
+import { DRAFT, GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, ISSUES, LEGACY, SAVE_STATUS, VALIDATION } from './copy.js';
 import { button, clear, el, linkButton } from './dom.js';
 import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
 import { renderFooter } from './footer.js';
-import { exportConfig, readConfig } from './model.js';
+import { exportConfig, legacySwitches, readConfig } from './model.js';
 import type { UiConfig } from './model.js';
 import { isCountry, localeCountry } from './phone.js';
 import { renderGroups } from './sections/groups.js';
@@ -72,9 +72,18 @@ class Page implements App {
   private providersEmpty: boolean;
   /** True from a Reset until the next change, so the Save status area reads the reset line (SPEC section 11.2, item 19). */
   private justReset = false;
+  /** The upgrade notice at the top of the page while the loaded configuration cannot be represented (SPEC section 11.2, item 26). */
+  private readonly legacyNotice: HTMLElement;
 
-  constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft) {
+  constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
+    // A configuration with more than one action on the same channel: the blocking notice comes first, before
+    // anything else on the page, and stays until Reset plugin to fresh install replaces the configuration.
+    // It is only in the page while it applies, so the draft banner stays the first element otherwise.
+    this.legacyNotice = el('div', { class: 'ns-legacy-notice alert alert-warning', role: 'alert' }, LEGACY.notice);
+    if (legacy) {
+      root.appendChild(this.legacyNotice);
+    }
     // Unsaved draft recovery banner (SPEC section 11.2, item 23), the first element of the page when a draft waits.
     // Laid out by its own rule, not `d-flex`, whose `!important` display would defeat the `hidden` attribute.
     this.draftBanner = el('div', { class: 'ns-draft-banner alert alert-info', role: 'status', hidden: true });
@@ -128,13 +137,38 @@ class Page implements App {
     for (const section of SECTIONS) {
       this.rerender(section.key);
     }
+    if (this.legacy) {
+      this.lockSections();
+    }
     this.revalidate();
+  }
+
+  /**
+   * Disables every control of every section while the loaded configuration cannot be represented (SPEC section
+   * 11.2, item 26), except Download backup, Download backup without credentials and Reset plugin to fresh install.
+   * Disclosures stay openable so the Settings > Advanced buttons can be reached; the Reset modal is created
+   * outside the sections when it opens, so its own controls are untouched.
+   */
+  private lockSections(): void {
+    for (const container of this.containers.values()) {
+      container.classList.add('ns-locked');
+      for (const control of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>(
+        'input, select, textarea, button',
+      )) {
+        if (!control.classList.contains('ns-legacy-allowed')) {
+          control.disabled = true;
+        }
+      }
+    }
   }
 
   replaceConfig(config: UiConfig, reason?: 'restore' | 'reset'): void {
     this.config = config;
     this.touched.clear();
     this.shown.clear();
+    // Reset (or a restore) replaces a configuration the editor could not represent with one it can: the page becomes an ordinary one.
+    this.legacy = undefined;
+    this.legacyNotice.remove();
     if (reason === 'reset') {
       // A draft never survives a Reset confirm (SPEC section 11.2, item 23).
       clearDraft();
@@ -150,6 +184,8 @@ class Page implements App {
       return;
     }
     clear(container);
+    // A section redrawn after Reset is an ordinary one again; `lockSections` marks it while the notice shows.
+    container.classList.remove('ns-locked');
     SECTIONS.find((s) => s.key === section)?.render(this, container);
     if (section === 'providers') {
       // The first provider added, or the last one removed: the Groups and Switches sections switch
@@ -316,6 +352,10 @@ class Page implements App {
   }
 
   private push(): void {
+    if (this.legacy) {
+      // Nothing the editor holds describes the stored configuration; it is neither pushed nor kept as a draft (SPEC section 11.2, item 26).
+      return;
+    }
     if (this.pushTimer !== undefined) {
       window.clearTimeout(this.pushTimer);
     }
@@ -381,6 +421,12 @@ class Page implements App {
   }
 
   private revalidate(): void {
+    if (this.legacy) {
+      // The stored configuration is not represented, so there is nothing to validate; Save stays disabled until Reset (SPEC section 11.2, item 26).
+      this.issuesBox.hidden = true;
+      setSaveEnabled(false);
+      return;
+    }
     const everything = validate(this.config);
     // Warnings (a channel without a default provider, SPEC section 11.2, item 25) are listed but never block Save or mark a field.
     const all = errorsOnly(everything);
@@ -569,7 +615,12 @@ async function start(): Promise<void> {
     if (!hasSavedCountry(raw)) {
       config.defaultCountry = localeCountry(navigator.language) ?? (await hostCountry()) ?? 'US';
     }
-    const page = new Page(config, root, pendingDraft(config));
+    // A switch with more than one action on the same channel cannot be shown (SPEC section 11.2, item 26): the block
+    // is kept as loaded for the backups, the notice is shown, and no draft is offered over it.
+    const legacyNames = legacySwitches(raw);
+    const legacy: LegacyConfig | undefined = legacyNames.length > 0 && raw && typeof raw === 'object'
+      ? { block: raw as Record<string, unknown>, switches: legacyNames } : undefined;
+    const page = new Page(config, root, legacy ? undefined : pendingDraft(config), legacy);
     page.setOtherBlocks(blocks.filter((_, i) => i !== index));
     page.renderAll();
   } catch (err) {
