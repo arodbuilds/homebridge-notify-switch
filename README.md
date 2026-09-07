@@ -113,9 +113,9 @@ Messages from a standard US long code to US phone numbers must come from a numbe
 
 Registration notes:
 
-1. **Sole Proprietor 10DLC registration** is the lightest path for a household: a one-time brand and campaign fee plus a small monthly campaign fee, with a low daily message limit. See [Sole Proprietor onboarding](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/onboarding-isv-sole-proprietor).
-2. **Toll-free verification** is an alternative that skips brand and campaign registration. Verification is free, but the form asks for privacy policy and terms URLs. See [Toll-free message verification](https://www.twilio.com/docs/messaging/compliance/toll-free-message-verification).
-3. **Fees.** As of September 2026, Sole Proprietor registration costs about $4 once for the brand and $15 once for campaign vetting, then about $2 a month for the campaign, with a limit of 1,000 message segments a day; carriers add a fraction of a cent to each message on top of Twilio's SMS price. Toll-free verification is free. These figures change, so check [Twilio's US SMS pricing page](https://www.twilio.com/en-us/sms/pricing/us) before you decide; nothing else in this document repeats them.
+1. **Sole Proprietor 10DLC registration** is the lightest path for a household: a one-time brand and campaign fee plus a small monthly campaign fee. It allows one campaign per brand, one phone number per campaign, and a throughput of 1 message per second. See [Sole Proprietor registration](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/direct-sole-proprietor-registration-overview).
+2. **Toll-free verification** is an alternative that skips brand and campaign registration. Verification is free, but the form asks for privacy policy and terms URLs. See [Toll-free verification in the Console](https://www.twilio.com/docs/messaging/compliance/toll-free/console-onboarding).
+3. **Fees.** As of September 2026, Sole Proprietor registration costs $4 once for the brand, $15 once for campaign vetting, and $2 per month per campaign; toll-free verification is free. Twilio's per-message price and the carrier surcharges are on [Twilio's US SMS pricing page](https://www.twilio.com/en-us/sms/pricing/us), and nothing else in this document repeats them.
 
 #### Email through Twilio
 
@@ -125,7 +125,7 @@ The `email` channel sends through Twilio's Emails API, which needs an authentica
 2. Add the DNS records Twilio shows to your domain and wait for the domain to show as verified.
 3. Set `emailFrom.address` to an address at that domain and `emailFrom.name` to the display name recipients see.
 
-Emails are sent as plain text. The plugin disables Twilio's open and click tracking on every send, so no tracking pixel is added to the message and links are not rewritten. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, use an [SMTP provider](#smtp-email-through-your-own-mailbox) instead; a household can also simply prefer its own SMTP mailbox if it would rather not send through Twilio at all.
+Emails are sent as plain text. Twilio may add open and click tracking (a tracking pixel and rewritten links) to the email it sends; the Emails API has no per-message setting to turn that off, so the plugin cannot disable it. Every message carries the `Auto-Submitted: auto-generated` header so mail systems treat it as automated. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, or would rather not send through Twilio at all, use an [SMTP provider](#smtp-email-through-your-own-mailbox): your own mailbox sends exactly the plain text the plugin writes and nothing else.
 
 ### SMTP (email through your own mailbox)
 

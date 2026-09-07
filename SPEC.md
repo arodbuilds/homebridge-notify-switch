@@ -309,7 +309,7 @@ POST `https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json` wit
 
 POST `https://comms.twilio.com/v1/Emails` with the same Basic auth, JSON body with `from`, `to` (all recipients in one request, so they see each other), and `content.subject`, `content.text` and `content.html`. The API requires `html`, so the plain body is sent both ways: `text` is the rendered body and `html` is the same body HTML-escaped inside a `pre` element so line breaks survive; no HTML authoring is exposed. With the action's `bcc` option and more than one recipient, the recipients go in `bcc` (the same `{ address }` objects as `to`) and the from address in `to`; a single recipient is always in `to`. Success is HTTP 202; `operationId` is returned as `id` for every recipient. One request per action regardless of recipient count.
 
-From 1.1.1 every request also carries, at the top level of the body, `headers` with `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies; not on Twilio's list of headers that may not be overridden) and `tracking_settings` with `open_tracking.enable` and `click_tracking.enable` both `false`. Tracking is disabled unconditionally: open tracking inserts a tracking pixel, which conflicts with the no-analytics rule (section 14, item 9) and got a message scored as spam at Fastmail. There is no configuration field and no UI for it (a toggle to re-enable it is a future item, section 15).
+From 1.1.1 `content.headers` carries `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies). The endpoint nests custom headers inside `content`, and `Auto-Submitted` is not on its list of headers that may not be overridden. It is the only custom header the plugin sends. The endpoint documents no per-message setting for open or click tracking (the SendGrid v3 `tracking_settings` field is not part of it), so the plugin sends none and makes no claim about tracking; the README says so and points a household that wants no tracking pixel at an SMTP provider (section 15, item 3).
 
 ### 6.3 SMTP
 
@@ -595,7 +595,7 @@ Using it in HomeKit (bottom of page):
 6. No post-install scripts.
 7. No TTY or non-standard startup parameters.
 8. Implements the Plugin Settings GUI.
-9. No analytics or tracking. Twilio's email open and click tracking is disabled on every send (section 6.2), so no tracking pixel is added to a message.
+9. No analytics or tracking by the plugin itself. Twilio may add its own open and click tracking to email sent through it, and the Emails API offers no per-message switch for it (section 6.2); the README says so.
 10. Files written only inside the Homebridge storage directory (only if `credentialsFile` is read; the plugin writes nothing).
 11. Catches and logs its own errors; never throws unhandled.
 
@@ -605,4 +605,4 @@ The questions raised for the review of this document are settled and folded into
 
 1. Telegram `markdown` maps to the legacy `Markdown` parse mode (section 5.2). Should a `markdownv2` value be added for people who write bodies in MarkdownV2, or should `markdown` switch to it and the escaping burden move to the user?
 2. Microsoft is retiring password sign-in for third-party apps on personal Outlook.com accounts (README, SMTP section). Should the Outlook.com preset stay, with its warning, or be removed once Microsoft completes the change?
-3. Not implemented in 1.1.1: an Advanced toggle on the Twilio provider card that would let a user re-enable Twilio open and click tracking (section 6.2 disables both on every send). It would add a configuration field on the Twilio provider and a UI string, so it belongs in a minor release, not a patch.
+3. Twilio email tracking. 1.1.1 set out to disable Twilio's open and click tracking on every send (open tracking inserts a tracking pixel, which got a message scored 5.7 as spam at Fastmail), but the Emails API documents no per-message setting for it, so nothing is sent (section 6.2). Should the endpoint gain one, the plan stands: disabled on every send, with an Advanced toggle on the Twilio provider card to re-enable it. That adds a configuration field and a UI string, so it belongs in a minor release, not a patch.
