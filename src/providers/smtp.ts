@@ -172,7 +172,7 @@ export class SmtpProvider implements Provider, ProviderDiagnostics {
         return { ok: false, message: 'SMTP: this transport cannot verify connections' };
       }
       await Promise.race([transport.verify(), timeout]);
-      return { ok: true, message: `Connected to ${this.config.host}:${this.config.port} and logged in as ${this.config.username}.` };
+      return { ok: true, message: `Connected to ${this.config.host}:${this.config.port} and logged in.` };
     } catch (err) {
       return { ok: false, message: this.describe(asMailError(err)) };
     } finally {

@@ -104,7 +104,7 @@ test('guided empty state: a Get started card with the chooser tiles, disabled Ad
   }
 });
 
-test('footer: version from the server, credit, and two links that open in a new tab, as the last element of the page', async (t) => {
+test('footer: the mark, version from the server, credit, and two links that open in a new tab, as the last element of the page', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
@@ -119,6 +119,20 @@ test('footer: version from the server, credit, and two links that open in a new 
     assert.equal(await page.evaluate(() => document.getElementById('app').lastElementChild.classList.contains('ns-footer')), true,
       'the footer is the last element of the page');
     assert.ok(await page.evaluate(() => window.__hb.requests.some((r) => r.path === '/version')), 'the version was asked from the server');
+    // The brand mark: inline SVG at 20px, first thing in the credit, in the text colour (currentColor) and hidden from readers.
+    const mark = footer.locator('.ns-footer-item svg.ns-mark-svg');
+    assert.equal(await mark.count(), 1);
+    assert.equal(await mark.evaluate((svg) => svg.parentElement.firstChild === svg), true, 'the mark comes before the name');
+    assert.equal(await mark.getAttribute('aria-hidden'), 'true');
+    const box = await mark.boundingBox();
+    assert.equal(Math.round(box.width), 20);
+    assert.equal(Math.round(box.height), 20);
+    assert.equal(await mark.evaluate((svg) => [...svg.querySelectorAll('[stroke], [fill]')].every((node) => {
+      const allowed = ['currentColor', 'none', null];
+      return allowed.includes(node.getAttribute('stroke')) && allowed.includes(node.getAttribute('fill'));
+    })), true, 'the mark carries no colour of its own');
+    assert.equal(await mark.evaluate((svg) => getComputedStyle(svg).color === getComputedStyle(svg.closest('.ns-footer')).color), true,
+      'the mark takes the footer text colour');
     const links = footer.locator('a');
     assert.deepEqual(await links.allTextContents(), ['alex-rodriguez.com', 'Report an issue']);
     assert.deepEqual(await links.evaluateAll((nodes) => nodes.map((a) => [a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')])), [

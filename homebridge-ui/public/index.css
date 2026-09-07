@@ -774,3 +774,17 @@ body.ns-touch .ns-modal .btn-close {
 .ns-footer-item {
   white-space: nowrap;
 }
+
+/* The brand mark beside the plugin name in the footer credit: 20px, in the text colour (currentColor). */
+.ns-mark-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: bottom;
+}
+
+.ns-mark-svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}

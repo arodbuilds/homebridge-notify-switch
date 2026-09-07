@@ -10,9 +10,7 @@
   "schema": {
     "type": "object",
     "required": [
-      "name",
-      "providers",
-      "switches"
+      "name"
     ],
     "properties": {
       "name": {
@@ -163,7 +161,7 @@
             "messagingServiceSid": {
               "title": "Messaging Service SID",
               "type": "string",
-              "pattern": "^(MG[0-9a-fA-F]{32})?$",
+              "pattern": "^MG[0-9a-fA-F]{32}$",
               "description": "Optional. Use a Messaging Service instead of a specific number. Found at Console > Messaging > Services. Starts with MG.",
               "condition": {
                 "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'twilio';"
@@ -270,6 +268,22 @@
               },
               "condition": {
                 "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+              }
+            },
+            "smtpPreset": {
+              "title": "Mail Provider Preset",
+              "type": "string",
+              "enum": [
+                "fastmail",
+                "gmail",
+                "icloud",
+                "outlook",
+                "yahoo",
+                "zoho"
+              ],
+              "description": "The mail provider preset last chosen in the settings UI, kept so the picker shows it again. The plugin reads Host, Port and Security, never this field.",
+              "condition": {
+                "functionBody": "return false;"
               }
             },
             "botToken": {
@@ -503,7 +517,7 @@
                   "sender": {
                     "title": "Sender",
                     "type": "string",
-                    "pattern": "^(\\+[1-9]\\d{6,14})?$",
+                    "pattern": "^\\+[1-9]\\d{6,14}$",
                     "description": "Optional. One of the provider's SMS Senders. Left blank, the only sender is used, or the Messaging Service when one is set.",
                     "condition": {
                       "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'sms';"

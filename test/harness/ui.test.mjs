@@ -24,6 +24,15 @@ function assertNoSecrets(value) {
   }
 }
 
+/** The SMTP login differs from the from address here so an echoed username cannot hide behind the sender. */
+const SMTP_LOGIN = { ...SMTP, username: 'alex.login@example.com' };
+
+/** A Test connection response never echoes the submitted SMTP username (SPEC section 12, item 5). */
+function assertNoUsername(value) {
+  const text = JSON.stringify(value);
+  assert.ok(!text.includes(SMTP_LOGIN.username), `response echoes the username: ${text}`);
+}
+
 test('test-provider twilio: lists one message on the submitted Account SID with Basic auth of apiKeySid:apiKeySecret', async () => {
   const fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ messages: [], page_size: 1 }) }));
   // Values exactly as the form submits them. The secret carries characters that matter in base64 and URLs so
@@ -393,10 +402,13 @@ test('smtp verify: connects with the configured transport options and scrubs the
       close: () => undefined,
     };
   };
-  const ok = await new SmtpProvider(SMTP, fakeLogger().log, { createTransport: factory }).testConnection();
-  assert.deepEqual(ok, { ok: true, message: 'Connected to smtp.fastmail.com:465 and logged in as alex@example.com.' });
+  const ok = await new SmtpProvider(SMTP_LOGIN, fakeLogger().log, { createTransport: factory }).testConnection();
+  assert.deepEqual(ok, { ok: true, message: 'Connected to smtp.fastmail.com:465 and logged in.' });
+  assertNoUsername(ok);
+  assertNoSecrets(ok);
   assert.equal(seen[0].host, 'smtp.fastmail.com');
   assert.equal(seen[0].secure, true);
+  assert.equal(seen[0].auth.user, SMTP_LOGIN.username, 'the login is still used to authenticate');
   assert.equal(seen[0].auth.pass, SMTP.password);
 
   const failing = () => ({
@@ -408,18 +420,31 @@ test('smtp verify: connects with the configured transport options and scrubs the
     },
     sendMail: async () => ({}),
   });
-  const bad = await new SmtpProvider(SMTP, fakeLogger().log, { createTransport: failing }).testConnection();
+  const bad = await new SmtpProvider(SMTP_LOGIN, fakeLogger().log, { createTransport: failing }).testConnection();
   assert.equal(bad.ok, false);
   assert.match(bad.message, /^SMTP EAUTH: Invalid login/);
   assertNoSecrets(bad);
+  assertNoUsername(bad);
+
+  // An error that quotes the login verbatim is scrubbed before it reaches the response.
+  const quoting = () => ({
+    verify: async () => {
+      throw Object.assign(new Error(`535 Authentication failed for user ${SMTP_LOGIN.username}`), { code: 'EAUTH' });
+    },
+    sendMail: async () => ({}),
+  });
+  const scrubbed = await new SmtpProvider(SMTP_LOGIN, fakeLogger().log, { createTransport: quoting }).testConnection();
+  assert.equal(scrubbed.ok, false);
+  assertNoUsername(scrubbed);
 });
 
 test('test-provider smtp: the real nodemailer transport is used and a connection failure is sanitized', async () => {
   // Port 9 on localhost is closed, so nodemailer fails to connect; no network beyond the loopback is touched.
-  const result = await testProvider({ ...SMTP, host: '127.0.0.1', port: 9, security: 'none' });
+  const result = await testProvider({ ...SMTP_LOGIN, host: '127.0.0.1', port: 9, security: 'none' });
   assert.equal(result.ok, false);
   assert.match(result.message, /^SMTP/);
   assertNoSecrets(result);
+  assertNoUsername(result);
 });
 
 test('test-send: validates like startup, sends every action of the chosen switch and reports per recipient', async () => {
