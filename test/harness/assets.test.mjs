@@ -18,8 +18,12 @@ const EXPECTED = [
   'notify-switch-light.svg', 'notify-switch-mark.svg', 'notify-switch-social.png',
 ];
 
-test('assets: all seven brand files are present and the SVGs contain only the drawing', () => {
-  assert.deepEqual(readdirSync(ASSETS).sort(), EXPECTED);
+/** README screenshots (SPEC section 13, item 9). Committed on their own, so they may be absent in a checkout. */
+const SCREENSHOTS = ['switch-config.png'];
+
+test('assets: all seven brand files are present, nothing else but the README screenshots, and the SVGs contain only the drawing', () => {
+  const files = readdirSync(ASSETS).sort();
+  assert.deepEqual(files.filter((name) => !SCREENSHOTS.includes(name)), EXPECTED);
   for (const name of EXPECTED.filter((file) => file.endsWith('.svg'))) {
     const svg = readFileSync(join(ASSETS, name), 'utf8');
     assert.ok(!/<metadata|c2pa/.test(svg), `${name} carries embedded metadata`);

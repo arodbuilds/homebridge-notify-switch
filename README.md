@@ -15,6 +15,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 
 ## Contents
 
+- [Which channel should I use?](#which-channel-should-i-use)
 - [What it does](#what-it-does)
 - [Install](#install)
 - [Five-minute Twilio SMS setup](#five-minute-twilio-sms-setup)
@@ -38,6 +39,12 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 - [Development](#development)
 - [Changelog](#changelog)
 - [About](#about)
+
+## Which channel should I use?
+
+1. **Email** is the easiest and cheapest place to start. You send through a mailbox you already have, and there is nothing to register and nothing to pay for.
+2. **Telegram or ntfy** are the best options for push notifications on a phone. Both are free. Telegram needs each recipient to have a Telegram account; ntfy needs each recipient to install the ntfy app.
+3. **SMS** is worth it only when the recipient will not install anything. In the United States, sending SMS through Twilio requires registration either way, which costs money and takes time to approve.
 
 ## What it does
 
@@ -104,6 +111,12 @@ Trial accounts can only send to phone numbers verified under [Verified Caller ID
 
 Messages from a standard US long code to US phone numbers must come from a number registered for [A2P 10DLC](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc). Unregistered traffic is blocked by the carriers and shows up in Twilio's message logs with error 30034. Register in the Console under **Messaging > Regulatory Compliance** (a brand, then a campaign, then attach your number to the campaign's Messaging Service). A registered number is normally attached to a Messaging Service, so set `messagingServiceSid` on the provider and omit `sender` on the action. Toll-free numbers use a separate, simpler [toll-free verification](https://www.twilio.com/docs/messaging/compliance/toll-free); numbers outside the US are not affected.
 
+Registration notes:
+
+1. **Sole Proprietor 10DLC registration** is the lightest path for a household: a one-time brand and campaign fee plus a small monthly campaign fee, with a low daily message limit. See [Sole Proprietor onboarding](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/onboarding-isv-sole-proprietor).
+2. **Toll-free verification** is an alternative that skips brand and campaign registration. Verification is free, but the form asks for privacy policy and terms URLs. See [Toll-free message verification](https://www.twilio.com/docs/messaging/compliance/toll-free-message-verification).
+3. **Fees.** As of September 2026, Sole Proprietor registration costs about $4 once for the brand and $15 once for campaign vetting, then about $2 a month for the campaign, with a limit of 1,000 message segments a day; carriers add a fraction of a cent to each message on top of Twilio's SMS price. Toll-free verification is free. These figures change, so check [Twilio's US SMS pricing page](https://www.twilio.com/en-us/sms/pricing/us) before you decide; nothing else in this document repeats them.
+
 #### Email through Twilio
 
 The `email` channel sends through Twilio's Emails API, which needs an authenticated sending domain.
@@ -112,7 +125,7 @@ The `email` channel sends through Twilio's Emails API, which needs an authentica
 2. Add the DNS records Twilio shows to your domain and wait for the domain to show as verified.
 3. Set `emailFrom.address` to an address at that domain and `emailFrom.name` to the display name recipients see.
 
-Emails are sent as plain text. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, use an [SMTP provider](#smtp-email-through-your-own-mailbox) instead.
+Emails are sent as plain text. The plugin disables Twilio's open and click tracking on every send, so no tracking pixel is added to the message and links are not rewritten. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, use an [SMTP provider](#smtp-email-through-your-own-mailbox) instead; a household can also simply prefer its own SMTP mailbox if it would rather not send through Twilio at all.
 
 ### SMTP (email through your own mailbox)
 
@@ -258,7 +271,9 @@ In the settings UI a switch card has four parts:
 3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)).
 4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
 
-*[Screenshot placeholder: a switch card showing Recipients, Send by, Message and the preview line.]*
+<img src="assets/switch-config.png" alt="Notify Switch settings, choosing recipients and writing one message" width="100%">
+
+*One message, recipients picked by group, channels derived from what those recipients have.*
 
 Open **Advanced** on the card when you need more:
 

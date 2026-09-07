@@ -9,10 +9,20 @@ import type {
 import { PROVIDER_CHANNELS } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import { parseJson, request, Semaphore, sendEach, shortMessage } from './http.js';
+import { autoSubmittedHeaders } from './mailHeaders.js';
 
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
 const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
 const TWILIO_MESSAGING_API = 'https://messaging.twilio.com/v1';
+
+/**
+ * Twilio inserts a tracking pixel and rewrites links unless told otherwise. Both are switched off on
+ * every send (SPEC section 6.2): the plugin has no analytics, and the pixel got a message flagged as spam.
+ * A fresh object per request, so no payload shares state with another.
+ */
+export function trackingDisabled(): { open_tracking: { enable: false }; click_tracking: { enable: false } } {
+  return { open_tracking: { enable: false }, click_tracking: { enable: false } };
+}
 
 /** Page size of the "Look up numbers" lists (SPEC section 11.2, item 9). */
 export const TWILIO_LOOKUP_PAGE_SIZE = 20;
@@ -303,6 +313,7 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
    * recipients from each other and there is more than one, in `bcc` with the from address in `to`);
    * `operationId` is the id for all of them. The API takes `from`, `to` and `bcc` as `{ address, name }`
    * objects and requires `content.subject` and `content.html`; `content.text` carries the plain body.
+   * Every message carries `Auto-Submitted: auto-generated` and has open and click tracking disabled.
    */
   private async sendEmail(req: SendRequest): Promise<RecipientResult[]> {
     const from = this.config.emailFrom;
@@ -320,6 +331,8 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
         html: plainTextAsHtml(req.body),
         text: req.body,
       },
+      headers: autoSubmittedHeaders(),
+      tracking_settings: trackingDisabled(),
     };
 
     const outcome = await request(TWILIO_EMAIL_API, {

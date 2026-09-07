@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet.
 
+## [1.1.1] - 2026-09-07
+
+Email deliverability and documentation. Nothing changes in the configuration format or the settings UI beyond one corrected line of copy.
+
+### Changed
+
+- **Twilio Email no longer tracks opens or clicks.** Every request to Twilio's Emails API carries `tracking_settings` with `open_tracking` and `click_tracking` disabled. Open tracking inserts a transparent tracking pixel, which conflicts with the plugin's no-analytics principle and got a message scored 5.7 as spam at Fastmail. This is unconditional: there is no configuration field and no UI for it (SPEC sections 6.2 and 14; a toggle to re-enable it is recorded as a future item in section 15).
+- **Both email paths mark messages as automated.** SMTP and Twilio Email sends carry the header `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies), through nodemailer's `headers` option and the Emails API's message-level `headers` object respectively (SPEC sections 6.2 and 6.3).
+- README: a "Which channel should I use?" section after the intro (email to start, Telegram or ntfy for push, SMS only when the recipient will not install anything); Twilio registration notes under the A2P 10DLC guide (Sole Proprietor 10DLC, toll-free verification, fees as of September 2026 with a link to Twilio's pricing page); the Twilio Email guide says that tracking is disabled on every send and that a household can prefer its own SMTP mailbox instead; the switch card screenshot placeholder is replaced by `assets/switch-config.png` with a caption.
+- SPEC.md: sections 6.2, 6.3, 11.3, 13, 14 and 15 record the above; status is current as of 1.1.1.
+- Version 1.1.1.
+
+### Fixed
+
+- Settings UI: the empty state of a group card's email list read "No email addresss yet."; it reads "No email addresses yet." The line was built by appending an `s` to the singular label, so the other lists keep reading "No phone numbers yet.", "No chat IDs yet." and "No topics yet." (SPEC section 11.3).
+- Harness: the Twilio Email request shape now includes the tracking settings and the header, both email providers are checked for `Auto-Submitted: auto-generated`, the group card empty-state lines are checked in the browser, and the assets test tolerates the README screenshot.
+
 ## [1.1.0] - 2026-09-07
 
 A new way to reach people (ntfy), a simpler way to set up a switch, and a security review of the 1.0.1 code. A configuration written by 1.0.x still starts and sends unchanged. The settings UI reads your existing switches into the new editor and writes them back exactly as they were, with the one exception below.

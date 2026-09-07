@@ -1,6 +1,6 @@
 # homebridge-notify-switch v1 Specification
 
-Status: Current as of 1.1.0
+Status: Current as of 1.1.1
 Repository: https://github.com/arodbuilds/homebridge-notify-switch
 Package: homebridge-notify-switch
 Author: arodbuilds
@@ -309,9 +309,11 @@ POST `https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json` wit
 
 POST `https://comms.twilio.com/v1/Emails` with the same Basic auth, JSON body with `from`, `to` (all recipients in one request, so they see each other), and `content.subject`, `content.text` and `content.html`. The API requires `html`, so the plain body is sent both ways: `text` is the rendered body and `html` is the same body HTML-escaped inside a `pre` element so line breaks survive; no HTML authoring is exposed. With the action's `bcc` option and more than one recipient, the recipients go in `bcc` (the same `{ address }` objects as `to`) and the from address in `to`; a single recipient is always in `to`. Success is HTTP 202; `operationId` is returned as `id` for every recipient. One request per action regardless of recipient count.
 
+From 1.1.1 every request also carries, at the top level of the body, `headers` with `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies; not on Twilio's list of headers that may not be overridden) and `tracking_settings` with `open_tracking.enable` and `click_tracking.enable` both `false`. Tracking is disabled unconditionally: open tracking inserts a tracking pixel, which conflicts with the no-analytics rule (section 14, item 9) and got a message scored as spam at Fastmail. There is no configuration field and no UI for it (a toggle to re-enable it is a future item, section 15).
+
 ### 6.3 SMTP
 
-nodemailer transport built from provider config. One message per action with all recipients in `to` by default. With the action's `bcc` option and more than one recipient, the recipients go in `bcc` and the `from` address in `to` (so the envelope is valid and recipients do not see each other); a single recipient is always in `to`. Success is a resolved `sendMail`; the `messageId` is returned as `id`. Rejected addresses reported by the server are mapped to per-recipient failures (a fully rejected envelope keeps the per-recipient errors). The login is scrubbed from every error string. nodemailer `debug` and `logger` options are never enabled and no `tls` override is passed.
+nodemailer transport built from provider config. One message per action with all recipients in `to` by default. With the action's `bcc` option and more than one recipient, the recipients go in `bcc` and the `from` address in `to` (so the envelope is valid and recipients do not see each other); a single recipient is always in `to`. Success is a resolved `sendMail`; the `messageId` is returned as `id`. Rejected addresses reported by the server are mapped to per-recipient failures (a fully rejected envelope keeps the per-recipient errors). The login is scrubbed from every error string. nodemailer `debug` and `logger` options are never enabled and no `tls` override is passed. From 1.1.1 every message carries the header `Auto-Submitted: auto-generated` (RFC 3834) through nodemailer's `headers` option; it is the only header the plugin adds.
 
 ### 6.4 Telegram
 
@@ -495,6 +497,7 @@ Recipient Groups section:
 "A group is a list of people. Switches send to groups, so you enter each person once."
 
 Group `name`: help "Who is in this list. For example: Family, Neighbors, On-call." Placeholder "e.g. Family".
+Group list labels: "Phone numbers (SMS)", "Email addresses", "Telegram chat IDs", "ntfy topics". Empty list lines: "No phone numbers yet.", "No email addresses yet.", "No chat IDs yet.", "No topics yet." (1.1.0 read "No email addresss yet."; fixed in 1.1.1). Add buttons: "Add phone number", "Add email address", "Add chat ID", "Add topic".
 Group `telegram` list: "Use Find people and groups on your Telegram provider. IDs are numbers, not usernames."
 
 Switches section:
@@ -580,7 +583,7 @@ Using it in HomeKit (bottom of page):
 6. CHANGELOG.md maintained per version. GitHub release notes mirror it.
 7. README structure: what it does, install, five-minute Twilio SMS setup, provider setup guides with links, groups, switches, HomeKit usage, template variables, cooldown and master switch, failure sensor, `credentialsFile`, backup, restore and reset, child bridge recommendation, security notes, troubleshooting, getting help, development, changelog link, about.
 8. Package contents: `files` restricts the tarball to `dist`, `homebridge-ui/public`, `homebridge-ui/server.js`, `config.schema.json` and `CHANGELOG.md` (npm adds `README.md`, `LICENSE` and `package.json`); `.npmignore` additionally excludes the source, the tests, `assets/`, `SPEC.md`, `CLAUDE.md` and `CONTRIBUTING.md`. There are no post-install scripts.
-9. Brand assets live in `assets/`: `notify-switch-192.png` and `notify-switch-512.png` (icons), `notify-switch-banner.png` (2560x640, the README header), `notify-switch-social.png` (2560x1280), and `notify-switch-dark.svg`, `notify-switch-light.svg` and `notify-switch-mark.svg` (the mark alone, `currentColor`). The SVGs contain only the drawing, no metadata. The README shows the banner at full width with the alt text "Notify Switch"; the settings UI inlines the mark (section 11.2, item 20). Nothing under `assets/` is published to npm.
+9. Brand assets live in `assets/`: `notify-switch-192.png` and `notify-switch-512.png` (icons), `notify-switch-banner.png` (2560x640, the README header), `notify-switch-social.png` (2560x1280), and `notify-switch-dark.svg`, `notify-switch-light.svg` and `notify-switch-mark.svg` (the mark alone, `currentColor`). The SVGs contain only the drawing, no metadata. The README shows the banner at full width with the alt text "Notify Switch"; the settings UI inlines the mark (section 11.2, item 20). README screenshots live there too: `switch-config.png` (a switch card, shown in the README's Switches section with the alt text "Notify Switch settings, choosing recipients and writing one message"); the harness tolerates its absence, since it is committed on its own. Nothing under `assets/` is published to npm.
 
 ## 14. Verification checklist
 
@@ -592,7 +595,7 @@ Using it in HomeKit (bottom of page):
 6. No post-install scripts.
 7. No TTY or non-standard startup parameters.
 8. Implements the Plugin Settings GUI.
-9. No analytics or tracking.
+9. No analytics or tracking. Twilio's email open and click tracking is disabled on every send (section 6.2), so no tracking pixel is added to a message.
 10. Files written only inside the Homebridge storage directory (only if `credentialsFile` is read; the plugin writes nothing).
 11. Catches and logs its own errors; never throws unhandled.
 
@@ -602,3 +605,4 @@ The questions raised for the review of this document are settled and folded into
 
 1. Telegram `markdown` maps to the legacy `Markdown` parse mode (section 5.2). Should a `markdownv2` value be added for people who write bodies in MarkdownV2, or should `markdown` switch to it and the escaping burden move to the user?
 2. Microsoft is retiring password sign-in for third-party apps on personal Outlook.com accounts (README, SMTP section). Should the Outlook.com preset stay, with its warning, or be removed once Microsoft completes the change?
+3. Not implemented in 1.1.1: an Advanced toggle on the Twilio provider card that would let a user re-enable Twilio open and click tracking (section 6.2 disables both on every send). It would add a configuration field on the Twilio provider and a UI string, so it belongs in a minor release, not a patch.
