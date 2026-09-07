@@ -521,7 +521,7 @@ Group chat IDs are negative. If a group was upgraded to a supergroup, its ID cha
 
 ## Getting help
 
-If you are stuck, open an [issue](https://github.com/arodbuilds/homebridge-notify-switch/issues) and attach:
+If you are stuck, open a [bug report](https://github.com/arodbuilds/homebridge-notify-switch/issues/new?template=bug_report.yml). The form asks for your versions, the area of the plugin, what happened, and the two things below:
 
 1. A **backup without credentials**: in the plugin settings open **Settings > Advanced** and click **Download backup without credentials**. The file holds your whole configuration with every secret replaced by an empty string, so it is safe to share. Remove any phone numbers or addresses you do not want public.
 2. The relevant lines from the Homebridge log: the lines prefixed with the platform name (`[Notify Switch]` unless you renamed it) around the time of the problem, including any that name a field path such as `switches[0].actions[0].body`. Turn on `debug` in the plugin settings first if the failure is about a send; even then the log never contains credentials.

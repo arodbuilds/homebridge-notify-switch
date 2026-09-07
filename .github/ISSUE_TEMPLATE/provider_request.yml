@@ -1,0 +1,38 @@
+name: Provider request
+description: Ask for a new messaging service to be supported.
+title: "[Provider] "
+labels: [provider]
+body:
+  - type: input
+    id: provider-name
+    attributes:
+      label: Provider name
+    validations:
+      required: true
+  - type: input
+    id: api-documentation
+    attributes:
+      label: Link to its API documentation
+      placeholder: "https://"
+    validations:
+      required: true
+  - type: dropdown
+    id: pricing
+    attributes:
+      label: Free or paid
+      options:
+        - Free
+        - Paid
+        - Free tier with paid plans
+  - type: textarea
+    id: why
+    attributes:
+      label: Why you would use it instead of the existing providers
+    validations:
+      required: true
+  - type: checkboxes
+    id: willing-to-test
+    attributes:
+      label: Testing
+      options:
+        - label: I am willing to test

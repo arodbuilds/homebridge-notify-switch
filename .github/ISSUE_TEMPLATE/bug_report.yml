@@ -1,0 +1,87 @@
+name: Bug report
+description: Something in the plugin does not work as described.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Shown in the footer of the plugin settings page.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: homebridge-version
+    attributes:
+      label: Homebridge version
+      placeholder: "1.11.0"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      placeholder: "22.12.0"
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      placeholder: "Raspberry Pi 4, Docker, macOS…"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Twilio SMS
+        - Twilio Email
+        - SMTP email
+        - Telegram
+        - Settings UI
+        - Installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: what-you-expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: log-lines
+    attributes:
+      label: Homebridge log lines
+      description: The plugin never logs credentials, but check before pasting.
+      render: shell
+  - type: textarea
+    id: backup-without-credentials
+    attributes:
+      label: Backup without credentials
+      description: Settings > Advanced > Download backup without credentials, then paste the contents.
+      render: json
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I am on the latest version
+          required: true
+        - label: I searched existing issues
+          required: true
