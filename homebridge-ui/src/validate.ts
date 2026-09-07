@@ -4,11 +4,13 @@ import {
   HAP_NAME_PATTERN, MESSAGING_SERVICE_SID_PATTERN, NTFY_MAX_TAGS, NTFY_TAG_PATTERN, NTFY_TOPIC_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN,
   UUID_PATTERN,
 } from '../../src/patterns.js';
-import { CHANNELS, PROVIDER_CHANNELS } from '../../src/types.js';
+import { CHANNELS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
-import { VALIDATION } from './copy.js';
+import { defaultNeeded, providersForChannel, servesChannel } from '../../src/defaults.js';
+import { DEFAULTS, VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
-import type { UiAction, UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
+import { channelRecipients, enabledChannels, presentChannels, switchProviderId } from './model.js';
+import type { UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
 
 /**
  * Client-side validation mirroring startup validation (SPEC section 10) so the Save button is
@@ -20,6 +22,8 @@ export interface UiIssue {
   path: string;
   label: string;
   message: string;
+  /** A warning is listed in the summary box but never disables Save or marks a field (SPEC section 11.2, item 25). */
+  level?: 'warning';
   /**
    * Other fields this check reads (SPEC section 11.2, item 15): a cross-field issue such as "nobody would
    * receive this action" or a duplicate name belongs to every field it references, and it is shown inline
@@ -46,6 +50,15 @@ class Issues {
   add(path: string, label: string, message: string, related?: string[]): void {
     this.list.push(related && related.length > 0 ? { path, label, message, related } : { path, label, message });
   }
+
+  warn(path: string, label: string, message: string): void {
+    this.list.push({ path, label, message, level: 'warning' });
+  }
+}
+
+/** The issues that block Save: everything but warnings. */
+export function errorsOnly(issues: UiIssue[]): UiIssue[] {
+  return issues.filter((issue) => issue.level !== 'warning');
 }
 
 function providerLabel(p: UiProvider, i: number): string {
@@ -290,67 +303,36 @@ function checkTags(issues: Issues, tags: string[], path: string, label: string):
   }
 }
 
-function checkAction(issues: Issues, config: UiConfig, a: UiAction, path: string, label: string): void {
-  const provider = config.providers.find((p) => p.id.trim() === a.providerId && a.providerId);
-  // Checks that read the provider as well as the channel or sender belong to the Provider dropdown too.
-  const viaProvider = [`${path}.providerId`];
+function checkSwitchProvider(issues: Issues, config: UiConfig, s: UiSwitch, channel: Channel, path: string, label: string): void {
+  const providerId = switchProviderId(s, channel, config);
+  const provider = config.providers.find((p) => p.id.trim() === providerId && providerId);
+  const field = `${path}.providers.${channel}`;
   if (!provider) {
-    issues.add(`${path}.providerId`, label, a.providerId ? `Provider "${a.providerId}" does not exist.` : 'Choose a provider.');
-  } else if (!PROVIDER_CHANNELS[provider.type].includes(a.channel)) {
-    issues.add(`${path}.channel`, label, `Provider "${provider.name.trim() || provider.id}" is ${provider.type}, which cannot send ${a.channel}.`, viaProvider);
-  } else if (provider.type === 'twilio' && a.channel === 'sms') {
-    const senders = provider.smsSenders.map((s) => s.trim()).filter((s) => s.length > 0);
+    issues.add(field, label, providerId ? VALIDATION.missingProvider(providerId) : VALIDATION.noProvider(channel));
+    return;
+  }
+  const name = provider.name.trim() || provider.id;
+  if (!servesChannel(provider, channel)) {
+    if (provider.type === 'twilio' && channel === 'email') {
+      issues.add(field, label, VALIDATION.twilioEmailFrom(name));
+    } else {
+      issues.add(field, label, VALIDATION.wrongProvider(name, provider.type, channel));
+    }
+    return;
+  }
+  if (provider.type === 'twilio' && channel === 'sms') {
+    const senders = provider.smsSenders.map((v) => v.trim()).filter((v) => v.length > 0);
     const service = provider.messagingServiceSid.trim().length > 0;
-    if (a.sender) {
-      if (!senders.includes(a.sender)) {
-        issues.add(`${path}.sender`, label, `Sender ${a.sender} is not one of the provider's SMS senders.`, viaProvider);
+    if (s.sender) {
+      if (!senders.includes(s.sender)) {
+        issues.add(`${path}.sender`, label, `Sender ${s.sender} is not one of the provider's SMS senders.`, [field]);
       }
     } else if (senders.length === 0 && !service) {
-      issues.add(`${path}.sender`, label,
-        `Provider "${provider.name.trim() || provider.id}" needs an SMS sender or a Messaging Service SID to send SMS.`, viaProvider);
+      issues.add(`${path}.sender`, label, `Provider "${name}" needs an SMS sender or a Messaging Service SID to send SMS.`, [field]);
     } else if (senders.length > 1 && !service) {
-      issues.add(`${path}.sender`, label, 'Choose a sender: the provider has more than one SMS sender.', viaProvider);
+      issues.add(`${path}.sender`, label, 'Choose a sender: the provider has more than one SMS sender.', [field]);
     }
-  } else if (provider.type === 'twilio' && a.channel === 'email' && !provider.emailFrom.address.trim()) {
-    issues.add(`${path}.channel`, label,
-      `Provider "${provider.name.trim() || provider.id}" needs an Email From address before it can send email.`, viaProvider);
   }
-
-  // Distinct recipients, the way startup resolves them, so the per-action bound matches (SPEC section 12, item 12).
-  const recipients = new Set<string>();
-  a.groups.forEach((groupId, g) => {
-    const group = config.groups.find((entry) => entry.id.trim() === groupId && groupId);
-    if (!group) {
-      issues.add(`${path}.groups[${g}]`, label, `Group "${groupId}" does not exist.`);
-      return;
-    }
-    for (const value of group[a.channel]) {
-      if (value.trim().length > 0) {
-        recipients.add(value.trim());
-      }
-    }
-  });
-  checkListSize(issues, a.recipients, `${path}.recipients`, label, 'The extra recipients list');
-  a.recipients.forEach((value, r) => {
-    if (!value.trim()) {
-      return;
-    }
-    if (checkAddress(issues, a.channel, value, `${path}.recipients[${r}]`, label, 'Extra recipient')) {
-      recipients.add(value.trim());
-    }
-  });
-  if (recipients.size === 0) {
-    // Recipient coverage belongs to the Groups checkboxes and the extra recipients list alike.
-    const message = `Nobody would receive this ${a.channel} action. Pick a group with ${a.channel} entries or add an extra recipient.`;
-    issues.add(`${path}.groups`, label, message, [`${path}.recipients`]);
-  } else if (recipients.size > MAX_RECIPIENTS_PER_ACTION) {
-    issues.add(`${path}.groups`, label, `This action reaches ${recipients.size} recipients; the limit is ${MAX_RECIPIENTS_PER_ACTION} per action.`,
-      [`${path}.recipients`]);
-  }
-  if (a.channel === 'ntfy') {
-    checkTags(issues, a.tags, `${path}.tags`, label);
-  }
-  checkBody(issues, a.channel, a.body, `${path}.body`, label);
 }
 
 function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, seenIds: Set<string>, seenNames: Map<string, string>): void {
@@ -379,13 +361,80 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   if (!Number.isInteger(s.failureSensorResetSeconds) || s.failureSensorResetSeconds < 0 || s.failureSensorResetSeconds > MAX_SECONDS) {
     issues.add(`${path}.failureSensorResetSeconds`, label, `Failure sensor reset must be a whole number between 0 and ${MAX_SECONDS}.`);
   }
-  if (s.actions.length === 0) {
-    // A new switch has no action field to touch yet; the name is the field the user fills in first.
-    issues.add(`${path}.actions`, label, 'Add at least one action.', [`${path}.name`]);
-  } else if (s.actions.length > MAX_ACTIONS_PER_SWITCH) {
-    issues.add(`${path}.actions`, label, `A switch can have at most ${MAX_ACTIONS_PER_SWITCH} actions.`);
+
+  // Recipients: every ticked group must exist; extra addresses are checked under their channel.
+  for (const id of s.groups) {
+    if (!config.groups.some((g) => g.id.trim() === id && id)) {
+      issues.add(`${path}.groups`, label, VALIDATION.missingGroup(id));
+    }
   }
-  s.actions.forEach((action, k) => checkAction(issues, config, action, `${path}.actions[${k}]`, `${label}, action ${k + 1}`));
+  const what: Record<Channel, string> = { sms: 'Phone number', email: 'Email', telegram: 'Chat ID', ntfy: 'Topic' };
+  for (const channel of CHANNELS) {
+    checkListSize(issues, s.recipients[channel], `${path}.recipients.${channel}`, label, 'The extra recipients list');
+    s.recipients[channel].forEach((value, r) => {
+      if (value.trim()) {
+        checkAddress(issues, channel, value, `${path}.recipients.${channel}[${r}]`, label, what[channel]);
+      }
+    });
+  }
+
+  // Send by: at least one channel, each enabled one reaching somebody (SPEC section 12, item 12 for the bound).
+  const present = presentChannels(config, s);
+  const enabled = enabledChannels(s, config);
+  const recipientLists = [`${path}.recipients.sms`, `${path}.recipients.email`, `${path}.recipients.telegram`, `${path}.recipients.ntfy`];
+  if (present.length === 0) {
+    // A new switch has nothing ticked yet; the name is the field the user fills in first.
+    issues.add(`${path}.groups`, label, VALIDATION.noRecipients, [`${path}.name`, ...recipientLists]);
+  } else if (enabled.length === 0) {
+    issues.add(`${path}.channels`, label, VALIDATION.noChannels, [`${path}.groups`]);
+  }
+  if (enabled.length + s.extraActions.length > MAX_ACTIONS_PER_SWITCH) {
+    issues.add(`${path}.channels`, label, `A switch can have at most ${MAX_ACTIONS_PER_SWITCH} actions.`);
+  }
+  for (const channel of enabled) {
+    const recipients = channelRecipients(config, s, channel);
+    if (recipients.size > MAX_RECIPIENTS_PER_ACTION) {
+      issues.add(`${path}.channels.${channel}`, label, VALIDATION.tooMany(channel, recipients.size, MAX_RECIPIENTS_PER_ACTION),
+        [`${path}.groups`, `${path}.recipients.${channel}`]);
+    }
+    checkSwitchProvider(issues, config, s, channel, path, label);
+  }
+
+  // Message: the shared body against every enabled channel's rules, or each channel's own body.
+  if (s.customize) {
+    for (const channel of enabled) {
+      checkBody(issues, channel, s.bodies[channel], `${path}.bodies.${channel}`, label);
+    }
+  } else if (enabled.length > 0) {
+    const before = issues.list.length;
+    for (const channel of enabled) {
+      checkBody(issues, channel, s.body, `${path}.body`, label);
+      if (issues.list.length > before) {
+        break;
+      }
+    }
+  }
+  if (enabled.includes('ntfy')) {
+    checkTags(issues, s.tags, `${path}.tags`, label);
+  }
+}
+
+/** The providers whose cards have no error, in configuration order: the ones the default provider rules count. */
+export function validProviders(config: UiConfig, issues: UiIssue[]): UiProvider[] {
+  return config.providers.filter((_, i) => !issues.some((issue) => issue.path === `providers[${i}]` || issue.path.startsWith(`providers[${i}].`)));
+}
+
+/**
+ * Platform defaults (SPEC section 5.7): a channel with several validated providers and no default is a warning,
+ * never an error. A provider still being filled in does not count, so the warning appears when its prompt does.
+ */
+function checkDefaults(issues: Issues, config: UiConfig): void {
+  const providers = validProviders(config, issues.list);
+  for (const channel of CHANNELS) {
+    if (providersForChannel(providers, channel).length > 1 && defaultNeeded(channel, providers, config.defaultProviders)) {
+      issues.warn(`defaultProviders.${channel}`, 'Settings', DEFAULTS.warning(channel));
+    }
+  }
 }
 
 export function validate(config: UiConfig): UiIssue[] {
@@ -415,5 +464,6 @@ export function validate(config: UiConfig): UiIssue[] {
   const switchNames = new Map<string, string>();
   config.switches.forEach((s, i) => checkSwitch(issues, config, s, i, switchIds, switchNames));
 
+  checkDefaults(issues, config);
   return issues.list;
 }

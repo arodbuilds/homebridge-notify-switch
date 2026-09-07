@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { addActionLabel, uncoveredChannels, uncoveredChannelWarning } from '../../dist/coverage.js';
+import { uncoveredChannels } from '../../dist/coverage.js';
 import { validateConfig } from '../../dist/validation.js';
 import { fakeLogger, platformConfig, SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
- * Uncovered channel detection (SPEC section 10 warnings, section 11.2 item 8, section 11.3 copy):
- * the pure check the settings UI and startup share, and the startup warning built on it.
+ * Uncovered channel detection (SPEC section 10 warnings): the pure check and the startup warning
+ * built on it. The settings UI no longer shows the warning (its Send by checkboxes make the choice
+ * explicit, SPEC section 11.2, item 8), so this is the path for hand-edited configurations.
  */
 
 const FAMILY = { id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: ['123456789'] };
@@ -53,21 +54,6 @@ test('coverage: groups are listed once each in configuration order, ids are matc
   assert.deepEqual(uncoveredChannels([{ channel: 'sms', groups: ['family'], recipients: [] }], [{ ...FAMILY, email: [], telegram: [] }]), []);
 });
 
-test('coverage: the settings UI copy is the SPEC section 11.3 wording, varied per channel', () => {
-  assert.equal(uncoveredChannelWarning('email'),
-    'This switch sends to a group with email addresses, but it has no email action. Those recipients will not receive anything.');
-  assert.equal(uncoveredChannelWarning('sms'),
-    'This switch sends to a group with phone numbers, but it has no SMS action. Those recipients will not receive anything.');
-  assert.equal(uncoveredChannelWarning('telegram'),
-    'This switch sends to a group with Telegram chat IDs, but it has no Telegram action. Those recipients will not receive anything.');
-  assert.equal(uncoveredChannelWarning('ntfy'),
-    'This switch sends to a group with ntfy topics, but it has no ntfy action. Those recipients will not receive anything.');
-  assert.equal(addActionLabel('email'), 'Add email action');
-  assert.equal(addActionLabel('sms'), 'Add SMS action');
-  assert.equal(addActionLabel('telegram'), 'Add Telegram action');
-  assert.equal(addActionLabel('ntfy'), 'Add ntfy action');
-});
-
 test('coverage: startup logs one warning per switch and channel with the switch name, and the platform still starts', async () => {
   const config = platformConfig({
     providers: [TWILIO, SMTP, TELEGRAM],
@@ -90,6 +76,7 @@ test('coverage: startup logs one warning per switch and channel with the switch 
 
   const covered = platformConfig({
     providers: [TWILIO, SMTP, TELEGRAM],
+    defaultProviders: { email: 'fastmail' },
     groups: [FAMILY],
     actions: [
       { providerId: 'twilio-main', channel: 'sms', groups: ['family'], body: 'hi' },

@@ -91,6 +91,8 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 .ns-span-5 { grid-column: span 5; }
 .ns-span-6 { grid-column: span 6; }
 .ns-span-7 { grid-column: span 7; }
+.ns-span-8 { grid-column: span 8; }
+.ns-span-9 { grid-column: span 9; }
 
 /* A single column on phones: every field takes the full width below 600px. */
 @media (max-width: 599.98px) {
@@ -129,16 +131,23 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   opacity: 1;
 }
 
-/* Outlined secondary buttons keep their outline on hover and focus with a subtle highlight instead of
-   Bootstrap's solid fill (SPEC section 11.2, item 11). A checked segment of the mail provider control
-   stays filled: that is a selection, not a hover. */
+/* Outlined secondary buttons keep their outline on hover and focus with a light highlight instead of
+   Bootstrap's solid fill (SPEC section 11.2, item 11); only a press (active) is a shade darker, so a
+   hovered button never reads as pressed. A checked segment of the mail provider control stays filled:
+   that is a selection, not a hover. */
 .notify-switch-ui .btn-outline-secondary:not(:disabled):hover,
 .notify-switch-ui .btn-outline-secondary:not(:disabled):focus,
-.notify-switch-ui .btn-outline-secondary:not(:disabled):focus-visible,
+.notify-switch-ui .btn-outline-secondary:not(:disabled):focus-visible {
+  color: var(--bs-btn-color, inherit);
+  background-color: rgba(128, 128, 128, 0.08);
+  border-color: var(--bs-border-color, #6c757d);
+  box-shadow: none;
+}
+
 .notify-switch-ui .btn-outline-secondary:not(:disabled):active,
 .notify-switch-ui .btn-outline-secondary:not(:disabled).active {
   color: var(--bs-btn-color, inherit);
-  background-color: rgba(128, 128, 128, 0.15);
+  background-color: rgba(128, 128, 128, 0.2);
   border-color: var(--bs-border-color, #6c757d);
   box-shadow: none;
 }
@@ -270,32 +279,46 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   display: block;
 }
 
-.action-card {
-  border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
-  border-radius: 0.375rem;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+/* The switch editor (SPEC section 11.2, item 8). */
+.ns-extra-recipients {
+  row-gap: 0.5rem;
 }
 
-/* Uncovered channel warning on a switch card (SPEC section 11.2, item 8). Not a validation error. */
-.coverage-warnings:empty {
-  display: none;
-}
-
-.coverage-warning {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.coverage-warning-text {
-  flex: 1 1 16rem;
+.ns-extra-channel {
   min-width: 0;
 }
 
-.action-header {
+.ns-send-by-rows:empty {
+  display: none;
+}
+
+.ns-send-by .form-check[data-path] {
+  margin-bottom: 0.25rem;
+}
+
+.ns-send-preview {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
+}
+
+.ns-channel-message {
+  border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
+  border-radius: 0.375rem;
+  padding: 0.75rem 0.75rem 0;
   margin-bottom: 0.75rem;
+}
+
+/* The default provider prompt on a provider card (SPEC section 11.2, item 25). */
+.ns-default-prompts:empty {
+  display: none;
+}
+
+.ns-default-prompt {
+  margin-bottom: 1rem;
+}
+
+.ns-default-providers {
+  row-gap: 0;
 }
 
 .sms-preview {
@@ -357,12 +380,30 @@ mark.sms-bad {
   vertical-align: baseline;
 }
 
-/* Each issue list entry is a link to its field (SPEC section 11.2, item 15); it wraps like the text it replaces. */
-.ns-issue-link {
+/* The summary box list: left-aligned entries with the bullet beside the first line of the text, whatever
+   the alert's own alignment. Each entry is a button that links to its field (SPEC section 11.2, item 15)
+   and wraps like the text it replaces. A button is always an inline block, whose baseline is its last
+   line, which would put the bullet at the bottom of a wrapped entry; aligning it to the top puts the
+   bullet on the first line. */
+.notify-switch-ui .ns-issue-list {
+  text-align: left;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+
+.notify-switch-ui .ns-issue-list li {
+  text-align: left;
+  margin-bottom: 0.15rem;
+}
+
+.notify-switch-ui .ns-issue-link {
   white-space: normal;
   text-align: left;
   color: inherit;
   font-size: inherit;
+  line-height: inherit;
+  vertical-align: top;
+  border: 0;
 }
 
 .ns-issue-link:hover,
@@ -373,10 +414,6 @@ mark.sms-bad {
 .ns-link-button:hover,
 .ns-link-button:focus {
   text-decoration: underline;
-}
-
-.ns-add-action {
-  margin-bottom: 0.75rem;
 }
 
 /* The chevron on the Show variables / Hide variables toggle (SPEC section 11.2, item 17). */

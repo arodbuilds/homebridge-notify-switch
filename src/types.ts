@@ -143,6 +143,12 @@ export interface NotifySwitchConfig {
   defaultCountry: string;
   masterSwitch: MasterSwitchConfig;
   debug: boolean;
+  /**
+   * Platform defaults per channel (SPEC section 5.7): the provider switches use on a channel unless an action
+   * names another. Only channels with more than one provider carry an entry. The runtime never reads it; the
+   * settings UI derives each action's `providerId` from it and startup validation checks it.
+   */
+  defaultProviders: Partial<Record<Channel, string>>;
   providers: ProviderConfig[];
   groups: GroupConfig[];
   switches: SwitchConfig[];

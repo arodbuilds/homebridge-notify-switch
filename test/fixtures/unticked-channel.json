@@ -1,0 +1,72 @@
+{
+  "platform": "NotifySwitch",
+  "name": "Notify Switch",
+  "configVersion": 1,
+  "defaultCountry": "US",
+  "masterSwitch": {
+    "enabled": true,
+    "name": "Notifications Enabled"
+  },
+  "debug": false,
+  "providers": [
+    {
+      "id": "twilio-main",
+      "type": "twilio",
+      "name": "Twilio",
+      "accountSid": "AC00000000000000000000000000000000",
+      "apiKeySid": "SK00000000000000000000000000000000",
+      "apiKeySecret": "secret-api-key-value",
+      "smsSenders": [
+        "+16785550100"
+      ]
+    },
+    {
+      "id": "telegram-home",
+      "type": "telegram",
+      "name": "Telegram",
+      "botToken": "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "parseMode": "none"
+    }
+  ],
+  "groups": [
+    {
+      "id": "family",
+      "name": "Family",
+      "sms": [
+        "+16785550101",
+        "+16785550102"
+      ],
+      "email": [
+        "a@example.com"
+      ],
+      "telegram": [
+        "123456789"
+      ],
+      "ntfy": [
+        "home-alerts"
+      ]
+    }
+  ],
+  "switches": [
+    {
+      "id": "6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b",
+      "name": "Door Open",
+      "enabled": true,
+      "cooldownSeconds": 0,
+      "failureMode": "any",
+      "failureSensor": false,
+      "failureSensorResetSeconds": 300,
+      "actions": [
+        {
+          "providerId": "twilio-main",
+          "channel": "sms",
+          "groups": [
+            "family"
+          ],
+          "recipients": [],
+          "body": "Door open."
+        }
+      ]
+    }
+  ]
+}

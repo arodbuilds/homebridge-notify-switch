@@ -24,7 +24,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
   - [Telegram](#telegram)
   - [ntfy](#ntfy)
 - [Recipient groups](#recipient-groups)
-- [Switches and actions](#switches-and-actions)
+- [Switches](#switches)
 - [Using switches in HomeKit automations](#using-switches-in-homekit-automations)
 - [Template variables](#template-variables)
 - [Cooldown and master switch](#cooldown-and-master-switch)
@@ -45,7 +45,7 @@ Notify Switch is built from three things you configure once in the Homebridge UI
 
 1. **Provider**: a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through a mailbox you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. ntfy sends push notifications to the free ntfy app through a topic name you choose.
 2. **Recipient group**: a named list of people, with phone numbers for SMS, email addresses for email, chat IDs for Telegram, and topic names for ntfy. You enter each person once and reuse the group everywhere.
-3. **Switch**: a HomeKit switch with one or more actions. Each action sends one message body through one provider on one channel to one or more groups.
+3. **Switch**: a HomeKit switch that sends one message to the groups you pick, on every channel they have addresses for. In `config.json` each channel is one action: one provider, one channel, the groups, the message.
 
 Every switch is always off in the Home app. When something turns it on, every action fires in parallel, the results are logged, and one second later the switch turns itself off. You only need one provider, one group, and one switch to start.
 
@@ -65,7 +65,7 @@ The plugin does nothing until it is configured, and it never registers accessori
 1. Sign in to the [Twilio Console](https://console.twilio.com) and copy the **Account SID** from **Account Info** on the home page. It starts with `AC`.
 2. Open [API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys) and create an API key. A **Standard** key works; so does a **Restricted** key with read and write access to Messaging. Copy the **SID** (starts with `SK`) and the **Secret**. The secret is shown once; keep it in a password manager. The Auth Token is deliberately not accepted, because an API key can be revoked without rotating your account's master credential.
 3. Open [Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming) and copy a Twilio phone number you own, including the country code, for example `+16785550100`. Or skip this step: once the three credentials are in the form, **Look up numbers** lists your numbers and Messaging Services to pick from. If you send to US numbers, read [A2P 10DLC](#a2p-10dlc-registration-for-us-numbers) below; unregistered US long codes are filtered by the carriers.
-4. In the Homebridge UI open the plugin settings and add a **Twilio** provider with those values, then click **Test connection**. Add a **Recipient group** with the phone numbers to notify (pick the country from the dropdown and type the national number). Add a **Switch**, give it a name such as `Water Leak Alert`, and add an **SMS** action on the Twilio provider to that group with a message body.
+4. In the Homebridge UI open the plugin settings and add a **Twilio** provider with those values, then click **Test connection**. Add a **Recipient group** with the phone numbers to notify (pick the country from the dropdown and type the national number). Add a **Switch**, give it a name such as `Water Leak Alert`, tick the group under **Recipients**, and type the message.
 5. Click **Test send** on the switch to send it for real, then save and restart Homebridge. In the Home app create an automation with a trigger such as a leak sensor detecting water and add the switch with **Turn On** as the action.
 
 ## Provider setup guides
@@ -220,7 +220,7 @@ ntfy serves the `ntfy` channel: free push notifications to the [ntfy app](https:
 
 1. Install the app: [iOS](https://apps.apple.com/us/app/ntfy/id1625396347), [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) (also on [F-Droid](https://f-droid.org/en/packages/io.heckel.ntfy/)), or use the [web app](https://ntfy.sh/app).
 2. In the app, subscribe to a topic name of your choosing, for example `home-alerts-x7q2`. Letters, numbers, dashes and underscores, up to 64 characters.
-3. Add that topic to a recipient group under **ntfy topics**, and give a switch an **ntfy** action.
+3. Add that topic to a recipient group under **ntfy topics**; a switch that sends to that group gets an **ntfy** checkbox under **Send by**.
 
 **Anyone who knows the topic name can read it, and can publish to it.** Topics on ntfy.sh are public: there is no password on a topic, only its name. Pick something unguessable (a word plus random characters), or reserve the topic with an access token so only you can publish to it.
 
@@ -231,13 +231,13 @@ ntfy serves the `ntfy` channel: free push notifications to the [ntfy app](https:
 | `token` | The access token when `auth` is `token`. Recommended: in the ntfy app or web app, sign in, open **Account > Access tokens**, create one, and reserve your topic under **Reserved topics** so nobody else can publish to it. A token can be revoked on its own. |
 | `username`, `password` | Your ntfy account login when `auth` is `basic`. A token is safer. |
 
-Each ntfy action has a **Title** (defaults to the switch name), a **Priority** (`min`, `low`, `default`, `high`, `urgent`; `high` and `urgent` can break through Do Not Disturb, `min` shows no notification) and up to eight **Tags** such as `warning` or `house`, which the app shows as emoji when they are [emoji short codes](https://docs.ntfy.sh/emojis/). Bodies are plain text up to 4,096 characters; ntfy.sh limits a message to 4,096 bytes, so a body full of emoji may be a little shorter.
+On the ntfy channel the switch's **Subject** is the notification title (defaults to the switch name), and under the switch's **Advanced** disclosure there is a **Priority** (`min`, `low`, `default`, `high`, `urgent`; `high` and `urgent` can break through Do Not Disturb, `min` shows no notification) and up to eight **Tags** such as `warning` or `house`, which the app shows as emoji when they are [emoji short codes](https://docs.ntfy.sh/emojis/). Bodies are plain text up to 4,096 characters; ntfy.sh limits a message to 4,096 bytes, so a body full of emoji may be a little shorter.
 
 **Test connection** checks the server's health and, when credentials are set, that the server accepts them; it publishes nothing. **Test send** on a switch publishes for real.
 
 ## Recipient groups
 
-A group is a named list of people. Each group has four lists: `sms` (phone numbers), `email` (email addresses), `telegram` (chat IDs), and `ntfy` (topic names). A switch's action sends to whichever list matches its channel, so one `Family` group can serve an SMS action and an email action at the same time.
+A group is a named list of people. Each group has four lists: `sms` (phone numbers), `email` (email addresses), `telegram` (chat IDs), and `ntfy` (topic names). A switch sends to whichever lists match the channels it has ticked, so one `Family` group can receive the same message by SMS and by email at the same time.
 
 - Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
 - Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them. ntfy topics are the names subscribed in the ntfy app (letters, numbers, dashes and underscores); see the [topic-name warning](#ntfy).
@@ -247,9 +247,28 @@ Provider and group names may hold letters, numbers, spaces, and punctuation, up 
 
 Group and provider IDs are short slugs generated from the name (`family`, `twilio`, with a numeric suffix such as `twilio-2` when the name is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
 
-## Switches and actions
+## Switches
 
-Each switch appears in the Home app under its `name` and holds one or more actions.
+Each switch appears in the Home app under its `name`. Turning it on sends your message to everyone in the groups you pick, on every channel they have, then the switch turns itself off.
+
+In the settings UI a switch card has four parts:
+
+1. **Recipients.** Tick the groups to send to. Each group shows what it holds per channel, for example `Family: 3 SMS, 1 email, 2 ntfy`. Under **Extra recipients** you can add individual phone numbers, email addresses, Telegram chat IDs or ntfy topics for people outside the groups.
+2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default, each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on, or that no provider can send, is not listed.
+3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)).
+4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
+
+*[Screenshot placeholder: a switch card showing Recipients, Send by, Message and the preview line.]*
+
+Open **Advanced** on the card when you need more:
+
+- **Customize message per channel** gives each ticked channel its own message (and, for email and ntfy, its own subject or title), each starting as a copy of the shared message.
+- A **provider** dropdown appears for a channel that more than one provider can send on. It defaults to `Platform default (…)`, the provider chosen under **Settings**; pick another to send this switch's messages through it instead.
+- **Hide recipients from each other (BCC)** for email, the **Sender** number for SMS when the Twilio provider has several, and the ntfy **Priority** and **Tags**.
+
+When more than one provider can send on a channel, the settings UI asks which one switches should use unless told otherwise, the first time the second provider is set up, and keeps the answer under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
+
+The other switch fields:
 
 | Field | Meaning |
 | --- | --- |
@@ -258,9 +277,10 @@ Each switch appears in the Home app under its `name` and holds one or more actio
 | `cooldownSeconds` | Minimum seconds between sends, 0 to 86400. `0` disables the cooldown. See [Cooldown and master switch](#cooldown-and-master-switch). |
 | `failureMode` | `any` (default), `all`, or `off`. See [Failure sensor](#failure-sensor). |
 | `failureSensor`, `failureSensorResetSeconds` | Adds a contact sensor that trips on failure; reset timeout defaults to 300 seconds. |
-| `actions` | At least one action. |
 
-Each action has:
+### Actions in config.json
+
+In `config.json` a switch holds an `actions` array, one action per channel it sends on. The settings UI writes that array from the card above and reads it back; you only need to know its shape if you edit the file by hand or use the schema form. Each action has:
 
 | Field | Meaning |
 | --- | --- |
@@ -273,11 +293,17 @@ Each action has:
 | `bcc` | Email only, default `false`. **Hide recipients from each other (BCC)**: recipients go in `Bcc` and the from address in `To`. A message to a single recipient always uses `To`. |
 | `priority` | ntfy only. `min`, `low`, `default` (the default), `high`, or `urgent`. |
 | `tags` | ntfy only. Up to 8 tags of letters, numbers, dashes, underscores and plus signs; emoji short codes show as icons in the app. |
-| `body` | The message. SMS: 1 to 160 characters from the GSM-7 set, so no emoji; the settings UI shows a live character and segment counter and highlights characters SMS cannot carry. Email: up to 10,000 characters of plain text. Telegram: up to 4,096 characters. ntfy: up to 4,096 characters. |
+| `body` | The message. SMS: 1 to 160 characters from the GSM-7 set, so no emoji. Email: up to 10,000 characters of plain text. Telegram: up to 4,096 characters. ntfy: up to 4,096 characters. |
 
 Recipients from every group plus `recipients` are merged and deduplicated before sending; an action may reach at most 100 recipients. Each SMS, Telegram and ntfy message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
 
-The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends its actions to the real recipients and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
+A hand-written configuration with several actions on the same channel still works: the settings UI edits the first one per channel and keeps the others as they are. A switch that sends to a group with addresses on a channel it has no action for is reported once at startup as a warning, because those people receive nothing; in the settings UI that channel simply shows unticked under **Send by**.
+
+### Platform defaults
+
+`defaultProviders` on the platform block maps a channel to the id of the provider switches use on it when more than one provider can send on that channel, for example `"defaultProviders": { "email": "fastmail" }`. Only channels with several providers carry an entry; with one provider it is the default on its own. A channel with several providers and no entry falls back to the first in `config.json` order with a startup warning; an entry naming a provider that does not exist, or one that cannot send on that channel, is a startup error.
+
+The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends to the real recipients on every ticked channel and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
 
 The plugin checks the whole configuration when Homebridge starts and logs every problem with its field path, for example:
 
@@ -356,7 +382,7 @@ The settings UI and the schema form write this structure. Every field is documen
           "channel": "email",
           "groups": ["family"],
           "subject": "Water leak: kitchen",
-          "body": "Water detected under the kitchen sink at {{time}} on {{date}}."
+          "body": "Water detected under the kitchen sink at {{time}}."
         },
         {
           "providerId": "telegram-home",

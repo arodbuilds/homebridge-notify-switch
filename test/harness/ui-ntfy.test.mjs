@@ -7,8 +7,8 @@ import { NTFY, TWILIO } from './helpers.mjs';
 /**
  * The ntfy provider in the built settings UI (SPEC section 11.2, items 8, 13 and 24, and section 11.3):
  * the fourth chooser tile and its card copy, the auth mode switching the credential fields, Test
- * connection through the server, the group's topic list, the action's Title, Priority and Tags, the
- * uncovered-channel warning, and the name rule; plus the restore and draft guards from the 1.1.0 review.
+ * connection through the server, the group's topic list, the switch editor's ntfy channel with its
+ * Priority and Tags, and the name rule; plus the restore and draft guards from the 1.1.0 review.
  */
 
 const CONFIG = {
@@ -109,7 +109,7 @@ test('ntfy card: the fourth tile creates the card with its copy, the server defa
   }
 });
 
-test('ntfy topics and actions: the group card has a topic list, an action gets Title, Priority and Tags, and the uncovered warning names ntfy', async (t) => {
+test('ntfy topics and the switch editor: the group card has a topic list, ticking ntfy adds Title, Priority and Tags under Advanced', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
@@ -132,36 +132,39 @@ test('ntfy topics and actions: the group card has a topic list, an action gets T
     await pushed(page, () => window.__hb.updates.at(-1)?.[0].groups[0].ntfy.length === 2);
     assert.deepEqual(await page.evaluate(() => window.__hb.updates.at(-1)[0].groups[0].ntfy), ['home-alerts', 'garage_x7']);
 
-    // The switch targets a group with topics but has no ntfy action: the warning and its one-click fix.
+    // The switch targets a group with topics but does not send on ntfy: Send by lists ntfy unticked, with no warning.
+    // The Switches section redraws shortly after a group changes; wait for the new count.
+    await page.waitForFunction(() => document.querySelector('.ns-send-by')?.textContent.includes('2 topics'));
     const sw = page.locator('.card[data-path="switches[0]"]');
-    const warning = sw.locator('.coverage-warning[data-channel="ntfy"]');
-    assert.equal(await warning.locator('.coverage-warning-text').textContent(),
-      'This switch sends to a group with ntfy topics, but it has no ntfy action. Those recipients will not receive anything.');
-    await warning.getByRole('button', { name: 'Add ntfy action' }).click();
-    const action = page.locator('.card[data-path="switches[0]"] .action-card').nth(1);
-    assert.equal(await action.locator('[data-path="switches[0].actions[1].providerId"] select').inputValue(), 'ntfy-home', 'the ntfy provider is preselected');
-    assert.equal(await action.locator('[data-path="switches[0].actions[1].channel"] select').inputValue(), 'ntfy');
-    assert.deepEqual(await action.locator('[data-path="switches[0].actions[1].channel"] option').allTextContents(), ['ntfy']);
-    assert.equal(await action.locator('[data-path="switches[0].actions[1].groups"] input[type="checkbox"]').isChecked(), true);
-    assert.equal(await page.locator('.card[data-path="switches[0]"] .coverage-warning[data-channel="ntfy"]').count(), 0, 'the warning is gone');
-    // Title, Priority and Tags, with no BCC checkbox.
-    const title = action.locator('[data-path="switches[0].actions[1].subject"]');
-    assert.equal(await title.locator('label').first().textContent(), 'Title');
-    assert.equal(await title.locator('input').getAttribute('placeholder'), 'Defaults to the switch name: Water Leak Alert');
-    assert.equal(await action.locator('.ns-variables-toggle').count(), 2, 'the Variables toggle sits on the title and the message');
-    assert.equal(await action.locator('[data-path="switches[0].actions[1].bcc"]').count(), 0);
-    const priority = action.locator('[data-path="switches[0].actions[1].priority"]');
+    assert.equal(await sw.locator('.coverage-warning').count(), 0);
+    assert.deepEqual(await sw.locator('.ns-send-by .form-check-label').allTextContents(), ['SMS (1 number)', 'ntfy (2 topics)']);
+    const ntfy = sw.locator('[data-path="switches[0].channels.ntfy"] input');
+    assert.equal(await ntfy.isChecked(), false);
+    assert.equal(await sw.locator('[data-path="switches[0].subject"]').isVisible(), false, 'no Subject while neither email nor ntfy sends');
+    await ntfy.check();
+    // Subject appears with its help; Priority and Tags sit under Advanced, with no BCC checkbox.
+    const subject = sw.locator('[data-path="switches[0].subject"]');
+    assert.equal(await subject.isVisible(), true);
+    assert.equal(await subject.locator('label').first().textContent(), 'Subject');
+    assert.equal(await subject.locator('.ns-help').textContent(), 'Used as the email subject and the ntfy title. Defaults to the switch name.');
+    assert.equal(await subject.locator('input').getAttribute('placeholder'), 'Defaults to the switch name: Water Leak Alert');
+    assert.equal(await sw.locator('.ns-variables-toggle:visible').count(), 2, 'the Variables toggle sits on the subject and the message');
+    const advanced = sw.locator('details.ns-advanced[data-advanced="switches[0]"]');
+    await advanced.locator('summary').click();
+    assert.equal(await sw.locator('[data-path="switches[0].bcc"]').isVisible(), false);
+    const priority = sw.locator('[data-path="switches[0].priority"]');
     assert.deepEqual(await priority.locator('option').allTextContents(), ['Min', 'Low', 'Default', 'High', 'Urgent']);
     assert.equal(await priority.locator('select').inputValue(), 'default');
-    const tags = action.locator('[data-path="switches[0].actions[1].tags"]');
+    const tags = sw.locator('[data-path="switches[0].tags"]');
     assert.equal(await tags.locator('input').getAttribute('placeholder'), 'e.g. warning, house');
     await priority.locator('select').selectOption('high');
     await tags.locator('input').fill('warning, house');
-    await action.locator('[data-path="switches[0].actions[1].body"] textarea').fill('Leak at {{time}}');
-    const config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].switches[0].actions[1]?.body === 'Leak at {{time}}');
+    await subject.locator('input').fill('Leak');
+    const config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].switches[0].actions[1]?.subject === 'Leak');
     assert.deepEqual(config.switches[0].actions[1], {
-      providerId: 'ntfy-home', channel: 'ntfy', groups: ['family'], recipients: [], priority: 'high', tags: ['warning', 'house'], body: 'Leak at {{time}}',
-    });
+      providerId: 'ntfy-home', channel: 'ntfy', groups: ['family'], recipients: [], subject: 'Leak', priority: 'high', tags: ['warning', 'house'],
+      body: 'Water detected.',
+    }, 'the ntfy action takes the shared message, the subject as its title, and the only ntfy provider');
     // Bad tags are reported on the Tags field.
     await tags.locator('input').fill('ok, bad!tag');
     await tags.locator('input').blur();
@@ -170,17 +173,21 @@ test('ntfy topics and actions: the group card has a topic list, an action gets T
     await tags.locator('input').fill('a,b,c,d,e,f,g,h,i');
     await tags.locator('input').blur();
     assert.equal(await tags.locator('.invalid-feedback').textContent(), 'Use at most 8 tags.');
-    // Extra recipients on an ntfy action are topics.
-    const extra = action.locator('[data-path="switches[0].actions[1].recipients"]');
+    // Extra recipients on the ntfy channel are topics.
+    const extra = sw.locator('[data-path="switches[0].recipients.ntfy"]');
     await extra.getByRole('button', { name: 'Add topic' }).click();
     assert.equal(await extra.locator('.address-row input').getAttribute('aria-label'), 'topic 1');
-    // Test send is gated like every other channel: the confirmation counts distinct topics.
+    // Test send is gated like every other channel: the confirmation counts distinct recipients across the enabled channels.
     await tags.locator('input').fill('warning');
     await extra.locator('.address-row input').fill('garage_x7');
     await extra.locator('.address-row input').blur();
+    assert.deepEqual(await sw.locator('.ns-send-by .form-check-label').allTextContents(), ['SMS (1 number)', 'ntfy (2 topics)'],
+      'a topic the group already holds is counted once');
+    await extra.locator('.address-row input').fill('porch_q2');
+    await extra.locator('.address-row input').blur();
     await page.waitForFunction(() => !document.querySelector('.card[data-path="switches[0]"] .ns-test-send button').disabled);
     await sw.locator('.ns-test-send').getByRole('button', { name: 'Test send' }).click();
-    assert.equal(await sw.locator('.ns-confirm-question').textContent(), 'Send to 3 recipients now?');
+    assert.equal(await sw.locator('.ns-confirm-question').textContent(), 'Send to 4 recipients now?');
   } finally {
     await browser.close();
   }

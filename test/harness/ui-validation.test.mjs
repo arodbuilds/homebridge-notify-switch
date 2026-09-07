@@ -15,6 +15,7 @@ const CONFIG = {
   platform: 'NotifySwitch',
   name: 'Notify Switch',
   defaultCountry: 'US',
+  defaultProviders: { email: 'fastmail' },
   providers: [TWILIO, SMTP],
   groups: [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: [] }],
   switches: [{
@@ -86,7 +87,7 @@ test('per-field validation: an error appears only after blur, never while typing
     await page.getByRole('button', { name: 'Add switch' }).click();
     const sw = page.locator('.card[data-path="switches[1]"]');
     assert.equal(await sw.locator('.is-invalid').count(), 0);
-    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), '');
+    assert.equal(await sw.locator('[data-path="switches[1].groups"] > .invalid-feedback').textContent(), '');
     const name = sw.locator('[data-path="switches[1].name"] input');
     await name.fill('Water Leak Alert');
     await name.blur();
@@ -97,8 +98,8 @@ test('per-field validation: an error appears only after blur, never while typing
     await other.locator('input').focus();
     await other.locator('input').blur();
     assert.equal(await other.locator('.invalid-feedback').textContent(), '', 'the first switch owns the name; the duplicate is reported on the second');
-    // "Add at least one action" belongs to the name field as well, so it shows once the name was touched.
-    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), 'Add at least one action.');
+    // "Pick at least one group" belongs to the name field as well, so it shows once the name was touched.
+    assert.equal(await sw.locator('[data-path="switches[1].groups"] > .invalid-feedback').textContent(), 'Pick at least one group, or add an extra recipient.');
   } finally {
     await browser.close();
   }
@@ -218,7 +219,7 @@ test('test send gating and remove confirmation', async (t) => {
     assert.equal(await card.locator('.ns-test-send-hint').isVisible(), false);
 
     // A validation error on the switch disables Test send with a hint beside it.
-    const body = card.locator('[data-path="switches[0].actions[0].body"] textarea');
+    const body = card.locator('[data-path="switches[0].body"] textarea');
     await body.fill('');
     assert.equal(await testSend.isEnabled(), false);
     assert.equal(await card.locator('.ns-test-send-hint').textContent(), 'Fix the errors above first');
@@ -256,10 +257,6 @@ test('test send gating and remove confirmation', async (t) => {
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     assert.equal(await footer.getByRole('button', { name: 'Remove switch' }).count(), 1, 'so does Cancel');
     assert.equal(await page.locator('.card[data-path="switches[0]"]').count(), 1, 'nothing was removed');
-    // List-entry Remove buttons stay single-click.
-    assert.equal(await page.locator('.action-card').count(), 1);
-    await page.getByRole('button', { name: 'Remove action' }).click();
-    assert.equal(await page.locator('.action-card').count(), 0);
     // Confirming removes the card. Group and provider cards ask the same way.
     await footer.getByRole('button', { name: 'Remove switch' }).click();
     await confirm.getByRole('button', { name: 'Remove', exact: true }).click();

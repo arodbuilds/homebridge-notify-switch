@@ -11,7 +11,9 @@ import { SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
  *   - no horizontal page scroll;
  *   - the two-column grids stacking to one column below 600px, and phone rows stacking to the country
  *     on its own line with the number and Remove together on the next (SPEC section 11.2, item 16);
- *   - the uncovered channel warning with its copy and "Add … action" button, with Save left enabled;
+ *   - the switch editor (SPEC section 11.2, item 8): a group with Telegram chats the switch does not send on
+ *     shows Telegram unticked under Send by, and ticking it adds the action with Save left enabled;
+ *   - the summary box list: left-aligned entries with the bullet beside the text;
  *   - the card footers (SPEC section 11.2, item 11): the red text button on the left, one outlined
  *     primary on the right, never two primary buttons next to each other, and the primary on top when
  *     the footer wraps;
@@ -20,12 +22,13 @@ import { SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
  *     configuration and on an empty one (SPEC section 11.2, item 18).
  */
 
-/** A valid configuration whose only switch leaves the family group's Telegram chat uncovered. */
+/** A valid configuration whose only switch does not send on the family group's Telegram chat. */
 const CONFIG = {
   platform: 'NotifySwitch',
   name: 'Notify Switch',
   defaultCountry: 'US',
   masterSwitch: { enabled: true, name: 'Notifications Enabled' },
+  defaultProviders: { email: 'fastmail' },
   providers: [TWILIO, { ...SMTP, credentialsFile: 'smtp.json' }, TELEGRAM],
   groups: [{ id: 'family', name: 'Family', sms: ['+16785550101', '+16785550102'], email: ['a@example.com'], telegram: ['123456789'] }],
   switches: [{
@@ -188,6 +191,9 @@ const SECONDARY_TEXT = [
   '.card[data-path^="providers"] .ns-help',
   '.card[data-path^="groups"] .ns-help',
   '.card[data-path^="switches"] .ns-help',
+  '.card[data-path^="switches"] .ns-send-preview',
+  '.card[data-path^="switches"] .ns-send-by .form-check-label',
+  '.card[data-path^="switches"] details.ns-advanced > summary',
   '.card[data-path^="providers"] details.ns-advanced > summary',
   '.card[data-path^="providers"] .ns-qr-caption',
   '.card[data-path^="switches"] .ns-help-toggle',
@@ -273,30 +279,25 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
     }
     await page.setViewportSize({ width: 900, height: 900 });
 
-    // Uncovered channel warning (SPEC section 11.3): the family group has a Telegram chat but the switch has no Telegram action.
-    const warning = page.locator('.coverage-warning');
-    assert.equal(await warning.count(), 1);
-    assert.equal(await warning.locator('.coverage-warning-text').textContent(),
-      'This switch sends to a group with Telegram chat IDs, but it has no Telegram action. Those recipients will not receive anything.');
-    const addButton = warning.getByRole('button', { name: 'Add Telegram action' });
-    assert.equal(await addButton.count(), 1);
-    assert.equal(await page.locator('.issues').isHidden(), true, 'a coverage warning is not a validation issue');
+    // Send by (SPEC section 11.2, item 8): the family group has a Telegram chat the switch does not send on, so
+    // Telegram is listed unticked. Ticking it adds the action; no warning and no "Add action" button exist any more.
+    assert.equal(await page.locator('.coverage-warning').count(), 0);
+    assert.equal(await page.getByRole('button', { name: /^Add .* action$/ }).count(), 0);
+    const sendBy = page.locator('.ns-send-by');
+    assert.deepEqual(await sendBy.locator('.form-check-label').allTextContents(), ['SMS (3 numbers)', 'Email (1 address)', 'Telegram (1 chat)']);
+    const telegram = sendBy.locator('[data-path="switches[0].channels.telegram"] input');
+    assert.equal(await telegram.isChecked(), false);
+    assert.equal(await page.locator('.issues').isHidden(), true, 'an unticked channel is not a validation issue');
     assert.deepEqual(await page.evaluate(() => window.__hb.save.at(-1)), true, 'Save stays enabled');
-
-    // The button appends a Telegram action on the first provider that serves Telegram, with the same group selected.
-    await addButton.click();
-    assert.equal(await page.locator('.action-card').count(), 3);
-    const added = page.locator('.action-card').nth(2);
-    assert.equal(await added.locator('select').nth(0).inputValue(), 'telegram-home');
-    assert.equal(await added.locator('select').nth(1).inputValue(), 'telegram');
-    assert.deepEqual(await added.locator('select').nth(1).locator('option').allTextContents(), ['Telegram'], 'only the channels the provider serves');
-    assert.equal(await added.locator('input[type="checkbox"]').isChecked(), true, 'the family group is selected');
-    assert.equal(await page.locator('.coverage-warning').count(), 0, 'the warning clears once the channel is covered');
+    await telegram.check();
+    assert.equal(await page.locator('.ns-send-preview').textContent(),
+      'Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, Telegram via Telegram to 1 chat.');
     // Config pushes are debounced; wait for the one that carries the new action.
     await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].switches[0].actions.length === 3);
     const pushed = await page.evaluate(() => window.__hb.updates.at(-1)[0].switches[0].actions[2]);
-    assert.deepEqual(pushed, { providerId: 'telegram-home', channel: 'telegram', groups: ['family'], recipients: [], body: '' });
-    assert.deepEqual(await page.evaluate(() => window.__hb.save.at(-1)), false, 'the empty message is a validation issue until filled in');
+    assert.deepEqual(pushed, { providerId: 'telegram-home', channel: 'telegram', groups: ['family'], recipients: [], body: 'Water detected at {{time}}.' },
+      'the shared message and the platform default provider fill the new action');
+    assert.deepEqual(await page.evaluate(() => window.__hb.save.at(-1)), true);
 
     // Card footers (SPEC section 11.2, item 11): red text button on the left, one outlined primary on the right.
     let footers = await footerButtons(page);
@@ -310,15 +311,6 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
       assert.equal(footer.wrapped, false, 'footers fit on one line at 900px');
     }
     assert.deepEqual(footers.map((footer) => footer.primary), [['Test connection'], ['Test connection'], ['Test connection'], [], ['Test send']]);
-    // "Add action" is an outlined secondary button, like Add phone number, directly under the actions list, left aligned, not in the footer.
-    const addAction = page.getByRole('button', { name: 'Add action' });
-    assert.match(await addAction.getAttribute('class'), /\bbtn-outline-secondary\b/);
-    assert.equal(await addAction.evaluate((node) => node.className), await page.getByRole('button', { name: 'Add phone number' }).first()
-      .evaluate((node) => node.className), 'the same classes as Add phone number');
-    const addActionBox = await addAction.boundingBox();
-    const actionsBox = await page.locator('.actions').boundingBox();
-    assert.ok(addActionBox.y >= actionsBox.y + actionsBox.height - 1, 'Add action sits under the actions list');
-    assert.ok(Math.abs(addActionBox.x - actionsBox.x) < 2, 'Add action is left aligned with the actions list');
 
     // Test send confirmation: the button is replaced in place by the question, a primary Send and a text Cancel.
     await page.getByRole('button', { name: 'Test send' }).click();
@@ -353,12 +345,45 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
     assert.ok(redButtons.every((label) => /^(Remove|Reset plugin to fresh install)/.test(label)),
       `only Remove and Reset buttons are red: ${redButtons.join(', ')}`);
 
-    // With validation issues showing, the sticky issues box is inside the viewport too.
+    // With validation issues showing, the sticky issues box is inside the viewport too, and its entries are
+    // left-aligned with the bullet beside the text (SPEC section 11.2, item 15).
+    await page.locator('[data-path="switches[0].bodies.sms"] textarea').fill('');
+    await page.locator('[data-path="switches[0].name"] input').fill('Bad-Name!');
+    await page.locator('[data-path="switches[0].name"] input').blur();
     await page.setViewportSize({ width: 360, height: 700 });
     assert.equal(await page.locator('.issues').isVisible(), true);
     const withIssues = await audit(page);
     assert.deepEqual(withIssues.offenders, []);
     assert.ok(withIssues.scrollWidth <= 360);
+    const entries = await page.locator('.issues .ns-issue-list li').evaluateAll((nodes) => nodes.map((li) => {
+      const link = li.querySelector('.ns-issue-link');
+      const liRect = li.getBoundingClientRect();
+      const linkRect = link.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(link);
+      const lines = range.getClientRects();
+      const firstLine = lines[0];
+      // The bullet is drawn on the baseline of the item's first line box. A zero-size inline probe at the start
+      // of the item sits on that same baseline, so its position tells where the bullet is.
+      const probe = document.createElement('span');
+      probe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+      li.insertBefore(probe, li.firstChild);
+      const bulletLine = probe.getBoundingClientRect().top;
+      probe.remove();
+      return {
+        textAlign: getComputedStyle(li).textAlign, indent: Math.round(linkRect.left - liRect.left), lines: lines.length,
+        bulletOnFirstLine: bulletLine >= firstLine.top - 1 && bulletLine <= firstLine.bottom + 1,
+        bulletLine: Math.round(bulletLine - liRect.top), firstLine: [Math.round(firstLine.top - liRect.top), Math.round(firstLine.bottom - liRect.top)],
+      };
+    }));
+    assert.ok(entries.length >= 2, `entries to check (${entries.length})`);
+    assert.ok(entries.some((entry) => entry.lines > 1), 'at least one entry wraps at 360px, so the bullet placement matters');
+    for (const entry of entries) {
+      assert.equal(entry.textAlign, 'left', 'entries are left-aligned');
+      assert.equal(entry.indent, 0, 'the text starts at the list item, right after the bullet');
+      assert.equal(entry.bulletOnFirstLine, true,
+        `the bullet sits beside the first line of the text (bullet at ${entry.bulletLine}px, first line ${entry.firstLine.join('..')}px)`);
+    }
   } finally {
     await browser.close();
   }
@@ -416,7 +441,15 @@ test('settings UI theme: placeholders are italic and lighter than typed text, an
       assert.notEqual(hovered.background, 'rgb(108, 117, 125)', 'no solid secondary fill');
       assert.notEqual(hovered.background, 'rgb(156, 39, 176)', 'no solid primary fill');
       const alpha = parseColor(hovered.background).alpha;
-      assert.ok(alpha > 0 && alpha < 0.5, `a subtle highlight (${hovered.background})`);
+      assert.ok(alpha > 0 && alpha <= 0.1, `a light highlight that does not read as pressed (${hovered.background})`);
+      // A press is a shade darker than a hover, so the two states read differently.
+      const pressed = await add.evaluate((node) => {
+        node.classList.add('active');
+        const background = getComputedStyle(node).backgroundColor;
+        node.classList.remove('active');
+        return background;
+      });
+      assert.ok(parseColor(pressed).alpha > alpha, `pressed (${pressed}) is darker than hovered (${hovered.background})`);
       await add.focus();
       const focused = await add.evaluate((node) => ({ background: getComputedStyle(node).backgroundColor, color: getComputedStyle(node).color }));
       assert.equal(focused.color, before.color);

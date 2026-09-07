@@ -1,23 +1,21 @@
-import { addActionLabel, uncoveredChannels, uncoveredChannelWarning } from '../../../src/coverage.js';
 import type { Channel, NtfyPriority, RecipientResult } from '../../../src/types.js';
-import { CHANNELS, PROVIDER_CHANNELS } from '../../../src/types.js';
+import { CHANNELS, SUBJECT_CHANNELS } from '../../../src/types.js';
+import { providersForChannel, resolveDefaultProvider } from '../../../src/defaults.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { helpToggle, variablesToggle } from '../card.js';
-import { NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { CHANNEL_TITLE, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
-  addButton, button, cardFooter, checkboxField, clear, dangerLinkButton, el, inlineConfirm, linkButton, numberField, outlineButton, paragraph,
-  selectField, statusBox, textField, textareaField,
+  addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
+  statusBox, textField, textareaField,
 } from '../dom.js';
-import { exportConfig, newAction, newSwitch } from '../model.js';
-import type { UiAction, UiProvider, UiSwitch } from '../model.js';
+import { channelRecipients, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId } from '../model.js';
+import type { UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
 import type { UiIssue } from '../validate.js';
 import { groupTitle } from './groups.js';
 import { providerTitle } from './providers.js';
-
-const CHANNEL_LABELS: Record<Channel, string> = { sms: 'SMS', email: 'Email', telegram: 'Telegram', ntfy: 'ntfy' };
 
 /** The Tags field holds a comma separated list; the model keeps the tags as an array. */
 function parseTags(text: string): string[] {
@@ -28,38 +26,14 @@ function switchTitle(s: UiSwitch): string {
   return s.name.trim() || 'New switch';
 }
 
-function providerFor(app: App, a: UiAction): UiProvider | undefined {
-  return app.config.providers.find((p) => p.id.trim() === a.providerId && a.providerId);
+function providerById(app: App, id: string): UiProvider | undefined {
+  return app.config.providers.find((p) => p.id.trim() === id && id);
 }
 
-/**
- * Uncovered channel warnings for one switch (SPEC section 11.2, item 8, and section 11.3): one line
- * per channel that a targeted group has addresses for but no action sends on, each with a button that
- * appends the missing action. A warning, not a validation error: it never touches the Save button.
- * `refresh()` recomputes it after the groups or actions change without re-rendering the card.
- */
-function coverageWarnings(app: App, s: UiSwitch, rerenderSwitch: () => void): { el: HTMLElement; refresh(): void } {
-  const box = el('div', { class: 'coverage-warnings', role: 'status' });
-  const refresh = (): void => {
-    clear(box);
-    for (const uncovered of uncoveredChannels(s.actions, app.config.groups)) {
-      const add = button(addActionLabel(uncovered.channel), () => {
-        // The first provider that serves the channel, and the targeted groups that hold addresses on it.
-        const provider = app.config.providers.find((p) => p.id.trim() && PROVIDER_CHANNELS[p.type].includes(uncovered.channel));
-        const action = newAction(provider?.id.trim() ?? '', uncovered.channel);
-        action.groups = [...uncovered.groups];
-        s.actions.push(action);
-        app.changed();
-        rerenderSwitch();
-      }, 'btn btn-outline-primary btn-sm');
-      box.appendChild(el('div', { class: 'coverage-warning alert alert-warning py-2 px-3 mb-2', 'data-channel': uncovered.channel },
-        el('span', { class: 'coverage-warning-text' }, uncoveredChannelWarning(uncovered.channel)),
-        add,
-      ));
-    }
-  };
-  refresh();
-  return { el: box, refresh };
+/** How the provider a channel resolves to is named in the preview line and the override dropdown: its name, else its id. */
+function providerName(app: App, id: string): string {
+  const provider = providerById(app, id);
+  return provider ? providerTitle(provider) : id;
 }
 
 /** A subject or message field with the Variables toggle on its label row and the variable list under the control. */
@@ -68,174 +42,33 @@ function withVariables(field: HTMLElement, box: HTMLElement): HTMLElement {
   return field;
 }
 
-function actionCard(
-  app: App, s: UiSwitch, a: UiAction, switchIndex: number, index: number, rerenderSwitch: () => void, onGroupsChange: () => void,
-): HTMLElement {
-  const path = `switches[${switchIndex}].actions[${index}]`;
-  const provider = providerFor(app, a);
-  const header = el('div', { class: 'action-header d-flex justify-content-between align-items-center' },
-    el('span', { class: 'fw-semibold' }, `Action ${index + 1}`),
-    // List-entry Remove buttons stay single-click (SPEC section 11.2, item 11).
-    button('Remove action', () => {
-      s.actions.splice(index, 1);
-      app.entryRemoved(`switches[${switchIndex}].actions`, index);
-      app.changed();
-      rerenderSwitch();
-    }, 'btn btn-outline-danger btn-sm'),
-  );
-  const body = el('div', { class: 'action-body' });
-
-  const providerOptions = [
-    { value: '', label: app.config.providers.length === 0 ? 'No providers configured' : 'Choose a provider…', disabled: true },
-    ...app.config.providers.filter((p) => p.id.trim()).map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
-  ];
-  if (a.providerId && !provider) {
-    providerOptions.push({ value: a.providerId, label: `${a.providerId} (missing)` });
-  }
-  // Only the channels the selected provider serves (SPEC section 11.2, item 17); a stored channel it cannot serve stays selectable so it can be fixed.
-  const channels = provider ? PROVIDER_CHANNELS[provider.type] : CHANNELS;
-  const channelOptions = channels.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }));
-  if (!channels.includes(a.channel)) {
-    channelOptions.push({ value: a.channel, label: `${CHANNEL_LABELS[a.channel]} (not served by this provider)` });
-  }
-
-  body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, selectField('Provider', a.providerId, providerOptions, (value) => {
-      a.providerId = value;
-      const next = providerFor(app, a);
-      if (next && !PROVIDER_CHANNELS[next.type].includes(a.channel)) {
-        a.channel = PROVIDER_CHANNELS[next.type][0];
-      }
-      a.sender = '';
-      app.changed();
-      rerenderSwitch();
-    }, { path: `${path}.providerId`, required: true })),
-    el('div', { class: 'ns-span-6' }, selectField('Channel', a.channel, channelOptions, (value) => {
-      a.channel = value as Channel;
-      a.sender = '';
-      a.recipients = [];
-      app.changed();
-      rerenderSwitch();
-    }, { path: `${path}.channel`, required: true })),
-  ));
-
-  if (provider?.type === 'twilio' && a.channel === 'sms') {
-    const senders = provider.smsSenders.map((v) => v.trim()).filter((v) => v.length > 0);
-    const service = provider.messagingServiceSid.trim();
-    const auto = senders.length === 1 ? `Automatic (${senders[0]})` : service ? 'Automatic (Messaging Service)' : 'Automatic';
-    const senderOptions = [{ value: '', label: auto }, ...senders.map((v) => ({ value: v, label: v }))];
-    if (a.sender && !senders.includes(a.sender)) {
-      senderOptions.push({ value: a.sender, label: `${a.sender} (not in provider)` });
-    }
-    body.appendChild(selectField('Sender', a.sender, senderOptions, (value) => {
-      a.sender = value;
-      app.changed();
-    }, { path: `${path}.sender`, help: SWITCH_HELP.sender }));
-  }
-
-  // Groups: a checkbox per configured group, showing how many entries it has for this channel.
-  const groupBox = el('div', { class: 'mb-3', 'data-path': `${path}.groups` }, el('label', { class: 'form-label' }, 'Groups'));
-  const groups = app.config.groups.filter((g) => g.id.trim());
-  if (groups.length === 0) {
-    groupBox.appendChild(el('div', { class: 'form-text' }, 'No groups yet. Add one under Recipient Groups, or list extra recipients below.'));
-  }
-  for (const g of groups) {
-    const id = g.id.trim();
-    const count = g[a.channel].filter((v) => v.trim()).length;
-    const input = el('input', { class: 'form-check-input', type: 'checkbox', id: `${path}.groups.${id}` });
-    input.checked = a.groups.includes(id);
-    input.addEventListener('change', () => {
-      if (input.checked) {
-        if (!a.groups.includes(id)) {
-          a.groups.push(id);
-        }
-      } else {
-        a.groups = a.groups.filter((v) => v !== id);
-      }
-      app.changed();
-      onGroupsChange();
-    });
-    groupBox.appendChild(el('div', { class: 'form-check' },
-      input,
-      el('label', { class: 'form-check-label', for: `${path}.groups.${id}` },
-        groupTitle(g), el('span', { class: 'ns-secondary small ms-1' }, `(${count} ${CHANNEL_LABELS[a.channel]} ${count === 1 ? 'entry' : 'entries'})`)),
-    ));
-  }
-  for (const missing of a.groups.filter((id) => !groups.some((g) => g.id.trim() === id))) {
-    const input = el('input', { class: 'form-check-input', type: 'checkbox', id: `${path}.groups.${missing}` });
-    input.checked = true;
-    input.addEventListener('change', () => {
-      a.groups = a.groups.filter((v) => v !== missing);
-      app.changed();
-      onGroupsChange();
-    });
-    groupBox.appendChild(el('div', { class: 'form-check' }, input,
-      el('label', { class: 'form-check-label text-danger', for: `${path}.groups.${missing}` }, `${missing} (missing group)`)));
-  }
-  groupBox.appendChild(el('div', { class: 'invalid-feedback' }));
-  body.appendChild(groupBox);
-
-  body.appendChild(el('div', { class: 'mb-3' },
-    el('label', { class: 'form-label' }, `Extra recipients (${CHANNEL_LABELS[a.channel]})`),
-    addressList({
-      channel: a.channel, values: a.recipients, defaultCountry: app.config.defaultCountry, path: `${path}.recipients`,
-      onChange: () => app.changed(), onRemove: (i) => app.entryRemoved(`${path}.recipients`, i),
-      emptyText: 'None. Groups above cover everyone unless you add someone here.',
-    }).el,
-  ));
-
-  if (a.channel === 'email' || a.channel === 'ntfy') {
-    // The email subject, or the ntfy notification title (SPEC section 5.5, item 7); both default to the switch name.
-    const variables = variablesToggle();
-    const name = s.name.trim();
-    body.appendChild(withVariables(textField(a.channel === 'ntfy' ? 'Title' : 'Subject', a.subject, (value) => {
-      a.subject = value;
-      app.changed();
-    }, {
-      path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
-      help: a.channel === 'ntfy' ? NTFY_HELP.title : SWITCH_HELP.subject, labelExtra: variables.extra,
-    }), variables.box));
-  }
-  if (a.channel === 'email') {
-    // Recipients see each other in To unless this is checked (SPEC section 6.2 and 6.3).
-    body.appendChild(checkboxField(SWITCH_HELP.bcc, a.bcc, (value) => {
-      a.bcc = value;
-      app.changed();
-    }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp }));
-  }
-  if (a.channel === 'ntfy') {
-    // Priority and tags (SPEC section 5.5, items 10 and 11) side by side.
-    body.appendChild(el('div', { class: 'ns-grid' },
-      el('div', { class: 'ns-span-4' }, selectField(NTFY_HELP.priorityLabel, a.priority, NTFY_HELP.priorityOptions, (value) => {
-        a.priority = value as NtfyPriority;
-        app.changed();
-      }, { path: `${path}.priority`, help: NTFY_HELP.priority })),
-      el('div', { class: 'ns-span-8' }, textField(NTFY_HELP.tagsLabel, a.tags.join(', '), (value) => {
-        a.tags = parseTags(value);
-        app.changed();
-      }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags })),
-    ));
-  }
-
-  const counter = a.channel === 'sms' ? smsCounter() : undefined;
+/** A message textarea for one channel, or the shared one, with the SMS counter under it when it carries SMS. */
+function bodyField(
+  label: string, value: string, sms: boolean, path: string, onChange: (value: string) => void,
+): { el: HTMLElement; setSms(sms: boolean): void } {
+  const counter = smsCounter();
   const variables = variablesToggle();
-  const bodyField = textareaField('Message', a.body, (value) => {
-    a.body = value;
-    counter?.update(value);
-    app.changed();
+  const field = textareaField(label, value, (next) => {
+    counter.update(next);
+    onChange(next);
   }, {
-    path: `${path}.body`, required: true, rows: a.channel === 'sms' ? 3 : 5, help: a.channel === 'sms' ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther,
-    labelExtra: variables.extra,
-    placeholder: a.channel === 'sms' ? 'e.g. Water detected under the kitchen sink at {{time}}.' : 'e.g. Water detected at {{time}} on {{date}}.',
+    path, required: true, rows: 3, help: sms ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther, labelExtra: variables.extra,
+    placeholder: sms ? SWITCH_HELP.bodySmsPlaceholder : SWITCH_HELP.bodyOtherPlaceholder,
   });
-  withVariables(bodyField, variables.box);
-  if (counter) {
-    counter.update(a.body);
-    bodyField.querySelector('textarea')?.insertAdjacentElement('afterend', counter.el);
-  }
-  body.appendChild(bodyField);
-
-  return el('div', { class: 'action-card', 'data-path': path }, header, body);
+  withVariables(field, variables.box);
+  counter.update(value);
+  field.querySelector('textarea')?.insertAdjacentElement('afterend', counter.el);
+  const help = field.querySelector<HTMLElement>(':scope > .ns-help');
+  const textarea = field.querySelector('textarea');
+  const setSms = (next: boolean): void => {
+    counter.el.hidden = !next;
+    if (help) {
+      help.textContent = next ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther;
+    }
+    textarea?.setAttribute('placeholder', next ? SWITCH_HELP.bodySmsPlaceholder : SWITCH_HELP.bodyOtherPlaceholder);
+  };
+  setSms(sms);
+  return { el: field, setSms };
 }
 
 interface TestSendResult {
@@ -245,39 +78,29 @@ interface TestSendResult {
   actions?: Array<{ index: number; providerId: string; channel: Channel; results: RecipientResult[] }>;
 }
 
+/** Distinct recipients across every enabled channel (SPEC section 11.2, item 11). */
 function recipientCount(app: App, s: UiSwitch): number {
-  const seen = new Set<string>();
-  for (const a of s.actions) {
-    for (const groupId of a.groups) {
-      const g = app.config.groups.find((entry) => entry.id.trim() === groupId);
-      for (const v of g?.[a.channel] ?? []) {
-        if (v.trim()) {
-          seen.add(`${a.channel}:${v.trim()}`);
-        }
-      }
-    }
-    for (const v of a.recipients) {
-      if (v.trim()) {
-        seen.add(`${a.channel}:${v.trim()}`);
-      }
-    }
+  let count = 0;
+  for (const channel of enabledChannels(s, app.config)) {
+    count += channelRecipients(app.config, s, channel).size;
   }
-  return seen.size;
+  return count;
 }
 
 /** The paths whose issues block a Test send of this switch: the switch itself and the providers and groups it uses. */
 function testSendScope(app: App, s: UiSwitch, index: number): string[] {
   const scope = [`switches[${index}]`];
-  for (const a of s.actions) {
-    const p = app.config.providers.findIndex((entry) => entry.id.trim() === a.providerId && a.providerId);
+  for (const channel of enabledChannels(s, app.config)) {
+    const id = switchProviderId(s, channel, app.config);
+    const p = app.config.providers.findIndex((entry) => entry.id.trim() === id && id);
     if (p >= 0) {
       scope.push(`providers[${p}]`);
     }
-    for (const groupId of a.groups) {
-      const g = app.config.groups.findIndex((entry) => entry.id.trim() === groupId);
-      if (g >= 0) {
-        scope.push(`groups[${g}]`);
-      }
+  }
+  for (const groupId of s.groups) {
+    const g = app.config.groups.findIndex((entry) => entry.id.trim() === groupId);
+    if (g >= 0) {
+      scope.push(`groups[${g}]`);
     }
   }
   return scope;
@@ -311,8 +134,7 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
     }
     for (const action of result.actions ?? []) {
       const table = el('table', { class: 'table table-sm mb-2' },
-        el('caption', { class: 'small ns-secondary caption-top py-1' },
-          `Action ${action.index + 1}: ${CHANNEL_LABELS[action.channel]} via ${action.providerId}`),
+        el('caption', { class: 'small ns-secondary caption-top py-1' }, `${CHANNEL_TITLE[action.channel]} via ${action.providerId}`),
         el('thead', {}, el('tr', {}, el('th', {}, 'Recipient'), el('th', {}, 'Result'))),
       );
       const tbody = el('tbody');
@@ -354,11 +176,301 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
   return { control, results };
 }
 
+/**
+ * The switch editor (SPEC section 11.2, item 8): Recipients (groups with per-channel counts, extra addresses
+ * by channel), Send by (one checkbox per channel anyone can be reached on), Message (one body, one subject),
+ * the live preview line, and Advanced (per-channel messages, provider overrides, BCC, ntfy priority and tags).
+ * The stored `actions` array is derived from it on every change (`switchActions` in the model).
+ */
+function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void): HTMLElement {
+  const path = `switches[${index}]`;
+  const root = el('div', { class: 'ns-switch-editor' });
+  let refresh: () => void = () => undefined;
+
+  // ---- Recipients ------------------------------------------------------------------------------------------
+  const groupBox = el('div', { class: 'ns-recipient-groups', 'data-path': `${path}.groups` });
+  const groups = app.config.groups.filter((g) => g.id.trim());
+  if (groups.length === 0) {
+    groupBox.appendChild(el('div', { class: 'form-text' }, SWITCH_EDITOR.noGroups));
+  }
+  /** A channel that just became reachable is ticked by default (SPEC section 11.2, item 8). */
+  const enableNewChannels = (before: Channel[]): void => {
+    for (const channel of presentChannels(app.config, s)) {
+      if (!before.includes(channel)) {
+        s.channels[channel] = true;
+      }
+    }
+  };
+  const toggleGroup = (id: string, checked: boolean): void => {
+    const before = presentChannels(app.config, s);
+    if (checked) {
+      if (!s.groups.includes(id)) {
+        s.groups.push(id);
+      }
+    } else {
+      s.groups = s.groups.filter((v) => v !== id);
+    }
+    enableNewChannels(before);
+    app.changed();
+    refresh();
+  };
+  for (const g of groups) {
+    const id = g.id.trim();
+    const input = el('input', { class: 'form-check-input', type: 'checkbox', id: `${path}.groups.${id}` });
+    input.checked = s.groups.includes(id);
+    input.addEventListener('change', () => toggleGroup(id, input.checked));
+    const counts = CHANNELS.map((channel): [Channel, number] => [channel, g[channel].filter((v) => v.trim()).length]);
+    groupBox.appendChild(el('div', { class: 'form-check' }, input,
+      el('label', { class: 'form-check-label', for: `${path}.groups.${id}` }, SWITCH_EDITOR.groupCounts(groupTitle(g), counts))));
+  }
+  for (const missing of s.groups.filter((id) => !groups.some((g) => g.id.trim() === id))) {
+    const input = el('input', { class: 'form-check-input', type: 'checkbox', id: `${path}.groups.${missing}` });
+    input.checked = true;
+    input.addEventListener('change', () => toggleGroup(missing, false));
+    groupBox.appendChild(el('div', { class: 'form-check' }, input,
+      el('label', { class: 'form-check-label text-danger', for: `${path}.groups.${missing}` }, SWITCH_EDITOR.missingGroup(missing))));
+  }
+  groupBox.appendChild(el('div', { class: 'invalid-feedback' }));
+
+  // Extra addresses, one list per channel somebody could send on.
+  const extras = el('div', { class: 'ns-grid ns-extra-recipients' });
+  for (const channel of CHANNELS) {
+    if (providersForChannel(app.config.providers, channel).length === 0 && s.recipients[channel].length === 0) {
+      continue;
+    }
+    const list = addressList({
+      channel, values: s.recipients[channel], defaultCountry: app.config.defaultCountry, path: `${path}.recipients.${channel}`,
+      onChange: () => {
+        const before = presentChannels(app.config, s);
+        enableNewChannels(before);
+        app.changed();
+        refresh();
+      },
+      onRemove: (i) => app.entryRemoved(`${path}.recipients.${channel}`, i),
+      emptyText: SWITCH_EDITOR.extraEmpty,
+    });
+    extras.appendChild(el('div', { class: 'ns-span-6 ns-extra-channel', 'data-channel': channel },
+      el('div', { class: 'small fw-semibold mb-1' }, SWITCH_EDITOR.extraChannelLabel[channel]), list.el));
+  }
+  root.appendChild(el('div', { class: 'mb-3 ns-recipients' },
+    el('label', { class: 'form-label' }, SWITCH_EDITOR.recipientsLabel),
+    groupBox,
+    helpText(SWITCH_EDITOR.recipientsHelp),
+    el('div', { class: 'mt-2' },
+      el('div', { class: 'form-label mb-1' }, SWITCH_EDITOR.extraLabel),
+      extras,
+      helpText(SWITCH_EDITOR.extraHelp),
+    ),
+  ));
+
+  // ---- Send by ---------------------------------------------------------------------------------------------
+  const channelBox = el('div', { class: 'ns-send-by', 'data-path': `${path}.channels` });
+  const channelRows = el('div', { class: 'ns-send-by-rows' });
+  const sendByEmpty = el('div', { class: 'form-text ns-send-by-empty' }, SWITCH_EDITOR.sendByEmpty);
+  const renderChannels = (): void => {
+    clear(channelRows);
+    const present = presentChannels(app.config, s);
+    sendByEmpty.hidden = present.length > 0;
+    for (const channel of present) {
+      const input = el('input', { class: 'form-check-input', type: 'checkbox', id: `${path}.channels.${channel}` });
+      input.checked = s.channels[channel];
+      input.addEventListener('change', () => {
+        s.channels[channel] = input.checked;
+        if (input.checked && s.customize && !s.bodies[channel]) {
+          s.bodies[channel] = s.body;
+        }
+        app.changed();
+        refresh();
+      });
+      const count = channelRecipients(app.config, s, channel).size;
+      channelRows.appendChild(el('div', { class: 'form-check', 'data-path': `${path}.channels.${channel}`, 'data-channel': channel },
+        input,
+        el('label', { class: 'form-check-label', for: `${path}.channels.${channel}` }, SWITCH_EDITOR.channelOption(channel, count)),
+        el('div', { class: 'invalid-feedback' }),
+      ));
+    }
+  };
+  channelBox.appendChild(el('label', { class: 'form-label' }, SWITCH_EDITOR.sendByLabel));
+  channelBox.appendChild(channelRows);
+  channelBox.appendChild(sendByEmpty);
+  channelBox.appendChild(helpText(SWITCH_EDITOR.sendByHelp));
+  channelBox.appendChild(el('div', { class: 'invalid-feedback' }));
+  root.appendChild(el('div', { class: 'mb-3' }, channelBox));
+
+  // ---- Message ---------------------------------------------------------------------------------------------
+  const name = s.name.trim();
+  const subjectVariables = variablesToggle();
+  const subjectField = withVariables(textField(SWITCH_EDITOR.subjectLabel, s.subject, (value) => {
+    s.subject = value;
+    if (!s.customize) {
+      for (const channel of CHANNELS) {
+        s.subjects[channel] = value;
+      }
+    }
+    app.changed();
+  }, {
+    path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
+    help: SWITCH_EDITOR.subjectHelp, labelExtra: subjectVariables.extra,
+  }), subjectVariables.box);
+  const sharedBody = bodyField(SWITCH_EDITOR.messageLabel, s.body, s.channels.sms, `${path}.body`, (value) => {
+    s.body = value;
+    if (!s.customize) {
+      for (const channel of CHANNELS) {
+        s.bodies[channel] = value;
+      }
+    }
+    app.changed();
+  });
+  const customizedNote = el('div', { class: 'form-text mb-3 ns-customized-note', hidden: true }, SWITCH_EDITOR.customizedNote);
+  const preview = el('div', { class: 'ns-send-preview small mb-3', role: 'status', 'aria-live': 'polite' });
+  root.appendChild(el('div', { class: 'ns-message' }, sharedBody.el, subjectField, customizedNote, preview));
+
+  // ---- Advanced --------------------------------------------------------------------------------------------
+  const perChannel = el('div', { class: 'ns-per-channel' });
+  const channelBodies: Partial<Record<Channel, HTMLElement>> = {};
+  for (const channel of CHANNELS) {
+    const block = el('div', { class: 'ns-channel-message', 'data-channel': channel });
+    const subjectLabel = SWITCH_EDITOR.channelSubject[channel];
+    if (subjectLabel) {
+      const variables = variablesToggle();
+      block.appendChild(withVariables(textField(subjectLabel, s.subjects[channel], (value) => {
+        s.subjects[channel] = value;
+        app.changed();
+      }, {
+        path: `${path}.subjects.${channel}`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
+        help: channel === 'ntfy' ? NTFY_HELP.title : SWITCH_HELP.subject, labelExtra: variables.extra,
+      }), variables.box));
+    }
+    block.appendChild(bodyField(SWITCH_EDITOR.channelBody[channel], s.bodies[channel], channel === 'sms', `${path}.bodies.${channel}`, (value) => {
+      s.bodies[channel] = value;
+      app.changed();
+    }).el);
+    channelBodies[channel] = block;
+    perChannel.appendChild(block);
+  }
+  const customize = checkboxField(SWITCH_EDITOR.customize, s.customize, (value) => {
+    s.customize = value;
+    if (value) {
+      // Each channel starts as a copy of the shared message (SPEC section 11.2, item 8).
+      for (const channel of CHANNELS) {
+        s.bodies[channel] = s.body;
+        s.subjects[channel] = s.subject;
+      }
+      rerenderSwitch();
+      return;
+    }
+    app.changed();
+    refresh();
+  }, { path: `${path}.customize`, help: SWITCH_EDITOR.customizeHelp });
+
+  const overrides: Partial<Record<Channel, HTMLElement>> = {};
+  for (const channel of CHANNELS) {
+    const candidates = providersForChannel(app.config.providers, channel);
+    const resolved = resolveDefaultProvider(channel, app.config.providers, app.config.defaultProviders);
+    const options = [
+      { value: '', label: resolved.id ? SWITCH_EDITOR.platformDefault(providerName(app, resolved.id)) : 'Platform default' },
+      ...candidates.map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
+    ];
+    if (s.providers[channel] && !candidates.some((p) => p.id.trim() === s.providers[channel])) {
+      options.push({ value: s.providers[channel], label: SWITCH_EDITOR.missingProvider(s.providers[channel]) });
+    }
+    const field = selectField(SWITCH_EDITOR.providerLabel(channel), s.providers[channel], options, (value) => {
+      s.providers[channel] = value;
+      if (channel === 'sms') {
+        s.sender = '';
+      }
+      app.changed();
+      rerenderSwitch();
+    }, { path: `${path}.providers.${channel}`, help: SWITCH_EDITOR.providerHelp });
+    field.setAttribute('data-channel', channel);
+    overrides[channel] = field;
+  }
+
+  // SMS sender, only when the resolved Twilio provider offers a choice (SPEC section 5.5, item 3).
+  let senderField: HTMLElement | undefined;
+  const smsProvider = providerById(app, switchProviderId(s, 'sms', app.config));
+  if (smsProvider?.type === 'twilio') {
+    const senders = smsProvider.smsSenders.map((v) => v.trim()).filter((v) => v.length > 0);
+    const service = smsProvider.messagingServiceSid.trim();
+    if (senders.length > 1 || s.sender) {
+      const auto = senders.length === 1 ? `Automatic (${senders[0]})` : service ? 'Automatic (Messaging Service)' : 'Automatic';
+      const senderOptions = [{ value: '', label: auto }, ...senders.map((v) => ({ value: v, label: v }))];
+      if (s.sender && !senders.includes(s.sender)) {
+        senderOptions.push({ value: s.sender, label: `${s.sender} (not in provider)` });
+      }
+      senderField = selectField('Sender', s.sender, senderOptions, (value) => {
+        s.sender = value;
+        app.changed();
+      }, { path: `${path}.sender`, help: SWITCH_HELP.sender });
+    }
+  }
+
+  const bcc = checkboxField(SWITCH_HELP.bcc, s.bcc, (value) => {
+    s.bcc = value;
+    app.changed();
+  }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp });
+  const ntfy = el('div', { class: 'ns-grid ns-ntfy-options' },
+    el('div', { class: 'ns-span-4' }, selectField(NTFY_HELP.priorityLabel, s.priority, NTFY_HELP.priorityOptions, (value) => {
+      s.priority = value as NtfyPriority;
+      app.changed();
+    }, { path: `${path}.priority`, help: NTFY_HELP.priority })),
+    el('div', { class: 'ns-span-8' }, textField(NTFY_HELP.tagsLabel, s.tags.join(', '), (value) => {
+      s.tags = parseTags(value);
+      app.changed();
+    }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags })),
+  );
+  const extraActions = el('div', { class: 'ns-extra-actions' });
+  for (const channel of [...new Set(s.extraActions.map((a) => a.channel))]) {
+    extraActions.appendChild(el('div', { class: 'form-text' }, SWITCH_EDITOR.extraActions(channel)));
+  }
+  const advancedOpen = s.customize || CHANNELS.some((channel) => s.providers[channel] !== '') || s.sender !== '' || s.bcc || s.priority !== 'default'
+    || s.tags.length > 0 || s.extraActions.length > 0;
+  const advanced = disclosure(SWITCH_EDITOR.advanced, [
+    customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy, extraActions,
+  ], { open: advancedOpen, attrs: { 'data-advanced': path } });
+  root.appendChild(advanced);
+
+  // ---- Live state ------------------------------------------------------------------------------------------
+  refresh = (): void => {
+    renderChannels();
+    const enabled = enabledChannels(s, app.config);
+    const hasSubject = enabled.some((channel) => SUBJECT_CHANNELS.includes(channel));
+    sharedBody.setSms(enabled.includes('sms'));
+    sharedBody.el.hidden = s.customize;
+    subjectField.hidden = s.customize || !hasSubject;
+    customizedNote.hidden = !s.customize;
+    perChannel.hidden = !s.customize;
+    for (const channel of CHANNELS) {
+      const block = channelBodies[channel];
+      if (block) {
+        block.hidden = !enabled.includes(channel);
+      }
+      const override = overrides[channel];
+      if (override) {
+        const candidates = providersForChannel(app.config.providers, channel).length;
+        override.hidden = !enabled.includes(channel) || (candidates < 2 && s.providers[channel] === '');
+      }
+    }
+    if (senderField) {
+      senderField.hidden = !enabled.includes('sms');
+    }
+    bcc.hidden = !enabled.includes('email');
+    ntfy.hidden = !enabled.includes('ntfy');
+    const parts = enabled.map((channel) => ({
+      channel, provider: providerName(app, switchProviderId(s, channel, app.config)), count: channelRecipients(app.config, s, channel).size,
+    })).filter((part) => part.count > 0);
+    preview.textContent = parts.length > 0 ? SWITCH_EDITOR.preview(parts) : SWITCH_EDITOR.previewNone;
+  };
+  refresh();
+  return root;
+}
+
 function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HTMLElement {
   const path = `switches[${index}]`;
   const card = el('div', { class: 'card mb-3', 'data-path': path });
   const rerenderSwitch = (): void => {
     host.replaceChild(switchCard(app, s, index, host), card);
+    app.changed();
   };
   const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
   const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, s));
@@ -403,22 +515,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     el('div', { class: 'ns-span-6' }, resetField),
   ));
 
-  const coverage = coverageWarnings(app, s, rerenderSwitch);
-  const actions = el('div', { class: 'actions mb-2', 'data-path': `${path}.actions` }, el('label', { class: 'form-label' }, 'Actions'));
-  s.actions.forEach((a, i) => actions.appendChild(actionCard(app, s, a, index, i, rerenderSwitch, coverage.refresh)));
-  if (s.actions.length === 0) {
-    actions.appendChild(el('div', { class: 'form-text mb-2' }, 'No actions yet. Add one action per channel you want to use.'));
-  }
-  actions.appendChild(el('div', { class: 'invalid-feedback' }));
-  body.appendChild(actions);
-  // Add action: an outlined secondary button directly under the actions list, like Add phone number (SPEC section 11.2, item 11).
-  body.appendChild(el('div', { class: 'ns-add-action' }, outlineButton('Add action', () => {
-    const first = app.config.providers.find((p) => p.id.trim());
-    s.actions.push(newAction(first?.id.trim() ?? '', first ? PROVIDER_CHANNELS[first.type][0] : 'sms'));
-    app.changed();
-    rerenderSwitch();
-  })));
-  body.appendChild(coverage.el);
+  body.appendChild(editor(app, s, index, rerenderSwitch));
 
   // Footer: Remove switch (with its in-place confirmation) on the left, Test send on the right; results below the footer.
   const testSend = testSendPanel(app, s, index);

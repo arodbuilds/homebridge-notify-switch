@@ -1,8 +1,11 @@
 import type { Channel, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
 import {
-  CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES,
+  CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS,
+  TELEGRAM_PARSE_MODES,
 } from '../../src/types.js';
 import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
+import { providersForChannel, pruneDefaults, resolveDefaultProvider } from '../../src/defaults.js';
+import type { DefaultProviders } from '../../src/defaults.js';
 
 /**
  * The configuration object the settings UI edits. It is the platform block from config.json with
@@ -72,6 +75,12 @@ export interface UiAction {
   tags: string[];
 }
 
+/**
+ * The switch as the editor shows it (SPEC section 11.2, item 8): one set of recipients, a checkbox per
+ * channel, one message, and the per-channel details under Advanced. config.json keeps the `actions`
+ * array; `readSwitch` derives this shape from it and `switchActions` writes it back, one action per
+ * enabled channel (SPEC section 5.4).
+ */
 export interface UiSwitch {
   id: string;
   name: string;
@@ -80,7 +89,32 @@ export interface UiSwitch {
   failureMode: FailureMode;
   failureSensor: boolean;
   failureSensorResetSeconds: number;
-  actions: UiAction[];
+  /** Recipients: the groups every channel sends to. */
+  groups: string[];
+  /** Recipients: extra addresses per channel, on top of the groups. */
+  recipients: Record<Channel, string[]>;
+  /** Send by: true for a channel the switch sends on (an action exists for it). */
+  channels: Record<Channel, boolean>;
+  /** The channel order of the stored actions, so a saved configuration is written back in its own order. */
+  order: Channel[];
+  /** The shared message and subject, used while `customize` is off. */
+  body: string;
+  subject: string;
+  /** Customize message per channel: each channel has its own body (and, for email and ntfy, subject). */
+  customize: boolean;
+  bodies: Record<Channel, string>;
+  subjects: Record<Channel, string>;
+  /** Per-channel provider override; '' means the platform default (SPEC section 5.7). */
+  providers: Record<Channel, string>;
+  /** SMS sender override, '' for automatic (SPEC section 5.5, item 3). */
+  sender: string;
+  /** Email only: hide recipients from each other (SPEC section 6.2 and 6.3). */
+  bcc: boolean;
+  /** ntfy only. */
+  priority: NtfyPriority;
+  tags: string[];
+  /** Actions past the first per channel in config.json, kept as loaded and written back unchanged. */
+  extraActions: UiAction[];
 }
 
 export interface UiConfig {
@@ -90,6 +124,8 @@ export interface UiConfig {
   defaultCountry: string;
   masterSwitch: { enabled: boolean; name: string };
   debug: boolean;
+  /** Platform defaults per channel (SPEC section 5.7); only stored for channels with more than one provider. */
+  defaultProviders: DefaultProviders;
   providers: UiProvider[];
   groups: UiGroup[];
   switches: UiSwitch[];
@@ -144,10 +180,6 @@ export function newGroup(): UiGroup {
   return { id: '', name: '', sms: [], email: [], telegram: [], ntfy: [] };
 }
 
-export function newAction(providerId = '', channel: Channel = 'sms'): UiAction {
-  return { providerId, channel, sender: '', groups: [], recipients: [], subject: '', body: '', bcc: false, priority: 'default', tags: [] };
-}
-
 /** RFC 4122 v4 UUID. `crypto.randomUUID` needs a secure context, which a LAN Homebridge UI over http is not. */
 export function generateUuid(): string {
   const c = globalThis.crypto;
@@ -172,10 +204,17 @@ export function generateUuid(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function perChannel<T>(value: () => T): Record<Channel, T> {
+  return { sms: value(), email: value(), telegram: value(), ntfy: value() };
+}
+
 export function newSwitch(): UiSwitch {
   return {
     id: generateUuid(), name: '', enabled: true, cooldownSeconds: 0, failureMode: 'any', failureSensor: false, failureSensorResetSeconds: 300,
-    actions: [],
+    groups: [], recipients: perChannel(() => []), channels: perChannel(() => false), order: [],
+    body: '', subject: '', customize: false, bodies: perChannel(() => ''), subjects: perChannel(() => ''),
+    providers: perChannel(() => ''), sender: '', bcc: false, priority: 'default', tags: [],
+    extraActions: [],
   };
 }
 
@@ -227,18 +266,89 @@ function readAction(raw: unknown): UiAction {
   };
 }
 
-function readSwitch(raw: unknown): UiSwitch {
+/**
+ * Derives the editor shape from a switch's `actions` (SPEC section 11.2, item 8). The first action per channel
+ * fills that channel: its groups join the switch's group list, its extra recipients and provider override are
+ * kept per channel, and its body and subject go to the shared fields when every channel agrees, or to the
+ * per-channel fields with Customize on when they differ. A provider that is the channel's platform default
+ * is stored as no override, so switching the default later moves the switch with it. Actions past the first
+ * per channel are kept aside and written back unchanged.
+ */
+export function switchFromActions(s: UiSwitch, actions: UiAction[], providers: UiProvider[], defaults: DefaultProviders): UiSwitch {
+  const first: Partial<Record<Channel, UiAction>> = {};
+  s.order = [];
+  s.extraActions = [];
+  for (const action of actions) {
+    if (first[action.channel]) {
+      s.extraActions.push(action);
+      continue;
+    }
+    first[action.channel] = action;
+    s.order.push(action.channel);
+  }
+  s.groups = [];
+  for (const channel of s.order) {
+    for (const id of first[channel]?.groups ?? []) {
+      if (!s.groups.includes(id)) {
+        s.groups.push(id);
+      }
+    }
+  }
+  for (const channel of CHANNELS) {
+    const action = first[channel];
+    s.channels[channel] = action !== undefined;
+    s.recipients[channel] = action ? [...action.recipients] : [];
+    s.bodies[channel] = action?.body ?? '';
+    s.subjects[channel] = action?.subject ?? '';
+    const resolved = resolveDefaultProvider(channel, providers, defaults).id;
+    s.providers[channel] = action && action.providerId !== resolved ? action.providerId : '';
+  }
+  s.sender = first.sms?.sender ?? '';
+  s.bcc = first.email?.bcc ?? false;
+  s.priority = first.ntfy?.priority ?? 'default';
+  s.tags = first.ntfy ? [...first.ntfy.tags] : [];
+  // Identical bodies (and subjects) collapse to the shared fields; differing ones open Customize per channel.
+  const present = s.order;
+  const bodies = new Set(present.map((channel) => s.bodies[channel]));
+  const subjects = new Set(present.filter((channel) => SUBJECT_CHANNELS.includes(channel)).map((channel) => s.subjects[channel]));
+  s.customize = bodies.size > 1 || subjects.size > 1;
+  s.body = present.length > 0 ? s.bodies[present[0]] : '';
+  s.subject = [...subjects][0] ?? '';
+  for (const channel of CHANNELS) {
+    if (!first[channel] || !s.customize) {
+      s.bodies[channel] = s.body;
+      s.subjects[channel] = s.subject;
+    }
+  }
+  return s;
+}
+
+function readSwitch(raw: unknown, providers: UiProvider[], defaults: DefaultProviders): UiSwitch {
   const r = isRaw(raw) ? raw : {};
-  return {
-    id: str(r.id) || generateUuid(),
-    name: str(r.name),
-    enabled: bool(r.enabled, true),
-    cooldownSeconds: int(r.cooldownSeconds, 0),
-    failureMode: oneOf(r.failureMode, FAILURE_MODES, 'any'),
-    failureSensor: bool(r.failureSensor, false),
-    failureSensorResetSeconds: int(r.failureSensorResetSeconds, 300),
-    actions: Array.isArray(r.actions) ? r.actions.map(readAction) : [],
-  };
+  const s = newSwitch();
+  s.id = str(r.id) || s.id;
+  s.name = str(r.name);
+  s.enabled = bool(r.enabled, true);
+  s.cooldownSeconds = int(r.cooldownSeconds, 0);
+  s.failureMode = oneOf(r.failureMode, FAILURE_MODES, 'any');
+  s.failureSensor = bool(r.failureSensor, false);
+  s.failureSensorResetSeconds = int(r.failureSensorResetSeconds, 300);
+  return switchFromActions(s, Array.isArray(r.actions) ? r.actions.map(readAction) : [], providers, defaults);
+}
+
+/** The `defaultProviders` block as stored: string values under channel keys; anything else is dropped. */
+function readDefaultProviders(raw: unknown): DefaultProviders {
+  const out: DefaultProviders = {};
+  if (!isRaw(raw)) {
+    return out;
+  }
+  for (const channel of CHANNELS) {
+    const value = raw[channel];
+    if (typeof value === 'string' && value.trim()) {
+      out[channel] = value.trim();
+    }
+  }
+  return out;
 }
 
 /** The unknown top-level keys of a block that are carried through unchanged; the forbidden names never are. */
@@ -256,6 +366,8 @@ function extraKeys(r: Raw): Raw {
 export function readConfig(raw: unknown): UiConfig {
   const r = isRaw(raw) ? raw : {};
   const master = isRaw(r.masterSwitch) ? r.masterSwitch : {};
+  const providers = Array.isArray(r.providers) ? r.providers.map(readProvider) : [];
+  const defaultProviders = readDefaultProviders(r.defaultProviders);
   return {
     ...extraKeys(r),
     platform: 'NotifySwitch',
@@ -264,9 +376,10 @@ export function readConfig(raw: unknown): UiConfig {
     defaultCountry: str(r.defaultCountry, 'US').toUpperCase() || 'US',
     masterSwitch: { enabled: bool(master.enabled, true), name: str(master.name, 'Notifications Enabled') },
     debug: bool(r.debug, false),
-    providers: Array.isArray(r.providers) ? r.providers.map(readProvider) : [],
+    defaultProviders,
+    providers,
     groups: Array.isArray(r.groups) ? r.groups.map(readGroup) : [],
-    switches: Array.isArray(r.switches) ? r.switches.map(readSwitch) : [],
+    switches: Array.isArray(r.switches) ? r.switches.map((item) => readSwitch(item, providers, defaultProviders)) : [],
   };
 }
 
@@ -369,9 +482,68 @@ function exportAction(a: UiAction): Raw {
   return out;
 }
 
+/** Distinct addresses of one channel across the switch's groups and its extra recipients, the way startup resolves them. */
+export function channelRecipients(config: UiConfig, s: UiSwitch, channel: Channel): Set<string> {
+  const out = new Set<string>();
+  for (const id of s.groups) {
+    const group = config.groups.find((entry) => entry.id.trim() === id && id);
+    for (const value of group?.[channel] ?? []) {
+      if (value.trim()) {
+        out.add(value.trim());
+      }
+    }
+  }
+  for (const value of s.recipients[channel]) {
+    if (value.trim()) {
+      out.add(value.trim());
+    }
+  }
+  return out;
+}
+
+/**
+ * The channels Send by lists (SPEC section 11.2, item 8): those with somebody to reach and a provider that can send
+ * on them. A channel with nobody to reach, or nobody to send through, is not listed and gets no action.
+ */
+export function presentChannels(config: UiConfig, s: UiSwitch): Channel[] {
+  return CHANNELS.filter((channel) => channelRecipients(config, s, channel).size > 0 && providersForChannel(config.providers, channel).length > 0);
+}
+
+/** The channels the switch sends on (present and ticked), in the order its actions are written: the stored order first, new channels after. */
+export function enabledChannels(s: UiSwitch, config: UiConfig): Channel[] {
+  const enabled = presentChannels(config, s).filter((channel) => s.channels[channel]);
+  return [...s.order.filter((channel) => enabled.includes(channel)), ...enabled.filter((channel) => !s.order.includes(channel))];
+}
+
+/** The provider id a channel of the switch sends through: the override, else the platform default (SPEC section 5.7). */
+export function switchProviderId(s: UiSwitch, channel: Channel, config: UiConfig): string {
+  return s.providers[channel] || resolveDefaultProvider(channel, config.providers, config.defaultProviders).id || '';
+}
+
+/**
+ * The `actions` array config.json keeps for a switch (SPEC section 5.4): one action per enabled channel with
+ * the switch's groups, that channel's extra recipients, the shared or per-channel body and subject, and the
+ * provider from the override or the platform default; then any actions kept aside on load.
+ */
+export function switchActions(s: UiSwitch, config: UiConfig): Raw[] {
+  const out = enabledChannels(s, config).map((channel) => exportAction({
+    providerId: switchProviderId(s, channel, config),
+    channel,
+    sender: channel === 'sms' ? s.sender : '',
+    groups: [...s.groups],
+    recipients: [...s.recipients[channel]],
+    subject: s.customize ? s.subjects[channel] : s.subject,
+    body: s.customize ? s.bodies[channel] : s.body,
+    bcc: s.bcc,
+    priority: s.priority,
+    tags: [...s.tags],
+  }));
+  return [...out, ...s.extraActions.map(exportAction)];
+}
+
 /** The platform block as written to config.json. */
 export function exportConfig(config: UiConfig): Raw {
-  return {
+  const out: Raw = {
     ...config,
     platform: 'NotifySwitch',
     name: config.name.trim() || 'Notify Switch',
@@ -391,9 +563,17 @@ export function exportConfig(config: UiConfig): Raw {
       failureMode: s.failureMode,
       failureSensor: s.failureSensor,
       failureSensorResetSeconds: s.failureSensorResetSeconds,
-      actions: s.actions.map(exportAction),
+      actions: switchActions(s, config),
     })),
   };
+  // Only channels with more than one provider carry a default (SPEC section 5.7); nothing is stored otherwise.
+  const defaults = pruneDefaults(config.providers, config.defaultProviders);
+  if (Object.keys(defaults).length > 0) {
+    out.defaultProviders = defaults;
+  } else {
+    delete out.defaultProviders;
+  }
+  return out;
 }
 
 /** The fields per provider type that are secrets on their own (SPEC section 5.2). ntfy's depend on its auth mode. */

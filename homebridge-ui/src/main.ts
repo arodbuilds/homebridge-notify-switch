@@ -13,7 +13,7 @@ import { renderProviders } from './sections/providers.js';
 import { renderSettings } from './sections/settings.js';
 import { renderSwitches } from './sections/switches.js';
 import { timeZoneCountry } from '../../src/timeZones.js';
-import { validate } from './validate.js';
+import { errorsOnly, validate } from './validate.js';
 import type { UiIssue } from './validate.js';
 
 /**
@@ -166,6 +166,10 @@ class Page implements App {
     if (refs && section !== 'switches') {
       this.rerender('switches');
     }
+    if (refs && section !== 'settings') {
+      // The Default provider dropdowns under Settings follow the providers (SPEC section 11.2, item 25).
+      this.rerender('settings');
+    }
     this.changed();
   }
 
@@ -299,8 +303,15 @@ class Page implements App {
       if (container) {
         clear(container);
         renderSwitches(this, container);
-        this.revalidate();
       }
+      // The Default provider dropdowns under Settings name providers too. Typing happens in a provider or group
+      // card while this runs, so redrawing Settings never takes focus from the user.
+      const settings = this.containers.get('settings');
+      if (settings) {
+        clear(settings);
+        renderSettings(this, settings);
+      }
+      this.revalidate();
     }, 400);
   }
 
@@ -370,7 +381,10 @@ class Page implements App {
   }
 
   private revalidate(): void {
-    const all = validate(this.config);
+    const everything = validate(this.config);
+    // Warnings (a channel without a default provider, SPEC section 11.2, item 25) are listed but never block Save or mark a field.
+    const all = errorsOnly(everything);
+    const warnings = everything.filter((issue) => issue.level === 'warning');
     const { listed, held, fresh } = this.splitIssues(all);
     this.markIssues(all);
     for (const node of this.root.querySelectorAll<ValidationListener>('.ns-on-validate')) {
@@ -384,12 +398,18 @@ class Page implements App {
         byPath.set(issue.path, issue);
       }
     }
-    for (const issue of byPath.values()) {
+    const entry = (issue: UiIssue): HTMLElement => {
       const link = button('', () => this.jumpTo(issue.path), 'btn btn-link btn-sm p-0 ns-link-button ns-issue-link text-start');
       link.appendChild(el('strong', {}, `${issue.label}: `));
       link.appendChild(document.createTextNode(issue.message));
       link.setAttribute('data-issue-path', issue.path);
-      this.issuesList.appendChild(el('li', {}, link));
+      return el('li', { class: issue.level === 'warning' ? 'ns-issue-warning' : undefined }, link);
+    };
+    for (const issue of byPath.values()) {
+      this.issuesList.appendChild(entry(issue));
+    }
+    for (const issue of warnings) {
+      this.issuesList.appendChild(entry(issue));
     }
     const nothingToSave = all.length === 0 && this.config.providers.length === 0 && this.config.groups.length === 0 && this.config.switches.length === 0;
     this.issuesToggle.hidden = true;
@@ -405,6 +425,11 @@ class Page implements App {
       this.issuesToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       this.issuesBox.className = 'issues alert alert-warning';
       this.issuesBox.setAttribute('role', 'alert');
+    } else if (held.length === 0 && warnings.length > 0) {
+      // Nothing blocks Save; the warnings are worth a look (SPEC section 11.2, item 25).
+      this.issuesHeading.textContent = ISSUES.optional;
+      this.issuesBox.className = 'issues alert alert-warning';
+      this.issuesBox.setAttribute('role', 'status');
     } else if (held.length > 0) {
       // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
       const kinds = [...new Set(held.map((issue) => fresh.find((card) => underPath(issue.path, card.path))?.kind ?? 'card'))];
@@ -417,7 +442,7 @@ class Page implements App {
       this.issuesBox.className = 'issues alert alert-secondary';
       this.issuesBox.setAttribute('role', 'status');
     }
-    this.issuesBox.hidden = all.length === 0 && !nothingToSave;
+    this.issuesBox.hidden = all.length === 0 && warnings.length === 0 && !nothingToSave;
     setSaveEnabled(all.length === 0);
   }
 

@@ -22,6 +22,7 @@ test('validation: every channel validates without a "not yet implemented" warnin
   const config = platformConfig({
     providers: [TWILIO, SMTP, TELEGRAM, NTFY],
     actions: [SMS_ACTION, TWILIO_EMAIL_ACTION, SMTP_ACTION, TELEGRAM_ACTION, NTFY_ACTION],
+    defaultProviders: { email: 'fastmail' },
   });
   const result = await validateConfig(config, fakeLogger().log);
   assert.deepEqual(errors(result), []);
@@ -84,6 +85,7 @@ test('validation: bcc is carried into the resolved email action, defaults to off
     providers: [TWILIO, SMTP],
     groups: [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'] }],
     actions: [{ ...SMTP_ACTION, bcc: true }, TWILIO_EMAIL_ACTION, { ...SMS_ACTION, bcc: true }],
+    defaultProviders: { email: 'twilio-main' },
   });
   const result = await validateConfig(config, fakeLogger().log);
   assert.deepEqual(errors(result), []);
@@ -205,4 +207,51 @@ test('credentialsFile: a file that fails to load does not hide the other validat
   assert.equal(lines.length, 2);
   assert.match(lines[0], /^providers\[0\]\.credentialsFile/);
   assert.match(lines[1], /did you mean "twilio-main"/);
+});
+
+test('defaultProviders: a channel with several providers and no default warns and falls back to the first in config order', async () => {
+  const family = { id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'] };
+  const config = platformConfig({ providers: [TWILIO, SMTP], groups: [family], actions: [SMS_ACTION, SMTP_ACTION] });
+  const result = await validateConfig(config, fakeLogger().log);
+  assert.deepEqual(errors(result), []);
+  assert.deepEqual(warnings(result), [
+    'platform.defaultProviders.email: 2 providers can send email and none is the default; switches that do not name one use "twilio-main", '
+      + 'the first in config order. Choose a default under Settings',
+  ]);
+  assert.deepEqual(result.config.defaultProviders, {}, 'the fallback is not written into the configuration');
+
+  const chosen = platformConfig({ providers: [TWILIO, SMTP], groups: [family], actions: [SMS_ACTION, SMTP_ACTION], defaultProviders: { email: 'fastmail' } });
+  const ok = await validateConfig(chosen, fakeLogger().log);
+  assert.deepEqual(warnings(ok), []);
+  assert.deepEqual(ok.config.defaultProviders, { email: 'fastmail' });
+
+  // A single provider per channel needs no entry, and one that names it is accepted quietly.
+  const single = platformConfig({ providers: [TWILIO], actions: [SMS_ACTION], defaultProviders: { sms: 'twilio-main' } });
+  const quiet = await validateConfig(single, fakeLogger().log);
+  assert.deepEqual(errors(quiet), []);
+  assert.deepEqual(warnings(quiet).filter((line) => line.includes('defaultProviders')), []);
+});
+
+test('defaultProviders: an id that does not exist, a provider that cannot serve the channel, or an unknown channel is an error', async () => {
+  const missing = platformConfig({ providers: [TWILIO, SMTP], actions: [SMS_ACTION], defaultProviders: { email: 'fastmial' } });
+  assert.deepEqual(errors(await validateConfig(missing, fakeLogger().log)),
+    ['platform.defaultProviders.email: no provider with id "fastmial" (did you mean "fastmail"?)']);
+
+  const wrongType = platformConfig({ providers: [TWILIO, TELEGRAM], actions: [SMS_ACTION], defaultProviders: { sms: 'telegram-home' } });
+  assert.deepEqual(errors(await validateConfig(wrongType, fakeLogger().log)),
+    ['platform.defaultProviders.sms: provider "telegram-home" is type telegram, which does not serve the sms channel']);
+
+  const noFrom = platformConfig({ providers: [{ ...TWILIO, emailFrom: undefined }, SMTP], actions: [SMS_ACTION], defaultProviders: { email: 'twilio-main' } });
+  assert.deepEqual(errors(await validateConfig(noFrom, fakeLogger().log)),
+    ['platform.defaultProviders.email: provider "twilio-main" cannot send email until emailFrom.address is set on it']);
+
+  const unknown = platformConfig({ providers: [TWILIO], actions: [SMS_ACTION], defaultProviders: { fax: 'twilio-main', sms: 42 } });
+  assert.deepEqual(errors(await validateConfig(unknown, fakeLogger().log)), [
+    'platform.defaultProviders.fax: "fax" is not a channel; use one of sms, email, telegram, ntfy',
+    'platform.defaultProviders.sms: must be a provider id',
+  ]);
+
+  const notObject = platformConfig({ providers: [TWILIO], actions: [SMS_ACTION], defaultProviders: 'twilio-main' });
+  assert.deepEqual(errors(await validateConfig(notObject, fakeLogger().log)),
+    ['platform.defaultProviders: must be an object mapping a channel (sms, email, telegram, ntfy) to a provider id']);
 });
