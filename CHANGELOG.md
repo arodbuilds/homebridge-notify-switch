@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet.
 
+## [1.1.1] - 2026-09-07
+
+Email deliverability and documentation. Nothing changes in the configuration format or the settings UI beyond one corrected line of copy.
+
+### Changed
+
+- **Both email paths mark messages as automated.** SMTP and Twilio Email sends carry the header `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies), through nodemailer's `headers` option and the Emails API's `content.headers` object respectively (SPEC sections 6.2 and 6.3).
+- **Twilio email tracking.** This release set out to disable Twilio's open and click tracking on every send, because the tracking pixel got a message scored 5.7 as spam at Fastmail. The Emails API documents no per-message setting for it, so nothing is sent and the README now says that Twilio may add tracking, that the plugin cannot turn it off, and that a household that wants none can use its own SMTP mailbox. The plan is recorded as a future item in SPEC section 15.
+- README: a "Which channel should I use?" section after the intro (email to start, Telegram or ntfy for push, SMS only when the recipient will not install anything); Twilio registration notes under the A2P 10DLC guide (Sole Proprietor 10DLC with its one brand, one campaign, one number and 1 message per second limits; toll-free verification; fees as of September 2026 with a link to Twilio's pricing page); the switch card screenshot placeholder is replaced by `assets/switch-config.png` with a caption.
+- SPEC.md: sections 6.2, 6.3, 11.3, 13, 14 and 15 record the above; status is current as of 1.1.1.
+- The package description on npm now lists ntfy: "Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on. Trigger them from HomeKit automations and scenes."
+- Version 1.1.1.
+
+### Fixed
+
+- Settings UI: the empty state of a group card's email list read "No email addresss yet."; it reads "No email addresses yet." The line was built by appending an `s` to the singular label, so the other lists keep reading "No phone numbers yet.", "No chat IDs yet." and "No topics yet." (SPEC section 11.3).
+- Harness: the Twilio Email request shape now includes the header inside `content` and nothing new at the top level, both email providers are checked for `Auto-Submitted: auto-generated`, the group card empty-state lines are checked in the browser, and the assets test tolerates the README screenshot.
+
 ## [1.1.0] - 2026-09-07
 
 A new way to reach people (ntfy), a simpler way to set up a switch, and a security review of the 1.0.1 code. A configuration written by 1.0.x still starts and sends unchanged. The settings UI reads your existing switches into the new editor and writes them back exactly as they were, with the one exception below.

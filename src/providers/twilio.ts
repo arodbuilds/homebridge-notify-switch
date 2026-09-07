@@ -9,6 +9,7 @@ import type {
 import { PROVIDER_CHANNELS } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import { parseJson, request, Semaphore, sendEach, shortMessage } from './http.js';
+import { autoSubmittedHeaders } from './mailHeaders.js';
 
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
 const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
@@ -302,7 +303,9 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
    * SPEC section 6.2: one request per action with every recipient in `to` (or, when the action hides
    * recipients from each other and there is more than one, in `bcc` with the from address in `to`);
    * `operationId` is the id for all of them. The API takes `from`, `to` and `bcc` as `{ address, name }`
-   * objects and requires `content.subject` and `content.html`; `content.text` carries the plain body.
+   * objects and requires `content.subject` and `content.html`; `content.text` carries the plain body and
+   * `content.headers` the one custom header, `Auto-Submitted: auto-generated`. The endpoint documents no
+   * per-message setting for open or click tracking, so none is sent.
    */
   private async sendEmail(req: SendRequest): Promise<RecipientResult[]> {
     const from = this.config.emailFrom;
@@ -319,6 +322,7 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
         subject: stripLineBreaks(req.subject ?? ''),
         html: plainTextAsHtml(req.body),
         text: req.body,
+        headers: autoSubmittedHeaders(),
       },
     };
 

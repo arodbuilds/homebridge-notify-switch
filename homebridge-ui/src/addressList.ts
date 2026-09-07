@@ -26,6 +26,9 @@ export interface AddressListOptions {
 
 const CHANNEL_LABEL: Record<Channel, string> = { sms: 'phone number', email: 'email address', telegram: 'chat ID', ntfy: 'topic' };
 
+/** Plural forms for the empty-state line ("No email addresses yet."), since not every label takes a plain `s`. */
+const CHANNEL_LABEL_PLURAL: Record<Channel, string> = { sms: 'phone numbers', email: 'email addresses', telegram: 'chat IDs', ntfy: 'topics' };
+
 /** Placeholders read as examples, never as values (SPEC section 11.2, item 15). */
 const PLACEHOLDER: Record<Exclude<Channel, 'sms'>, string> = {
   email: 'e.g. name@example.com', telegram: 'e.g. 123456789 or -1001234567890', ntfy: 'e.g. home-alerts-x7q2',
@@ -47,7 +50,7 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
   const render = (): void => {
     clear(rows);
     if (opts.values.length === 0) {
-      rows.appendChild(el('div', { class: 'form-text mb-2 ns-list-empty' }, opts.emptyText ?? `No ${CHANNEL_LABEL[opts.channel]}s yet.`));
+      rows.appendChild(el('div', { class: 'form-text mb-2 ns-list-empty' }, opts.emptyText ?? `No ${CHANNEL_LABEL_PLURAL[opts.channel]} yet.`));
     }
     opts.values.forEach((value, i) => {
       // List-entry Remove buttons stay single-click (SPEC section 11.2, item 11).

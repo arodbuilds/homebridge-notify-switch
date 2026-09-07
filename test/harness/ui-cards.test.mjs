@@ -221,6 +221,38 @@ test('fresh cards: no errors until a field is touched, then errors appear; the i
   }
 });
 
+test('group card empty state: each empty address list reads "No … yet." with the right plural', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    // The stored group has one phone number and nothing else: the three other lists show their empty line.
+    const family = page.locator('.card[data-path="groups[0]"]');
+    assert.deepEqual(await family.locator('.ns-list-empty').allTextContents(), ['No email addresses yet.', 'No chat IDs yet.', 'No topics yet.']);
+    assert.equal(await family.locator('[data-path="groups[0].sms"] .ns-list-empty').count(), 0, 'a list with an entry has no empty line');
+    assert.equal(await family.locator('[data-path="groups[0].email"] .ns-list-empty').textContent(), 'No email addresses yet.');
+
+    // A fresh group shows all four, in the order of the lists on the card.
+    await page.getByRole('button', { name: 'Add group' }).click();
+    const group = page.locator('.card[data-path="groups[1]"]');
+    assert.deepEqual(await group.locator('.ns-list-empty').allTextContents(),
+      ['No phone numbers yet.', 'No email addresses yet.', 'No chat IDs yet.', 'No topics yet.']);
+
+    // Adding an entry removes the line; removing the entry brings it back.
+    await group.getByRole('button', { name: 'Add email address' }).click();
+    assert.equal(await group.locator('[data-path="groups[1].email"] .ns-list-empty').count(), 0);
+    await group.locator('[data-path="groups[1].email"]').getByRole('button', { name: 'Remove email address 1' }).click();
+    assert.equal(await group.locator('[data-path="groups[1].email"] .ns-list-empty').textContent(), 'No email addresses yet.');
+
+    // The misspelling from 1.1.0 ("addresss") appears nowhere on the page.
+    assert.ok(!(await page.locator('#app').textContent()).includes('addresss'));
+  } finally {
+    await browser.close();
+  }
+});
+
 test('show help toggle and Variables toggle', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {

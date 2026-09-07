@@ -67,7 +67,8 @@ test('twilio email: one request for every recipient, operationId returned as id 
     assert.equal(fetch.calls[0].init.method, 'POST');
     assert.equal(fetch.calls[0].headers.Authorization, EXPECTED_AUTH);
     assert.equal(fetch.calls[0].headers['Content-Type'], 'application/json');
-    // Exact request shape of POST https://comms.twilio.com/v1/Emails: `address` keys, and `content` with subject, html and text.
+    // Exact request shape of POST https://comms.twilio.com/v1/Emails: `address` keys, and `content` with subject, html, text
+    // and the custom headers, which the endpoint nests inside `content` (SPEC section 6.2). Nothing else at the top level.
     assert.deepEqual(JSON.parse(fetch.calls[0].body), {
       from: { address: 'alerts@example.com', name: 'Home' },
       to: [{ address: 'a@example.com' }, { address: 'b@example.com' }],
@@ -76,8 +77,29 @@ test('twilio email: one request for every recipient, operationId returned as id 
         html: '<pre style="font-family: inherit; white-space: pre-wrap">'
           + 'Water detected under the sink &lt;kitchen&gt; &amp; &quot;pantry&quot;.\nCheck now.</pre>',
         text: body,
+        headers: { 'Auto-Submitted': 'auto-generated' },
       },
     });
+  } finally {
+    fetch.restore();
+  }
+});
+
+test('twilio email: every send carries Auto-Submitted: auto-generated in content.headers and no tracking field', async () => {
+  const fetch = installFetch(() => ({ status: 202, body: JSON.stringify({ operationId: 'op-1' }) }));
+  try {
+    await provider().send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b' });
+    await provider().send({ channel: 'email', recipients: ['a@example.com', 'b@example.com'], subject: 's', body: 'b', bcc: true });
+    await provider({ emailFrom: { address: 'alerts@example.com' } }).send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b' });
+    assert.equal(fetch.calls.length, 3);
+    for (const call of fetch.calls) {
+      const payload = JSON.parse(call.body);
+      assert.deepEqual(payload.content.headers, { 'Auto-Submitted': 'auto-generated' }, 'RFC 3834 header inside content, and nothing else');
+      assert.ok(!('headers' in payload), 'headers are not sent at the top level, where the endpoint does not read them');
+      assert.ok(!('tracking_settings' in payload), 'no SendGrid-only field the endpoint does not document');
+      // Nothing in the body could carry a credential: the API key pair travels only in the Authorization header.
+      assert.ok(!call.body.includes(TWILIO.apiKeySecret) && !call.body.includes(TWILIO.apiKeySid));
+    }
   } finally {
     fetch.restore();
   }

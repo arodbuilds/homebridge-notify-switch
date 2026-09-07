@@ -56,6 +56,22 @@ test('smtp: one message per action, recipients in to by default, header line bre
   assert.equal(mail.subject, 'Leak X-Injected: 1');
   assert.equal(mail.text, 'Water detected.');
   assert.ok(!('html' in mail));
+  assert.deepEqual(mail.headers, { 'Auto-Submitted': 'auto-generated' }, 'RFC 3834 header on every message, and nothing else');
+});
+
+test('smtp: every message carries Auto-Submitted: auto-generated, in To and in Bcc mode alike', async () => {
+  const transport = fakeTransport([accepted]);
+  const smtp = provider(transport);
+  await smtp.send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b' });
+  await smtp.send({ channel: 'email', recipients: RECIPIENTS, subject: 's', body: 'b', bcc: true });
+  assert.equal(transport.sent.length, 2);
+  for (const mail of transport.sent) {
+    assert.deepEqual(mail.headers, { 'Auto-Submitted': 'auto-generated' });
+  }
+  assert.notEqual(transport.sent[0].headers, transport.sent[1].headers, 'a fresh headers object per message');
+  // The login never travels in the message itself.
+  const serialized = JSON.stringify(transport.sent);
+  assert.ok(!serialized.includes(SMTP.password));
 });
 
 test('smtp: with bcc set, recipients go in bcc and the from address in to; a single recipient always goes in to', async () => {

@@ -11,6 +11,7 @@ import type {
 import { PROVIDER_CHANNELS, SMTP_SECURITIES } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
 import { Semaphore, shortMessage, sleep } from './http.js';
+import { autoSubmittedHeaders } from './mailHeaders.js';
 
 /** The part of a nodemailer transport this provider uses. The harness substitutes a fake. */
 export interface MailTransport {
@@ -72,8 +73,9 @@ interface Attempt {
 /**
  * SMTP provider (SPEC section 6.3) on nodemailer. One message per action with every recipient in
  * `to`; with the action's `bcc` option and more than one recipient, the recipients go in `bcc` and
- * the from address in `to` so they do not see each other. Certificate verification cannot be
- * disabled and nodemailer's `debug` and `logger` options are never set.
+ * the from address in `to` so they do not see each other. Every message carries
+ * `Auto-Submitted: auto-generated` (RFC 3834). Certificate verification cannot be disabled and
+ * nodemailer's `debug` and `logger` options are never set.
  */
 export class SmtpProvider implements Provider, ProviderDiagnostics {
   readonly type = 'smtp' as const;
@@ -210,6 +212,7 @@ export class SmtpProvider implements Provider, ProviderDiagnostics {
       ...(hide ? { to: identity, bcc: req.recipients } : { to: req.recipients }),
       subject: stripLineBreaks(req.subject ?? ''),
       text: req.body,
+      headers: autoSubmittedHeaders(),
     };
 
     const first = await this.attempt(req.recipients, mail);
