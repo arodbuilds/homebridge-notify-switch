@@ -2,22 +2,28 @@ import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
 import { BACKUP } from '../copy.js';
 import { button, checkboxField, clear, dangerLinkButton, el, openModal, selectField, textField } from '../dom.js';
-import { backupBlock, emptyConfig, exportConfig, readConfig } from '../model.js';
+import { backupBlock, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, readConfig } from '../model.js';
+import type { UiConfig } from '../model.js';
 import { countryOptions } from '../phone.js';
 import { validate } from '../validate.js';
 
-/** `notify-switch-backup-YYYY-MM-DD.json` for today, in local time. */
-export function backupFileName(now = new Date()): string {
+/** `notify-switch-backup-YYYY-MM-DD.json` for today, in local time; `-without-credentials` before the date for the shareable version. */
+export function backupFileName(now = new Date(), withoutCredentials = false): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
-  return `notify-switch-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return `notify-switch-backup${withoutCredentials ? '-without-credentials' : ''}-${date}.json`;
 }
 
-/** Downloads the current platform block as a JSON file. */
-function downloadBackup(app: App): void {
-  const text = JSON.stringify(exportConfig(app.config), null, 2);
+/**
+ * Downloads the current platform block as a JSON file: the full block, or the version with every secret
+ * field emptied and `credentialsRemoved: true` (SPEC section 11.2, item 12).
+ */
+function downloadBackup(app: App, withoutCredentials = false): void {
+  const block = withoutCredentials ? exportConfigWithoutCredentials(app.config) : exportConfig(app.config);
+  const text = JSON.stringify(block, null, 2);
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const link = el('a', { href: url, download: backupFileName(), hidden: true });
+  const link = el('a', { href: url, download: backupFileName(new Date(), withoutCredentials), hidden: true });
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -27,25 +33,30 @@ function downloadBackup(app: App): void {
 /**
  * Checks a backup's text before anything changes: JSON, then the platform block shape, then the same
  * rules the form applies (which mirror config.schema.json and startup validation). Returns the config
- * to load, or the list of problems.
+ * to load, or the list of problems. A backup without credentials (`credentialsRemoved: true`) is accepted
+ * with its secret fields empty; `emptied` lists their paths so the form can show their errors.
  */
-export function checkBackup(text: string): { config?: ReturnType<typeof readConfig>; errors: string[] } {
+export function checkBackup(text: string): { config?: UiConfig; errors: string[]; emptied: string[] } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    return { errors: [`Not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+    return { errors: [`Not valid JSON: ${err instanceof Error ? err.message : String(err)}`], emptied: [] };
   }
   const { block, error } = backupBlock(parsed);
   if (!block) {
-    return { errors: [error ?? 'The file is not a Notify Switch backup.'] };
+    return { errors: [error ?? 'The file is not a Notify Switch backup.'], emptied: [] };
   }
+  // The marker is not a platform field; it must not reach config.json.
+  const withoutCredentials = block.credentialsRemoved === true;
+  delete block.credentialsRemoved;
   const config = readConfig(block);
-  const issues = validate(config);
+  const emptied = withoutCredentials ? emptySecretPaths(config) : [];
+  const issues = validate(config).filter((issue) => !emptied.includes(issue.path));
   if (issues.length > 0) {
-    return { errors: issues.map((issue) => `${issue.label}: ${issue.message}`) };
+    return { errors: issues.map((issue) => `${issue.label}: ${issue.message}`), emptied: [] };
   }
-  return { config, errors: [] };
+  return { config, errors: [], emptied };
 }
 
 /** Settings > Advanced (SPEC section 11.2, item 12): backup, restore, and reset. Collapsed by default. */
@@ -74,7 +85,13 @@ function advancedPanel(app: App): HTMLElement {
       }
       clear(restoreStatus);
       app.replaceConfig(result.config, 'restore');
-      toastSuccess(BACKUP.restored);
+      if (result.emptied.length > 0) {
+        // The secrets the backup left out: their errors show at once and the issue list names them.
+        app.touchFields(result.emptied);
+        toastSuccess(BACKUP.restoredWithoutCredentials);
+      } else {
+        toastSuccess(BACKUP.restored);
+      }
     }).catch((err: unknown) => {
       showErrors([`Could not read the file: ${err instanceof Error ? err.message : String(err)}`]);
     });
@@ -111,8 +128,11 @@ function advancedPanel(app: App): HTMLElement {
     el('summary', { class: 'ns-secondary small' }, BACKUP.summary),
     el('div', { class: 'mt-2' },
       el('div', { class: 'mb-3' },
-        el('div', { class: 'form-text mb-2 backup-note' }, BACKUP.backupNote),
-        button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm'),
+        el('div', { class: 'ns-backup-actions' },
+          button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm'),
+          button(BACKUP.downloadWithoutCredentials, () => downloadBackup(app, true), 'btn btn-outline-secondary btn-sm'),
+        ),
+        el('div', { class: 'form-text backup-note' }, BACKUP.backupNote),
       ),
       el('div', { class: 'mb-3' },
         el('label', { class: 'form-label' }, BACKUP.restore),

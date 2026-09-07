@@ -2,7 +2,7 @@
   "name": "homebridge-notify-switch",
   "displayName": "Notify Switch",
   "type": "module",
-  "version": "0.1.0-beta.7",
+  "version": "1.0.0",
   "description": "Homebridge switches that send SMS, email, or Telegram messages when turned on. Trigger them from HomeKit automations and scenes.",
   "author": {
     "name": "Alex Rodriguez",
@@ -19,17 +19,15 @@
   },
   "keywords": [
     "homebridge-plugin",
-    "supports-hap",
     "homebridge",
     "homekit",
     "notification",
-    "notify",
+    "alert",
     "sms",
     "twilio",
     "email",
     "smtp",
-    "telegram",
-    "switch"
+    "telegram"
   ],
   "main": "dist/index.js",
   "files": [

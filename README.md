@@ -14,12 +14,12 @@ Do not claim it. Once the plugin is verified, replace this comment with the badg
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 -->
 
-[![npm](https://img.shields.io/npm/v/homebridge-notify-switch/beta)](https://www.npmjs.com/package/homebridge-notify-switch)
+[![npm](https://img.shields.io/npm/v/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
 [![Build and Lint](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml/badge.svg)](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml)
 
 A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Turn a switch on from a HomeKit automation or scene, it sends one or more preset messages by SMS, email, or Telegram, and it turns itself back off. Any HomeKit event can notify people.
 
-> **Status:** beta. The current release is shown in the badge above. The configuration format is final and covered by the full specification in [SPEC.md](https://github.com/arodbuilds/homebridge-notify-switch/blob/latest/SPEC.md). Please report problems in the [issue tracker](https://github.com/arodbuilds/homebridge-notify-switch/issues).
+> **Status:** The configuration format is stable and covered by the full specification in [SPEC.md](https://github.com/arodbuilds/homebridge-notify-switch/blob/latest/SPEC.md). Please report problems in the [issue tracker](https://github.com/arodbuilds/homebridge-notify-switch/issues).
 
 ## Contents
 
@@ -41,6 +41,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 - [Child bridge](#child-bridge)
 - [Security notes](#security-notes)
 - [Troubleshooting](#troubleshooting)
+- [Getting help](#getting-help)
 - [Development](#development)
 - [Changelog](#changelog)
 - [About](#about)
@@ -61,10 +62,8 @@ Things it does not do in this version: receive replies, report delivery status a
 
 Requirements: Node.js 22.12 or newer (or 24), and Homebridge 1.6 or newer (2.x included).
 
-While the plugin is in beta, install the `beta` release:
-
-- **Homebridge UI**: on the Plugins page search for `homebridge-notify-switch`, open the plugin's menu, choose **Manage Version**, and pick the newest `beta` version.
-- **Command line**: `sudo npm install -g homebridge-notify-switch@beta`
+- **Homebridge UI**: on the Plugins page search for the exact name `homebridge-notify-switch` and click **Install**.
+- **Command line**: `sudo npm install -g homebridge-notify-switch`
 
 The plugin does nothing until it is configured, and it never registers accessories while the configuration has errors. Running it as a [child bridge](#child-bridge) is recommended.
 
@@ -422,7 +421,8 @@ The file is read once at startup, and again when the settings UI runs **Test con
 At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure holds three actions:
 
 - **Download backup** saves the current platform configuration as `notify-switch-backup-YYYY-MM-DD.json`. The file contains your provider credentials, so store it like a password.
-- **Restore from backup** takes such a file (or a whole Homebridge `config.json` holding a NotifySwitch block), checks it against the same rules the form applies, and lists every problem if it fails. If it passes, the form is replaced with the file's contents and **Save** is enabled; nothing is written until you click Save.
+- **Download backup without credentials** saves the same file as `notify-switch-backup-without-credentials-YYYY-MM-DD.json` with every secret (API key secret, SMTP password, bot token, and every field a `credentialsFile` may supply) replaced by an empty string and `"credentialsRemoved": true` at the top. It is safe to attach to an issue when [asking for help](#getting-help).
+- **Restore from backup** takes either file (or a whole Homebridge `config.json` holding a NotifySwitch block), checks it against the same rules the form applies, and lists every problem if it fails. If it passes, the form is replaced with the file's contents and **Save** is enabled; nothing is written until you click Save. A backup without credentials loads with its secret fields empty and marked as errors, so **Save** stays disabled until you enter them again.
 - **Reset plugin to fresh install** opens a confirmation that lists what happens: all providers, groups, switches, and settings are removed; switches disappear from the Home app after the next restart; credentials files on disk are not touched. It offers **Download backup first**, and the red **Confirm** button stays disabled until you type `RESET`. Confirming replaces the form with the empty default configuration and enables **Save**.
 
 After you save a configuration with no switches and restart Homebridge, the plugin removes every accessory it had registered, including the master switch, and forgets the master switch position and any failure sensor state. A configuration with errors never does this: cached accessories stay until the errors are fixed.
@@ -437,7 +437,7 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 - Twilio accepts API keys only, never the Auth Token, so a leaked key can be revoked without touching the account. SMTP setups should use an app password that you can revoke on its own. A Telegram bot token only controls that bot; revoke it with BotFather's `/revoke`.
 - Credentials are never written to the log at any level. Phone numbers and email addresses are partially masked at info level (`+1678***0101`, `a***@example.com`), and message bodies are logged only when `debug` is on. Provider errors are reduced to a code and a short message before logging.
 - The settings UI's **Test connection**, **Look up numbers**, **Find people and groups**, and **Test send** use the credentials from the form in memory for that one request and never store, log, or return them. They only connect to the mail host you configured and to Twilio's and Telegram's APIs.
-- **Download backup** writes the same credentials into the file you download. Treat it like `config.json`.
+- **Download backup** writes the same credentials into the file you download. Treat it like `config.json`. **Download backup without credentials** leaves every secret out; that is the file to share.
 - TLS certificate verification cannot be disabled.
 - Email subjects and from names have line breaks removed. Telegram bodies are sent as plain text unless you choose a `parseMode`.
 - Cooldown and the master switch limit the damage from a runaway automation.
@@ -515,11 +515,18 @@ Group chat IDs are negative. If a group was upgraded to a supergroup, its ID cha
 - **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to and is a link that takes you to the field. A field shows its error only after you leave it (or jump to it from the list), and a card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save." With more than three items the list collapses to "{n} fields need attention"; click **Show all**.
 - **"You have unsaved changes from earlier" appears at the top**: you closed the settings without saving last time. **Restore** brings those changes back into the form (every field is checked at once); **Discard** forgets them. The draft is kept in your browser for 24 hours and is cleared once the same configuration has been saved, or when you reset the plugin.
 - **The default country was wrong on first load**: on a fresh install the settings UI guesses it from your browser's language, else from the Homebridge host's time zone, else United States. Pick the right one under Settings; once saved it is never changed for you.
-- **Help text is hard to read in dark mode**: update the plugin; since 0.1.0-beta.6 secondary text follows the Homebridge UI theme, including the way the Homebridge UI marks dark mode inside the settings page.
+- **Help text is hard to read in dark mode**: update the plugin; secondary text follows the Homebridge UI theme, including the way the Homebridge UI marks dark mode inside the settings page.
 - **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.
 
-If you are stuck, open an [issue](https://github.com/arodbuilds/homebridge-notify-switch/issues) with the log lines (remove any addresses you do not want public) and your configuration with the secrets removed.
+## Getting help
+
+If you are stuck, open an [issue](https://github.com/arodbuilds/homebridge-notify-switch/issues) and attach:
+
+1. A **backup without credentials**: in the plugin settings open **Settings > Advanced** and click **Download backup without credentials**. The file holds your whole configuration with every secret replaced by an empty string, so it is safe to share. Remove any phone numbers or addresses you do not want public.
+2. The relevant lines from the Homebridge log: the lines prefixed with the platform name (`[Notify Switch]` unless you renamed it) around the time of the problem, including any that name a field path such as `switches[0].actions[0].body`. Turn on `debug` in the plugin settings first if the failure is about a send; even then the log never contains credentials.
+
+Say which Homebridge, Node.js and plugin versions you run (the settings page footer shows the plugin version) and what you expected to happen.
 
 ## Development
 

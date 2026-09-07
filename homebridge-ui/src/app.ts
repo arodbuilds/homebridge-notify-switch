@@ -24,6 +24,11 @@ export interface App {
    */
   replaceConfig(config: UiConfig, reason?: 'restore' | 'reset'): void;
   /**
+   * Marks the fields at `paths` touched so their errors show inline (SPEC section 11.2, item 15): the secret
+   * fields a backup without credentials left empty (item 12).
+   */
+  touchFields(paths: string[]): void;
+  /**
    * Marks a provider, group or switch that was just added. Its card's issues stay out of the issue list
    * until a field in it is touched (SPEC section 11.2, item 15).
    */

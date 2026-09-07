@@ -53,10 +53,14 @@ test('settings advanced: Download backup writes the current configuration as not
     const advanced = page.locator(ADVANCED);
     assert.equal(await advanced.evaluate((node) => node.open), false, 'collapsed by default');
     await advanced.locator('summary').click();
-    assert.equal(await advanced.locator('.backup-note').textContent(), 'The backup file contains your provider credentials. Store it like a password.');
+    assert.equal(await advanced.locator('.backup-note').textContent(),
+      'The full backup contains your provider credentials; store it like a password. The version without credentials is safe to share when asking for help.');
+    // The note sits under the two buttons, which share one row.
+    assert.equal(await advanced.locator('.ns-backup-actions button').count(), 2);
+    assert.equal(await advanced.locator('.ns-backup-actions + .backup-note').count(), 1);
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      advanced.getByRole('button', { name: 'Download backup' }).click(),
+      advanced.getByRole('button', { name: 'Download backup', exact: true }).click(),
     ]);
     assert.match(download.suggestedFilename(), /^notify-switch-backup-\d{4}-\d{2}-\d{2}\.json$/);
     const path = await download.path();
@@ -65,6 +69,99 @@ test('settings advanced: Download backup writes the current configuration as not
     assert.equal(saved.platform, 'NotifySwitch');
     assert.equal(saved.providers[0].apiKeySecret, TWILIO.apiKeySecret, 'the backup carries the credentials');
     assert.equal(saved.switches[0].name, 'Water Leak Alert');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('settings advanced: Download backup without credentials empties every secret field and marks the file', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, {
+      ...CONFIG,
+      providers: [TWILIO, SMTP, TELEGRAM, { ...TWILIO, id: 'twilio-file', name: 'Twilio file', credentialsFile: 'twilio.json' }],
+    });
+    const advanced = page.locator(ADVANCED);
+    await advanced.locator('summary').click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      advanced.getByRole('button', { name: 'Download backup without credentials' }).click(),
+    ]);
+    assert.match(download.suggestedFilename(), /^notify-switch-backup-without-credentials-\d{4}-\d{2}-\d{2}\.json$/);
+    const { readFileSync } = await import('node:fs');
+    const saved = JSON.parse(readFileSync(await download.path(), 'utf8'));
+    assert.equal(saved.credentialsRemoved, true);
+    assert.equal(saved.platform, 'NotifySwitch');
+    const [twilio, smtp, telegram, fromFile] = saved.providers;
+    assert.equal(twilio.apiKeySecret, '', 'the Twilio secret is emptied');
+    assert.equal(twilio.accountSid, TWILIO.accountSid, 'the Account SID is not a secret and stays');
+    assert.equal(twilio.apiKeySid, TWILIO.apiKeySid);
+    assert.equal(smtp.password, '', 'the SMTP password is emptied');
+    assert.equal(smtp.username, SMTP.username, 'the SMTP username stays without a credentials file');
+    assert.equal(smtp.host, SMTP.host);
+    assert.equal(telegram.botToken, '', 'the bot token is emptied');
+    // With a credentialsFile every key the file may supply is emptied too; the path to the file stays.
+    assert.deepEqual([fromFile.accountSid, fromFile.apiKeySid, fromFile.apiKeySecret], ['', '', '']);
+    assert.equal(fromFile.credentialsFile, 'twilio.json');
+    assert.equal(fromFile.smsSenders[0], TWILIO.smsSenders[0]);
+    assert.equal(saved.switches[0].name, 'Water Leak Alert', 'everything else is the full backup');
+    assert.equal(saved.groups[0].sms[0], '+16785550101');
+    assert.equal(JSON.stringify(saved).includes(TWILIO.apiKeySecret), false, 'no secret anywhere in the file');
+    assert.equal(JSON.stringify(saved).includes(SMTP.password), false);
+    assert.equal(JSON.stringify(saved).includes(TELEGRAM.botToken), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('settings advanced: Restore from a backup without credentials loads everything else and shows the empty secret fields as errors', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    const advanced = page.locator(ADVANCED);
+    await advanced.locator('summary').click();
+    const picker = advanced.locator('input[type="file"]');
+    const stripped = {
+      ...BACKUP,
+      credentialsRemoved: true,
+      providers: [{ ...SMTP, password: '' }, { ...TELEGRAM, botToken: '' }],
+    };
+    await picker.setInputFiles(file('shared.json', stripped));
+    await page.waitForSelector('.card[data-path="providers[1]"]');
+    assert.equal(await page.locator(`${ADVANCED} .restore-status .alert-danger`).count(), 0, 'accepted');
+    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header > span').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
+    assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored');
+    assert.equal(await page.locator('.card[data-path="switches[0]"] [data-path="switches[0].name"] input').inputValue(), 'Smoke Alarm');
+    assert.deepEqual(await page.evaluate(() => window.__hb.toasts.at(-1)), ['success', 'Backup loaded. Enter the credentials it left out, then click Save.']);
+    // The emptied secrets are touched: their errors show inline and the issue list names them. Save waits for them.
+    const password = page.locator('[data-path="providers[0].password"]');
+    assert.equal(await password.locator('.invalid-feedback').textContent(), 'Password is required.');
+    assert.equal(await password.locator('input').evaluate((node) => node.classList.contains('is-invalid')), true);
+    const token = page.locator('[data-path="providers[1].botToken"]');
+    assert.match(await token.locator('.invalid-feedback').textContent(), /does not look like a bot token/);
+    assert.deepEqual(await page.locator('.issues .ns-issue-link').evaluateAll((nodes) => nodes.map((node) => node.dataset.issuePath)),
+      ['providers[0].password', 'providers[1].botToken']);
+    assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:');
+    assert.equal(await page.evaluate(() => window.__hb.save.at(-1)), false, 'Save is disabled until the secrets are entered');
+    await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].name === 'Restored');
+    const pushed = await page.evaluate(() => window.__hb.updates.at(-1)[0]);
+    assert.equal('credentialsRemoved' in pushed, false, 'the marker never reaches config.json');
+    assert.equal(pushed.providers[0].host, SMTP.host);
+    // Other errors in such a file are still rejected before anything changes.
+    await picker.setInputFiles(file('broken.json', { ...stripped, providers: [{ ...SMTP, password: '', host: '' }] }));
+    await page.waitForFunction(() => /Host is required/.test(document.querySelector('.restore-status')?.textContent ?? ''));
+    assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored', 'the form is untouched');
+    // Typing the password clears its error and its list entry.
+    await password.locator('input').fill(SMTP.password);
+    await password.locator('input').blur();
+    assert.equal(await password.locator('.invalid-feedback').textContent(), '');
+    assert.equal(await page.locator('.issues .ns-issue-link[data-issue-path="providers[0].password"]').count(), 0);
   } finally {
     await browser.close();
   }
