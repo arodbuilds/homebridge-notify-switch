@@ -18,5 +18,7 @@ await build({
   format: 'iife',
   target: 'es2020',
   legalComments: 'none',
+  // The brand mark is inlined as text so the footer draws it with no file to load (SPEC section 11.2, item 20).
+  loader: { '.svg': 'text' },
   logLevel: 'info',
 });

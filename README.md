@@ -1,12 +1,4 @@
-<p align="center">
-<img src="https://github.com/homebridge/branding/raw/latest/logos/homebridge-wordmark-logo-vertical.png" width="150">
-</p>
-
-<span align="center">
-
-# Notify Switch
-
-</span>
+<img src="assets/notify-switch-banner.png" alt="Notify Switch" width="100%">
 
 <!--
 verified-by-homebridge: this plugin has not been through Homebridge verification yet.

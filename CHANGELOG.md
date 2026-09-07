@@ -6,8 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-07
+
+Closes the remaining pre-release audit findings and adds the brand assets. The only user-visible changes are the SMTP Test connection success line and the mark in the settings page footer.
+
+### Added
+
+- Brand assets under `assets/`: `notify-switch-192.png`, `notify-switch-512.png`, `notify-switch-banner.png` (2560x640), `notify-switch-social.png` (2560x1280), `notify-switch-dark.svg`, `notify-switch-light.svg` and `notify-switch-mark.svg`. The SVGs contain only the drawing; their embedded metadata was stripped. The directory is listed in `.npmignore` and is not in the package.json `files` array, so nothing under it is published (SPEC section 13, items 8 and 9).
+- Settings UI: the Notify Switch mark, inlined into the UI bundle from `assets/notify-switch-mark.svg` at build time, precedes the plugin name in the footer credit at 20px. It is drawn with `currentColor`, so it follows the host's theme, and is hidden from assistive technology. It is not added to the getting-started header. No new runtime dependency (SPEC section 11.2, item 20).
+- Harness: `maskAddress` is covered for phone numbers, email addresses and Telegram chat ids, short and empty values included; the flip handler's log output is checked at info level (the body and subject never appear, every address is masked, failures are warned with the address masked in the error too) and with `debug` on (the body and the full addresses appear). A packaging test asserts the bundle inlines the mark as shipped, the SVGs carry no metadata, and `npm pack` leaves out `assets/`, the source and the tests.
+
 ### Changed
 
+- SMTP Test connection success line: "Connected to {host}:{port} and logged in." The submitted username is no longer echoed; the harness asserts that no Test connection response contains it, on success, on a plain failure, and on an error that quotes the login (SPEC section 11.2, item 3).
+- `config.schema.json` now matches the runtime: `providers` and `switches` are optional (only `name` is required), as SPEC section 10 says an empty or absent list is not an error; `smtpPreset` is declared as an optional hidden string with the preset enum (`fastmail`, `gmail`, `icloud`, `outlook`, `yahoo`, `zoho`), so a value stored by the settings UI passes the schema; the `sender` and `messagingServiceSid` patterns no longer accept an empty string. The settings UI already omits both keys when blank, so nothing it saves changes.
+- README: the Homebridge logo at the top is replaced by `assets/notify-switch-banner.png` at full width with the alt text "Notify Switch"; the badges stay below it. The centered "Notify Switch" heading under the old logo is gone, since the banner carries the name.
+- SPEC.md: sections 5.2, 5.5, 10, 11.2 (items 3 and 20), 11.3 and 13 record the above; the configuration example no longer shows an empty `messagingServiceSid`.
 - GitHub issue forms replace the markdown issue templates: a bug report (versions, host, area, what happened, expected, steps, log lines, backup without credentials, and two confirmation checkboxes), a feature request, and a provider request, each with a title prefix and label. Blank issues are off; the chooser links to the README setup guide and the Homebridge Discord.
 - README: Getting help links straight to the bug report form.
 - CLAUDE.md: the runtime dependency rule names `nodemailer` and `@homebridge/plugin-ui-utils`, matching package.json and SPEC section 12.
@@ -219,7 +233,8 @@ Usability and copy. Runtime behavior does not change.
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.7...v1.0.0
 [0.1.0-beta.7]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.5...v0.1.0-beta.6

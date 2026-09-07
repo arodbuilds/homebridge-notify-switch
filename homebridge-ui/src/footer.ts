@@ -1,11 +1,13 @@
 import { FOOTER } from './copy.js';
 import { el } from './dom.js';
+import { renderMark } from './mark.js';
 
 /**
  * Version and credit footer (SPEC section 11.2, item 20): the last element on the page, one line of
  * secondary text. The version is asked from the plugin's UI server, which reads it from the installed
- * package.json, so it always reflects the installed package. Both links open in a new tab; the site
- * link carries a `ref` parameter and nothing else is tracked.
+ * package.json, so it always reflects the installed package. The plugin name is preceded by the brand
+ * mark at 20px, drawn in the text colour. Both links open in a new tab; the site link carries a `ref`
+ * parameter and nothing else is tracked.
  */
 
 interface VersionResult {
@@ -13,6 +15,9 @@ interface VersionResult {
   message: string;
   version?: unknown;
 }
+
+/** Height of the brand mark beside the plugin name, in CSS pixels. */
+const MARK_SIZE = 20;
 
 function outLink(text: string, href: string): HTMLAnchorElement {
   return el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text);
@@ -24,7 +29,8 @@ function item(...children: Array<Node | string>): HTMLElement {
 
 /** Renders the footer and fills in the version once the server answers. */
 export function renderFooter(): HTMLElement {
-  const version = item(FOOTER.name);
+  const label = document.createTextNode(FOOTER.name);
+  const version = item(el('span', { class: 'ns-mark-label' }, renderMark(MARK_SIZE), label));
   const separator = (): string => ' · ';
   const footer = el('footer', { class: 'ns-footer form-text' },
     version, separator(),
@@ -37,7 +43,7 @@ export function renderFooter(): HTMLElement {
     .then(() => window.homebridge.request('/version', {}) as Promise<VersionResult>)
     .then((result) => {
       if (result && result.ok && typeof result.version === 'string' && result.version.length > 0) {
-        version.textContent = `${FOOTER.name} v${result.version}`;
+        label.textContent = `${FOOTER.name} v${result.version}`;
       }
     })
     .catch(() => undefined);
