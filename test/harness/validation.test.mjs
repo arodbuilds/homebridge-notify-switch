@@ -29,6 +29,21 @@ test('validation: every channel validates without a "not yet implemented" warnin
   assert.deepEqual([...result.providers.keys()].sort(), ['fastmail', 'telegram-home', 'twilio-main']);
 });
 
+test('validation: bcc is carried into the resolved email action, defaults to off, and is ignored with a warning on other channels', async () => {
+  const config = platformConfig({
+    providers: [TWILIO, SMTP],
+    groups: [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'] }],
+    actions: [{ ...SMTP_ACTION, bcc: true }, TWILIO_EMAIL_ACTION, { ...SMS_ACTION, bcc: true }],
+  });
+  const result = await validateConfig(config, fakeLogger().log);
+  assert.deepEqual(errors(result), []);
+  assert.deepEqual(warnings(result), ['switches[0].actions[2].bcc: only applies to the email channel and is ignored for sms']);
+  assert.equal(result.switches[0].actions[0].bcc, true);
+  assert.equal(result.switches[0].actions[1].bcc, undefined);
+  assert.equal(result.switches[0].actions[2].bcc, undefined);
+  assert.equal(result.config.switches[0].actions[0].bcc, true);
+});
+
 test('validation: an email action on a Twilio provider without emailFrom is a blocking error with a field path', async () => {
   const config = platformConfig({ providers: [{ ...TWILIO, emailFrom: undefined }], actions: [TWILIO_EMAIL_ACTION] });
   const result = await validateConfig(config, fakeLogger().log);

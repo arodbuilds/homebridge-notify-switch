@@ -83,6 +83,29 @@ test('twilio email: one request for every recipient, operationId returned as id 
   }
 });
 
+test('twilio email: with bcc set, recipients go in bcc and the from address in to; a single recipient always goes in to', async () => {
+  const fetch = installFetch(() => ({ status: 202, body: JSON.stringify({ operationId: 'op-9' }) }));
+  try {
+    const results = await provider().send({ channel: 'email', recipients: ['a@example.com', 'b@example.com'], subject: 's', body: 'b', bcc: true });
+    assert.deepEqual(results.map((r) => r.ok), [true, true]);
+    const hidden = JSON.parse(fetch.calls[0].body);
+    assert.deepEqual(hidden.to, [{ address: 'alerts@example.com' }], 'the from address is the visible recipient');
+    assert.deepEqual(hidden.bcc, [{ address: 'a@example.com' }, { address: 'b@example.com' }]);
+
+    await provider().send({ channel: 'email', recipients: ['a@example.com'], subject: 's', body: 'b', bcc: true });
+    const single = JSON.parse(fetch.calls[1].body);
+    assert.deepEqual(single.to, [{ address: 'a@example.com' }], 'one recipient is always addressed directly');
+    assert.ok(!('bcc' in single));
+
+    await provider().send({ channel: 'email', recipients: ['a@example.com', 'b@example.com'], subject: 's', body: 'b' });
+    const open = JSON.parse(fetch.calls[2].body);
+    assert.deepEqual(open.to, [{ address: 'a@example.com' }, { address: 'b@example.com' }], 'without the option everyone is in to');
+    assert.ok(!('bcc' in open));
+  } finally {
+    fetch.restore();
+  }
+});
+
 test('twilio email: from without a name is sent as address only', async () => {
   const fetch = installFetch(() => ({ status: 202, body: JSON.stringify({ operationId: 'op-1' }) }));
   try {

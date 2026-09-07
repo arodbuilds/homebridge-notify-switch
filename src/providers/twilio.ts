@@ -299,9 +299,10 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
   }
 
   /**
-   * SPEC section 6.2: one request per action with every recipient in `to`; `operationId` is the id for
-   * all of them. The API takes `from` and `to` as `{ address, name }` objects and requires
-   * `content.subject` and `content.html`; `content.text` carries the plain body.
+   * SPEC section 6.2: one request per action with every recipient in `to` (or, when the action hides
+   * recipients from each other and there is more than one, in `bcc` with the from address in `to`);
+   * `operationId` is the id for all of them. The API takes `from`, `to` and `bcc` as `{ address, name }`
+   * objects and requires `content.subject` and `content.html`; `content.text` carries the plain body.
    */
   private async sendEmail(req: SendRequest): Promise<RecipientResult[]> {
     const from = this.config.emailFrom;
@@ -309,9 +310,11 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
       return req.recipients.map((recipient) => ({ recipient, ok: false, error: 'emailFrom is not configured on this provider' }));
     }
     const fromName = from.name ? stripLineBreaks(from.name) : '';
+    const hide = req.bcc === true && req.recipients.length > 1;
     const payload = {
       from: fromName ? { address: from.address, name: fromName } : { address: from.address },
-      to: req.recipients.map((address) => ({ address })),
+      to: hide ? [{ address: from.address }] : req.recipients.map((address) => ({ address })),
+      ...(hide ? { bcc: req.recipients.map((address) => ({ address })) } : {}),
       content: {
         subject: stripLineBreaks(req.subject ?? ''),
         html: plainTextAsHtml(req.body),

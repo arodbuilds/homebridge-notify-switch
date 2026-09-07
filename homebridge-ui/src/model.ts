@@ -31,6 +31,8 @@ export interface UiProvider {
   username: string;
   password: string;
   from: UiEmailIdentity;
+  /** Mail provider preset key, kept for redisplay only (SPEC section 11.2, item 22); '' means Other. */
+  smtpPreset: string;
   // telegram
   botToken: string;
   parseMode: TelegramParseMode;
@@ -52,6 +54,8 @@ export interface UiAction {
   recipients: string[];
   subject: string;
   body: string;
+  /** Email only: hide recipients from each other (SPEC section 6.2 and 6.3). */
+  bcc: boolean;
 }
 
 export interface UiSwitch {
@@ -113,7 +117,7 @@ export function newProvider(type: ProviderType = 'twilio'): UiProvider {
   return {
     id: '', type, name: '', credentialsFile: '',
     accountSid: '', apiKeySid: '', apiKeySecret: '', smsSenders: [], messagingServiceSid: '', emailFrom: { address: '', name: '' },
-    host: '', port: 465, security: 'ssl', username: '', password: '', from: { address: '', name: '' },
+    host: '', port: 465, security: 'ssl', username: '', password: '', from: { address: '', name: '' }, smtpPreset: '',
     botToken: '', parseMode: 'none',
   };
 }
@@ -123,7 +127,7 @@ export function newGroup(): UiGroup {
 }
 
 export function newAction(providerId = '', channel: Channel = 'sms'): UiAction {
-  return { providerId, channel, sender: '', groups: [], recipients: [], subject: '', body: '' };
+  return { providerId, channel, sender: '', groups: [], recipients: [], subject: '', body: '', bcc: false };
 }
 
 /** RFC 4122 v4 UUID. `crypto.randomUUID` needs a secure context, which a LAN Homebridge UI over http is not. */
@@ -175,6 +179,7 @@ function readProvider(raw: unknown): UiProvider {
   p.username = str(r.username);
   p.password = str(r.password);
   p.from = identity(r.from);
+  p.smtpPreset = str(r.smtpPreset);
   p.botToken = str(r.botToken);
   p.parseMode = oneOf(r.parseMode, TELEGRAM_PARSE_MODES, 'none');
   return p;
@@ -195,6 +200,7 @@ function readAction(raw: unknown): UiAction {
     recipients: list(r.recipients),
     subject: str(r.subject),
     body: str(r.body),
+    bcc: bool(r.bcc, false),
   };
 }
 
@@ -277,6 +283,9 @@ export function exportProvider(p: UiProvider): Raw {
       out.password = p.password;
     }
     out.from = cleanIdentity(p.from) ?? { address: '' };
+    if (p.smtpPreset.trim()) {
+      out.smtpPreset = p.smtpPreset.trim();
+    }
     break;
   }
   case 'telegram':
@@ -296,6 +305,9 @@ function exportAction(a: UiAction): Raw {
   out.recipients = trimList(a.recipients);
   if (a.channel === 'email' && a.subject.trim()) {
     out.subject = a.subject.trim();
+  }
+  if (a.channel === 'email' && a.bcc) {
+    out.bcc = true;
   }
   out.body = a.body;
   return out;

@@ -383,6 +383,10 @@ function readAction(c: Collector, raw: unknown, path: string, defaultCountry: st
   if (subject && channel !== 'email') {
     c.warn(`${path}.subject`, `only applies to the email channel and is ignored for ${channel}`);
   }
+  const bcc = readBoolean(c, raw, 'bcc', path, false);
+  if (bcc && channel !== 'email') {
+    c.warn(`${path}.bcc`, `only applies to the email channel and is ignored for ${channel}`);
+  }
   return {
     providerId,
     channel,
@@ -391,6 +395,7 @@ function readAction(c: Collector, raw: unknown, path: string, defaultCountry: st
     recipients: normalizeAddressList(c, readStringArray(c, raw, 'recipients', path), `${path}.recipients`, channel, defaultCountry),
     subject: channel === 'email' && subject ? stripLineBreaks(subject) : undefined,
     body,
+    bcc: channel === 'email' && bcc ? true : undefined,
   };
 }
 
@@ -567,6 +572,7 @@ async function resolveSwitch(
       recipients,
       subject: action.channel === 'email' ? (action.subject ?? sw.name) : undefined,
       body: action.body,
+      bcc: action.channel === 'email' && action.bcc ? true : undefined,
     });
   }
 

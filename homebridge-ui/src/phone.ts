@@ -108,9 +108,11 @@ export function sanitizePhoneText(text: string): string {
   return kept.replace(/(?!^)\+/g, '');
 }
 
+/** An example number for the country, marked as an example so it is never mistaken for a value (SPEC section 11.2, item 15). */
 function placeholderFor(country: CountryCode): string {
   try {
-    return getExampleNumber(country, examples)?.formatNational() ?? '';
+    const example = getExampleNumber(country, examples)?.formatNational();
+    return example ? `e.g. ${example}` : '';
   } catch {
     return '';
   }

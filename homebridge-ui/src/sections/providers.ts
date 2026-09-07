@@ -6,16 +6,17 @@ import { callServer } from '../api.js';
 import type { App } from '../app.js';
 import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
 import {
-  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, PROVIDER_CHOOSER, PROVIDERS_SECTION, SMTP_HELP, TELEGRAM_HELP,
-  TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, PROVIDER_CHOOSER, PROVIDER_NAME_HELP, PROVIDER_TYPE_LABEL,
+  PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
-  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpText, linkButton, linkOut, numberField, openModal, paragraph,
-  passwordField, selectField, statusBox, textField,
+  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, linkOut, numberField, openModal,
+  outlineButton, paragraph, passwordField, selectField, setHelp, statusBox, textField, uniqueId,
 } from '../dom.js';
 import { createProvider, exportProvider, slugify, uniqueSlug } from '../model.js';
 import type { UiProvider } from '../model.js';
 import { qrElement } from '../qr.js';
+import { OTHER_PRESET_KEY, OTHER_PRESET_LABEL, SMTP_PRESETS, smtpPreset } from '../smtpPresets.js';
 import { groupTitle } from './groups.js';
 
 export function providerTitle(p: UiProvider): string {
@@ -42,7 +43,8 @@ function advancedDisclosure(app: App, p: UiProvider, path: string, id: HTMLEleme
     p.credentialsFile = v;
     app.changed();
   }, {
-    path: `${path}.credentialsFile`, monospace: true, placeholder: `notify-switch-${p.type}.json`, help: CREDENTIALS_FILE_HELP, helpLink: CREDENTIALS_FILE_LINK,
+    path: `${path}.credentialsFile`, monospace: true, placeholder: `e.g. notify-switch-${p.type}.json`, help: CREDENTIALS_FILE_HELP,
+    helpLink: CREDENTIALS_FILE_LINK,
   });
   const isOpen = open || p.credentialsFile.trim().length > 0;
   return disclosure('Advanced', [id, ...extra, credentials], { cls: 'mb-3', open: isOpen, attrs: { 'data-advanced': path } });
@@ -138,7 +140,7 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
 
   const senders = addressList({
     channel: 'sms', values: p.smsSenders, defaultCountry: app.config.defaultCountry, path: `${path}.smsSenders`,
-    onChange: () => app.changed(true), addLabel: 'Add sender number',
+    onChange: () => app.changed(true), onRemove: (i) => app.entryRemoved(`${path}.smsSenders`, i), addLabel: 'Add sender number',
     emptyText: 'No sender numbers yet. Add one, look them up from your account, or set a Messaging Service SID under Advanced.',
   });
   lookup.onNumber = (phoneNumber) => {
@@ -162,12 +164,13 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
       p.emailFrom.address = v;
       app.changed(true);
     }, {
-      path: `${path}.emailFrom.address`, type: 'email', placeholder: 'alerts@example.com', help: TWILIO_HELP.emailFrom, helpLink: TWILIO_HELP.emailFromLink,
+      path: `${path}.emailFrom.address`, type: 'email', placeholder: 'e.g. alerts@example.com', help: TWILIO_HELP.emailFrom,
+      helpLink: TWILIO_HELP.emailFromLink,
     })),
     el('div', { class: 'ns-span-5' }, textField('Email From name', p.emailFrom.name, (v) => {
       p.emailFrom.name = v;
       app.changed();
-    }, { path: `${path}.emailFrom.name`, placeholder: 'Home' })),
+    }, { path: `${path}.emailFrom.name`, placeholder: 'e.g. Home' })),
   ));
 
   // Advanced: ID, Messaging Service SID and credentials file (SPEC section 11.2, items 9 and 14).
@@ -188,55 +191,149 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
 
 // ---- SMTP -----------------------------------------------------------------------------------------------
 
-/** The Fastmail, Gmail, iCloud and Outlook settings, collapsed under "Common settings" (SPEC section 11.3). */
-function commonSettings(): HTMLElement {
-  const table = el('table', { class: 'table table-sm mb-0 ns-settings-table' },
-    el('thead', {}, el('tr', {}, el('th', {}, 'Provider'), el('th', {}, 'Host'), el('th', {}, 'Port'), el('th', {}, 'Security'))),
-    el('tbody', {}, ...SMTP_HELP.commonSettingsRows.map(([name, host, port, security]) => el('tr', {},
-      el('td', { 'data-label': 'Provider' }, name), el('td', { class: 'font-monospace', 'data-label': 'Host' }, host),
-      el('td', { 'data-label': 'Port' }, port), el('td', { 'data-label': 'Security' }, security)))),
+interface ServerFields {
+  host: HTMLInputElement;
+  port: HTMLInputElement;
+  security: HTMLSelectElement;
+  /** Locks or unlocks the three server controls; the Edit link shows while they are locked. */
+  setLocked(locked: boolean): void;
+}
+
+/**
+ * The "Mail provider" selector at the top of the SMTP card (SPEC section 11.2, item 22): a segmented
+ * control on wide screens and a dropdown below 600px, both bound to the same value. Choosing a preset
+ * fills and locks host, port and security; Other leaves them editable. Text labels only.
+ */
+function presetPicker(p: UiProvider, path: string, onChoose: (key: string) => void): HTMLElement {
+  const current = (): string => smtpPreset(p.smtpPreset)?.key ?? OTHER_PRESET_KEY;
+  const options = [...SMTP_PRESETS.map((preset) => ({ key: preset.key, label: preset.label })), { key: OTHER_PRESET_KEY, label: OTHER_PRESET_LABEL }];
+  const group = uniqueId('preset');
+  const segments = el('div', { class: 'btn-group ns-preset-segments', role: 'group', 'aria-label': SMTP_HELP.presetLabel, 'data-preset-segments': path });
+  const select = el('select', { class: 'form-select ns-preset-select', 'aria-label': SMTP_HELP.presetLabel, 'data-preset-select': path });
+  const radios: HTMLInputElement[] = [];
+  const sync = (): void => {
+    const key = current();
+    for (const radio of radios) {
+      radio.checked = radio.value === key;
+    }
+    select.value = key;
+  };
+  for (const option of options) {
+    const id = `${group}-${option.key}`;
+    const radio = el('input', { type: 'radio', class: 'btn-check', name: group, id, value: option.key, autocomplete: 'off' });
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        onChoose(option.key);
+        sync();
+      }
+    });
+    radios.push(radio);
+    segments.appendChild(radio);
+    segments.appendChild(el('label', { class: 'btn btn-outline-secondary btn-sm', for: id }, option.label));
+    select.appendChild(el('option', { value: option.key }, option.label));
+  }
+  select.addEventListener('change', () => {
+    onChoose(select.value);
+    sync();
+  });
+  sync();
+  return el('div', { class: 'mb-3 ns-preset-picker' },
+    el('label', { class: 'form-label' }, SMTP_HELP.presetLabel),
+    segments,
+    select,
+    helpText(SMTP_HELP.preset),
   );
-  return disclosure(SMTP_HELP.commonSettings, [table], { cls: 'mb-3 ns-common-settings' });
 }
 
 function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
+  // Server settings, locked while a preset is chosen; Edit on the Host label row unlocks them.
+  let unlock: () => void = () => undefined;
+  const edit = linkButton(SMTP_HELP.edit, () => unlock(), 'ns-server-edit');
+  edit.setAttribute('aria-label', `${SMTP_HELP.edit} server settings`);
+  const hostField = textField('Host', p.host, (v) => {
+    p.host = v;
+    app.changed();
+  }, { path: `${path}.host`, required: true, placeholder: 'e.g. smtp.fastmail.com', labelExtra: edit });
+  const portField = numberField('Port', p.port, (v) => {
+    p.port = v;
+    app.changed();
+  }, { path: `${path}.port`, required: true, min: 1, max: 65535 });
+  const securityField = selectField('Security', p.security, [
+    { value: 'ssl', label: 'SSL' }, { value: 'starttls', label: 'STARTTLS' }, { value: 'none', label: 'None' },
+  ], (v) => {
+    p.security = v as UiProvider['security'];
+    app.changed();
+  }, { path: `${path}.security` });
+  const serverHelp = helpText(SMTP_HELP.server, undefined, 'mb-2 ns-server-help');
+  const server: ServerFields = {
+    host: hostField.querySelector('input') as HTMLInputElement,
+    port: portField.querySelector('input') as HTMLInputElement,
+    security: securityField.querySelector('select') as HTMLSelectElement,
+    setLocked: (locked) => {
+      server.host.readOnly = locked;
+      server.port.readOnly = locked;
+      server.security.disabled = locked;
+      edit.hidden = !locked;
+      serverHelp.textContent = locked ? SMTP_HELP.serverLocked : SMTP_HELP.server;
+      body.classList.toggle('ns-server-locked', locked);
+    },
+  };
+  unlock = (): void => server.setLocked(false);
+
+  const passwordField_ = passwordField('Password', p.password, (v) => {
+    p.password = v;
+    app.changed();
+  }, { path: `${path}.password`, required: true, help: SMTP_HELP.password, helpLink: SMTP_HELP.passwordLink });
+  // The password help names the chosen provider and links to its app-password page.
+  const applyPreset = (key: string): void => {
+    const preset = smtpPreset(key);
+    if (preset) {
+      setHelp(passwordField_, preset.passwordHelp, preset.passwordLink);
+    } else {
+      setHelp(passwordField_, SMTP_HELP.password, SMTP_HELP.passwordLink);
+    }
+    server.setLocked(preset !== undefined);
+  };
+
+  body.appendChild(presetPicker(p, path, (key) => {
+    const preset = smtpPreset(key);
+    p.smtpPreset = preset ? preset.key : '';
+    if (preset) {
+      // Choosing a preset fills the server settings; Other leaves whatever is there editable.
+      p.host = preset.host;
+      p.port = preset.port;
+      p.security = preset.security;
+      server.host.value = preset.host;
+      server.port.value = String(preset.port);
+      server.security.value = preset.security;
+    }
+    applyPreset(key);
+    app.changed();
+  }));
   body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, textField('Host', p.host, (v) => {
-      p.host = v;
-      app.changed();
-    }, { path: `${path}.host`, required: true, placeholder: 'smtp.fastmail.com' })),
-    el('div', { class: 'ns-span-3' }, numberField('Port', p.port, (v) => {
-      p.port = v;
-      app.changed();
-    }, { path: `${path}.port`, required: true, min: 1, max: 65535 })),
-    el('div', { class: 'ns-span-3' }, selectField('Security', p.security, [
-      { value: 'ssl', label: 'SSL' }, { value: 'starttls', label: 'STARTTLS' }, { value: 'none', label: 'None' },
-    ], (v) => {
-      p.security = v as UiProvider['security'];
-      app.changed();
-    }, { path: `${path}.security` })),
+    el('div', { class: 'ns-span-6' }, hostField),
+    el('div', { class: 'ns-span-3' }, portField),
+    el('div', { class: 'ns-span-3' }, securityField),
   ));
-  body.appendChild(helpText(SMTP_HELP.server, undefined, 'mb-2 ns-server-help'));
-  body.appendChild(commonSettings());
+  body.appendChild(serverHelp);
   body.appendChild(textField('Username', p.username, (v) => {
     p.username = v;
     app.changed();
-  }, { path: `${path}.username`, required: true, autocomplete: 'off', placeholder: 'you@example.com', help: SMTP_HELP.username }));
-  body.appendChild(passwordField('Password', p.password, (v) => {
-    p.password = v;
-    app.changed();
-  }, { path: `${path}.password`, required: true, help: SMTP_HELP.password, helpLink: SMTP_HELP.passwordLink }));
+  }, { path: `${path}.username`, required: true, autocomplete: 'off', placeholder: 'e.g. you@example.com', help: SMTP_HELP.username }));
+  body.appendChild(passwordField_);
   body.appendChild(el('div', { class: 'ns-grid' },
     el('div', { class: 'ns-span-7' }, textField('From address', p.from.address, (v) => {
       p.from.address = v;
       app.changed();
-    }, { path: `${path}.from.address`, required: true, type: 'email', placeholder: 'you@example.com', help: SMTP_HELP.fromAddress })),
+    }, { path: `${path}.from.address`, required: true, type: 'email', placeholder: 'e.g. you@example.com', help: SMTP_HELP.fromAddress })),
     el('div', { class: 'ns-span-5' }, textField('From name', p.from.name, (v) => {
       p.from.name = v;
       app.changed();
-    }, { path: `${path}.from.name`, placeholder: 'Home' })),
+    }, { path: `${path}.from.name`, placeholder: 'e.g. Home', help: SMTP_HELP.fromName })),
   ));
   body.appendChild(advancedDisclosure(app, p, path, id, [], false));
+  // A stored preset locks the stored values; nothing is overwritten on load (the runtime reads host, port and security).
+  applyPreset(p.smtpPreset);
 }
 
 // ---- Telegram onboarding (SPEC section 11.2, item 10) ---------------------------------------------------
@@ -503,7 +600,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   const others = (): string[] => app.config.providers.filter((other) => other !== p).map((other) => other.id);
   const card = el('div', { class: 'card mb-3', 'data-path': path, 'data-type': p.type });
   const title = el('span', { class: 'fw-semibold' }, providerTitle(p));
-  const badge = el('span', { class: 'badge text-bg-secondary ms-2' }, p.type);
+  const badge = el('span', { class: 'badge text-bg-secondary ms-2' }, PROVIDER_TYPE_LABEL[p.type]);
   const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' },
     el('span', {}, title, badge), helpToggle(card, p));
 
@@ -528,7 +625,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
       idInput.value = p.id;
     }
     app.changed(true);
-  }, { path: `${path}.name`, required: true, placeholder: PROVIDER_CHOOSER[p.type].name }));
+  }, { path: `${path}.name`, required: true, placeholder: `e.g. ${PROVIDER_CHOOSER[p.type].name}`, help: PROVIDER_NAME_HELP }));
 
   switch (p.type) {
   case 'twilio':
@@ -552,9 +649,18 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     const result = await callServer<{ ok: boolean; message: string }>('/test-provider', { provider: exportProvider(p) });
     status.set(result.ok ? 'success' : 'danger', result.message);
   }, 'btn btn-outline-primary btn-sm');
-  const remove = dangerLinkButton('Remove provider', () => {
-    app.config.providers.splice(index, 1);
-    app.rerender('providers', true);
+  const remove = inlineConfirm({
+    start: dangerLinkButton('Remove provider', () => undefined),
+    question: () => REMOVE.question('provider'),
+    confirmLabel: REMOVE.confirm,
+    confirmClass: 'btn btn-danger btn-sm',
+    cancelLabel: REMOVE.cancel,
+    cls: 'ns-remove-confirm',
+    onConfirm: () => {
+      app.config.providers.splice(index, 1);
+      app.entryRemoved('providers', index);
+      app.rerender('providers', true);
+    },
   });
 
   card.appendChild(header);
@@ -600,7 +706,7 @@ function addProviderControl(app: App): HTMLElement {
     slot.appendChild(el('div', { class: 'ns-chooser', role: 'group', 'aria-label': CHOOSER.prompt },
       el('div', { class: 'fw-semibold mb-2' }, CHOOSER.prompt),
       tiles,
-      el('div', { class: 'mt-2' }, linkButton(CHOOSER.cancel, showButton)),
+      el('div', { class: 'mt-2' }, outlineButton(CHOOSER.cancel, showButton, 'ns-chooser-cancel')),
     ));
     tiles.querySelector<HTMLElement>('.ns-chooser-tile')?.focus();
   };

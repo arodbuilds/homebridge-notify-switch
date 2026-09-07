@@ -183,6 +183,27 @@ export function pluginVersion(): VersionResult {
   return { ok: true, message: '', version: PLUGIN_VERSION };
 }
 
+export interface HostTimeZoneResult {
+  ok: boolean;
+  message: string;
+  /** The Homebridge host's IANA time zone, for example `Europe/Berlin`; empty when Node cannot tell. */
+  timeZone: string;
+}
+
+/**
+ * The host's time zone for the default country prefill (SPEC section 11.2, item 21): the settings UI
+ * runs in the user's browser, which may be in another country than the Homebridge host, so the host
+ * reports its own zone and the UI maps it to a country when the browser locale names none.
+ */
+export function hostTimeZone(): HostTimeZoneResult {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return { ok: true, message: '', timeZone: typeof timeZone === 'string' ? timeZone : '' };
+  } catch (err) {
+    return { ok: false, message: `Could not read the host time zone: ${describeError(err)}`, timeZone: '' };
+  }
+}
+
 /** Reads the `provider` field of a request payload without trusting its shape. */
 export function payloadProvider(payload: unknown): unknown {
   return isRecord(payload) ? payload.provider : undefined;

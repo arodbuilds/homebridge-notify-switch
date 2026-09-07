@@ -538,6 +538,15 @@
                       "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'email';"
                     }
                   },
+                  "bcc": {
+                    "title": "Hide recipients from each other (BCC)",
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Recipients go in Bcc and your from address in To, so nobody sees the other addresses. A message to one recipient always uses To.",
+                    "condition": {
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'email';"
+                    }
+                  },
                   "body": {
                     "title": "Message",
                     "type": "string",

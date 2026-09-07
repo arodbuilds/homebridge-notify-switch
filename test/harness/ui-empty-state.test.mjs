@@ -73,7 +73,7 @@ test('guided empty state: a Get started card with the chooser tiles, disabled Ad
     // Picking a tile creates the provider and the page renders as it does today.
     await card.locator('.ns-chooser-tile[data-type="telegram"]').click();
     assert.equal(await page.locator('.ns-get-started').count(), 0, 'the Get started card is gone');
-    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header .badge').textContent(), 'telegram');
+    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header .badge').textContent(), 'Telegram');
     assert.equal(await providers.getByRole('button', { name: 'Add provider' }).count(), 1, 'Add provider is back');
     assert.equal(await providers.locator('.section-copy').count(), 1, 'so is the section intro');
     for (const [section, label] of [['groups', 'Add group'], ['switches', 'Add switch']]) {
@@ -86,8 +86,10 @@ test('guided empty state: a Get started card with the chooser tiles, disabled Ad
     assert.equal(await status.locator('.fw-semibold').textContent(), 'Fill in the new provider to enable Save.');
     await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].providers.length === 1);
 
-    // Removing the last provider brings the guided empty state back and disables the Add buttons again.
+    // Removing the last provider (through the in-place confirmation) brings the guided empty state back and disables the Add buttons again.
     await page.getByRole('button', { name: 'Remove provider' }).click();
+    assert.equal(await page.locator('.ns-remove-confirm .ns-confirm-question').textContent(), 'Remove this provider?');
+    await page.locator('.ns-remove-confirm').getByRole('button', { name: 'Remove', exact: true }).click();
     assert.equal(await page.locator('.ns-get-started').count(), 1);
     assert.equal(await page.locator('#section-groups').getByRole('button', { name: 'Add group' }).isDisabled(), true);
     assert.equal(await page.locator('#section-switches').getByRole('button', { name: 'Add switch' }).isDisabled(), true);
@@ -142,30 +144,56 @@ test('footer: version from the server, credit, and two links that open in a new 
   }
 });
 
-test('default country: prefilled from the browser locale on first load, never overriding a saved value', async (t) => {
+/** A server stub that answers the host time zone request with the given zone (or a failure when `zone` is null). */
+function timeZoneServer(zone) {
+  return `async (path) => path === '/host-timezone'
+    ? ${zone === null ? '{ ok: false, message: "no zone", timeZone: "" }' : `{ ok: true, message: '', timeZone: ${JSON.stringify(zone)} }`}
+    : { ok: true, message: 'stub' }`;
+}
+
+test('default country: the locale region, else the host time zone, else US on first load; a saved value is never overridden', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
   }
   try {
-    // First load, no saved defaultCountry: the locale's region.
-    let page = await openSettings(browser, EMPTY, { locale: 'en-GB' });
+    // First load, no saved defaultCountry: the locale's region wins, whatever the host's zone says.
+    let page = await openSettings(browser, EMPTY, { locale: 'en-GB', requestScript: timeZoneServer('Europe/Berlin') });
     assert.equal(await page.evaluate(() => navigator.language), 'en-GB');
     assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'GB');
     await page.waitForFunction(() => window.__hb.updates.length > 0);
     assert.equal(await page.evaluate(() => window.__hb.updates.at(-1)[0].defaultCountry), 'GB', 'the prefilled value is what Save will write');
+    assert.equal(await page.evaluate(() => window.__hb.requests.some((r) => r.path === '/host-timezone')), false, 'the host is not asked');
     await page.close();
 
-    // A locale without a region, or with one the phone entry does not know, falls back to US.
-    page = await openSettings(browser, EMPTY, { locale: 'de' });
+    // A locale without a region: the country of the Homebridge host's time zone (SPEC section 11.2, item 21).
+    page = await openSettings(browser, EMPTY, { locale: 'de', requestScript: timeZoneServer('Europe/Berlin') });
+    assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'DE');
+    assert.equal(await page.evaluate(() => window.__hb.requests.some((r) => r.path === '/host-timezone')), true, 'the host was asked');
+    await page.waitForFunction(() => window.__hb.updates.length > 0);
+    assert.equal(await page.evaluate(() => window.__hb.updates.at(-1)[0].defaultCountry), 'DE');
+    await page.close();
+
+    // A host zone that names no country (UTC), or a server that cannot answer, falls back to US.
+    page = await openSettings(browser, EMPTY, { locale: 'de', requestScript: timeZoneServer('UTC') });
     assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'US');
     await page.close();
+    page = await openSettings(browser, EMPTY, { locale: 'de', requestScript: timeZoneServer(null) });
+    assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'US');
+    await page.close();
+    page = await openSettings(browser, EMPTY, { locale: 'de' });
+    assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'US', 'a server without the endpoint is US too');
+    await page.close();
 
-    // A saved value wins over the locale.
-    page = await openSettings(browser, { ...WITH_PROVIDER, defaultCountry: 'CA' }, { locale: 'en-GB' });
+    // A saved value wins over the locale and the host zone.
+    page = await openSettings(browser, { ...WITH_PROVIDER, defaultCountry: 'CA' }, { locale: 'de', requestScript: timeZoneServer('Europe/Berlin') });
     assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'CA');
     await page.waitForFunction(() => window.__hb.updates.length > 0);
     assert.equal(await page.evaluate(() => window.__hb.updates.at(-1)[0].defaultCountry), 'CA');
+    await page.close();
+
+    page = await openSettings(browser, { ...WITH_PROVIDER, defaultCountry: 'CA' }, { locale: 'en-GB' });
+    assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'CA');
   } finally {
     await browser.close();
   }

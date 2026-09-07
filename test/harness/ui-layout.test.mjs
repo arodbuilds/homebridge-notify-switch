@@ -237,10 +237,6 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
 
     for (const width of [900, 599, 400, 360]) {
       await page.setViewportSize({ width, height: 900 });
-      // Open the SMTP card's Common settings table so it is measured too.
-      await page.locator('details.ns-common-settings').evaluate((node) => {
-        node.open = true;
-      });
       const result = await audit(page);
       assert.deepEqual(result.offenders, [], `elements outside the ${width}px viewport`);
       assert.ok(result.scrollWidth <= width, `no horizontal scroll at ${width}px (scrollWidth ${result.scrollWidth})`);
@@ -314,9 +310,11 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
       assert.equal(footer.wrapped, false, 'footers fit on one line at 900px');
     }
     assert.deepEqual(footers.map((footer) => footer.primary), [['Test connection'], ['Test connection'], ['Test connection'], [], ['Test send']]);
-    // "Add action" is a link-style button directly under the actions list, left aligned, not in the footer.
+    // "Add action" is an outlined secondary button, like Add phone number, directly under the actions list, left aligned, not in the footer.
     const addAction = page.getByRole('button', { name: 'Add action' });
-    assert.match(await addAction.getAttribute('class'), /\bbtn-link\b/);
+    assert.match(await addAction.getAttribute('class'), /\bbtn-outline-secondary\b/);
+    assert.equal(await addAction.evaluate((node) => node.className), await page.getByRole('button', { name: 'Add phone number' }).first()
+      .evaluate((node) => node.className), 'the same classes as Add phone number');
     const addActionBox = await addAction.boundingBox();
     const actionsBox = await page.locator('.actions').boundingBox();
     assert.ok(addActionBox.y >= actionsBox.y + actionsBox.height - 1, 'Add action sits under the actions list');
@@ -324,7 +322,7 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
 
     // Test send confirmation: the button is replaced in place by the question, a primary Send and a text Cancel.
     await page.getByRole('button', { name: 'Test send' }).click();
-    assert.equal(await page.locator('.test-send-question').textContent(), 'Send to 5 recipients now?');
+    assert.equal(await page.locator('.test-send .ns-confirm-question').textContent(), 'Send to 5 recipients now?');
     const send = page.getByRole('button', { name: 'Send', exact: true });
     assert.match(await send.getAttribute('class'), /\bbtn-primary\b/);
     assert.match(await page.getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-link\b/);
@@ -361,6 +359,70 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
     const withIssues = await audit(page);
     assert.deepEqual(withIssues.offenders, []);
     assert.ok(withIssues.scrollWidth <= 360);
+  } finally {
+    await browser.close();
+  }
+});
+
+/**
+ * Placeholders are italic and visibly lighter than typed text (SPEC section 11.2, item 15): at least 2:1
+ * between the placeholder colour and the input's text colour, in both themes. Outlined secondary buttons keep
+ * their outline on hover with a subtle highlight, never the solid fill (item 11).
+ */
+test('settings UI theme: placeholders are italic and lighter than typed text, and outlined buttons keep their outline on hover', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    for (const dark of [true, false]) {
+      const page = await openSettings(browser, CONFIG, { dark });
+      const fields = await page.evaluate(() => [...document.querySelectorAll('input[placeholder]')]
+        .filter((node) => node.checkVisibility())
+        .map((node) => ({
+          placeholder: node.getAttribute('placeholder'),
+          textColor: getComputedStyle(node).color,
+          placeholderColor: getComputedStyle(node, '::placeholder').color,
+          fontStyle: getComputedStyle(node, '::placeholder').fontStyle,
+          background: getComputedStyle(node).backgroundColor,
+        })));
+      assert.ok(fields.length >= 6, `placeholders were measured (${fields.length})`);
+      for (const field of fields) {
+        assert.equal(field.fontStyle, 'italic', `${field.placeholder} is italic`);
+        const background = composite(parseColor(field.background), [255, 255, 255]);
+        const text = composite(parseColor(field.textColor), background);
+        const placeholder = composite(parseColor(field.placeholderColor), background);
+        const ratio = contrastRatio(text, placeholder);
+        assert.ok(ratio >= 2,
+          `${dark ? 'dark' : 'light'}: "${field.placeholder}" placeholder ${field.placeholderColor} vs text ${field.textColor} is ${ratio.toFixed(2)}:1`);
+      }
+      // Realistic placeholders read as examples.
+      const realistic = fields.filter((field) => /@|\d{3}|Family|Home|Water|Twilio|smtp\./.test(field.placeholder));
+      assert.ok(realistic.length > 0);
+      for (const field of realistic) {
+        assert.match(field.placeholder, /^(e\.g\. |Defaults to )/, `"${field.placeholder}" is marked as an example`);
+      }
+
+      // Hover and focus on an outlined secondary button: outline kept, subtle highlight, never a solid fill.
+      const add = page.getByRole('button', { name: 'Add phone number' }).first();
+      const before = await add.evaluate((node) => ({ border: getComputedStyle(node).borderTopColor, color: getComputedStyle(node).color }));
+      await add.hover();
+      const hovered = await add.evaluate((node) => ({
+        background: getComputedStyle(node).backgroundColor, border: getComputedStyle(node).borderTopColor, borderStyle: getComputedStyle(node).borderTopStyle,
+        color: getComputedStyle(node).color,
+      }));
+      assert.equal(hovered.borderStyle, 'solid', 'the outline stays');
+      assert.equal(hovered.color, before.color, 'the text colour does not flip to white');
+      assert.notEqual(hovered.background, 'rgb(108, 117, 125)', 'no solid secondary fill');
+      assert.notEqual(hovered.background, 'rgb(156, 39, 176)', 'no solid primary fill');
+      const alpha = parseColor(hovered.background).alpha;
+      assert.ok(alpha > 0 && alpha < 0.5, `a subtle highlight (${hovered.background})`);
+      await add.focus();
+      const focused = await add.evaluate((node) => ({ background: getComputedStyle(node).backgroundColor, color: getComputedStyle(node).color }));
+      assert.equal(focused.color, before.color);
+      assert.notEqual(focused.background, 'rgb(108, 117, 125)');
+      await page.close();
+    }
   } finally {
     await browser.close();
   }
