@@ -22,7 +22,7 @@ const CHANNEL_LABEL: Record<Channel, string> = { sms: 'phone number', email: 'em
 
 export interface AddressListHandle {
   el: HTMLElement;
-  /** Re-renders the rows, for example after a chat id was added from Find chat IDs. */
+  /** Re-renders the rows, for example after a number was added from Look up numbers. */
   refresh(): void;
 }
 

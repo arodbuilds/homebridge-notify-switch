@@ -292,18 +292,13 @@ export function validate(config: UiConfig): UiIssue[] {
     checkHapName(issues, config.masterSwitch.name, 'masterSwitch.name', 'Settings');
   }
 
-  if (config.providers.length === 0) {
-    issues.add('providers', 'Providers', 'Add at least one provider.');
-  }
+  // No providers or no switches is valid (a fresh install, or after Reset plugin to fresh install); startup then registers nothing.
   const providerIds = new Set<string>();
   config.providers.forEach((p, i) => checkProvider(issues, p, i, providerIds));
 
   const groupIds = new Set<string>();
   config.groups.forEach((g, i) => checkGroup(issues, g, i, groupIds));
 
-  if (config.switches.length === 0) {
-    issues.add('switches', 'Switches', 'Add at least one switch.');
-  }
   const switchIds = new Set<string>();
   const switchNames = new Set<string>();
   config.switches.forEach((s, i) => checkSwitch(issues, config, s, i, switchIds, switchNames));

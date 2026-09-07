@@ -31,9 +31,8 @@ export const SMTP_HELP = {
 };
 
 export const TELEGRAM_HELP = {
-  botToken: 'Message @BotFather in Telegram, send /newbot, and follow the prompts. BotFather replies with the token. '
-    + 'Then open a chat with your new bot and send it any message so it can find you.',
-  chatIds: 'Chat IDs are numbers, not usernames. Use Find chat IDs above after messaging the bot. Group chats have negative IDs.',
+  botToken: 'BotFather replies with the token, which looks like 123456789:AAF… Treat it as a password; anyone with the token can send as the bot.',
+  chatIds: 'Chat IDs are numbers, not usernames. Use Find people and groups on the Telegram provider to add them. Group chats have negative IDs.',
 };
 
 export const GROUPS_SECTION = 'A group is a named list of people. Add phone numbers for SMS, email addresses for email, and chat IDs for Telegram. '
@@ -54,3 +53,72 @@ export const SWITCH_HELP = {
 
 export const HOMEKIT_USAGE = 'After saving, restart Homebridge. Your switches appear in the Home app. Open Automations, choose a trigger such as a sensor '
   + 'detecting water, and add the switch with Turn On as the action. You can also test by tapping the switch directly.';
+
+/** Telegram onboarding flow (SPEC section 11.2, item 10). */
+export const TELEGRAM_ONBOARDING = {
+  botFatherUrl: 'https://t.me/BotFather',
+  step1Title: 'Create your bot',
+  openBotFather: 'Open BotFather',
+  step1Instructions: [
+    'Send /newbot.',
+    'Choose a display name such as Home Alerts.',
+    'Choose a username ending in bot.',
+    'Paste the token below.',
+  ],
+  step2Title: 'Choose how people receive messages',
+  groupTitle: 'Family group chat (recommended)',
+  groupText: 'Everyone in the group gets every message. Nobody has to opt in individually.',
+  addToGroup: 'Add bot to a group',
+  individualTitle: 'Individual chats',
+  individualText: 'Each person opens the bot and taps Start once.',
+  step3Title: 'Invite people',
+  enlarge: 'Enlarge',
+  copyLink: 'Copy link',
+  copyInvite: 'Copy invite message',
+  inviteMessage: (username: string): string => `Tap this link and press Start to get alerts from our home: https://t.me/${username}?start=join`,
+  connectFirst: 'Connect your bot in step 1 to get the links and QR codes.',
+  findTitle: 'Find people and groups',
+  findHelp: 'Lists everyone who has opened the bot and every group it has been added to. Choose a recipient group, then add people to it.',
+  chooseGroup: 'Choose a recipient group first.',
+  noGroups: 'Add a recipient group under Recipient Groups first.',
+};
+
+/** Twilio "Look up numbers" (SPEC section 11.2, item 9). */
+export const TWILIO_LOOKUP = {
+  button: 'Look up numbers',
+  help: 'Lists the phone numbers and Messaging Services on your Twilio account so you can pick instead of typing. Manual entry always works.',
+  numbersLabel: 'Add a phone number from your account',
+  servicesLabel: 'Use a Messaging Service from your account',
+  numbersPlaceholder: 'Choose a phone number…',
+  servicesPlaceholder: 'Choose a Messaging Service…',
+};
+
+/** Switch card Test send confirmation (SPEC section 11.3). */
+export const TEST_SEND = {
+  confirm: (count: number): string => `Send to ${count} recipient${count === 1 ? '' : 's'} now?`,
+  send: 'Send',
+  cancel: 'Cancel',
+  dismiss: 'Dismiss',
+};
+
+/** Settings > Advanced: backup, restore and reset (SPEC section 11.2, item 12). */
+export const BACKUP = {
+  summary: 'Advanced',
+  backupNote: 'The backup file contains your provider credentials. Store it like a password.',
+  download: 'Download backup',
+  restore: 'Restore from backup',
+  restoreHelp: 'Choose a backup file. It is checked before anything changes; if it passes, the form is replaced with its contents and Save is enabled.',
+  restoreFailed: 'The backup could not be loaded:',
+  restored: 'Backup loaded. Review the form, then click Save.',
+  reset: 'Reset plugin to fresh install',
+  resetTitle: 'Reset plugin to fresh install?',
+  resetList: [
+    'All providers, groups, switches, and settings are removed.',
+    'Switches disappear from the Home app after the next restart.',
+    'Credentials files on disk are not touched.',
+  ],
+  resetDownloadFirst: 'Download backup first',
+  resetPrompt: 'Type RESET to confirm.',
+  resetConfirm: 'Confirm',
+  resetDone: 'The configuration has been reset. Click Save, then restart Homebridge.',
+};

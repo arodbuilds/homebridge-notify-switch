@@ -56,6 +56,11 @@ class Page implements App {
     this.revalidate();
   }
 
+  replaceConfig(config: UiConfig): void {
+    this.config = config;
+    this.renderAll();
+  }
+
   rerender(section: Section, refs = false): void {
     const container = this.containers.get(section);
     if (!container) {

@@ -28,6 +28,8 @@ A Homebridge dynamic platform plugin that exposes HomeKit switches. Each switch 
 4. WhatsApp (planned for a later version).
 5. Fallback routing (send on channel B only if channel A fails). v1 sends on every configured channel in parallel.
 
+Planned for 1.1: WhatsApp via Twilio, using a single approved utility template with the message body as the template variable, so no per-message template approval is needed. Voice calls via Twilio are a candidate for the same release.
+
 ## 3. Terminology
 
 1. Provider: a configured connection to an external messaging service. v1 types: `twilio`, `smtp`, `telegram`.
@@ -44,8 +46,9 @@ A Homebridge dynamic platform plugin that exposes HomeKit switches. Each switch 
 4. On startup the platform registers accessories for every valid switch and unregisters any cached accessory whose `id` is no longer in config.
 5. Optional per switch: a `ContactSensor` service that trips on send failure (see section 9). Default off.
 6. Optional platform-level master switch named by the user (default "Notifications Enabled"). When off, no switch sends anything; flips are logged as suppressed. Default enabled and shown.
-7. The plugin does not register any accessory if the platform config is missing or fails validation. It logs the reasons and exits its startup path cleanly. It never throws.
+7. The plugin does not register any accessory if the platform config is missing or fails validation. It logs the reasons and exits its startup path cleanly. It never throws. Cached accessories are left untouched in that case, so HomeKit automations survive a typo.
 8. Child bridge is supported and recommended in the README.
+9. A configuration that passes validation with zero switches (a fresh install, or after Reset plugin to fresh install in the settings UI) registers nothing and unregisters every cached accessory, the master switch included. The state persisted in their contexts (the master switch position and the failure sensor state) is cleared with them.
 
 ## 5. Configuration schema
 
@@ -291,9 +294,11 @@ Setting `On` to false from HomeKit is a no-op.
 
 Validation runs in code, independent of the schema, and reports every issue in one pass with the field path, for example `switches[2].actions[0].providerId: no provider with id "twillio-main" (did you mean "twilio-main"?)`.
 
-Blocking issues (the platform registers nothing): no providers, no switches, invalid provider credentials format, invalid or duplicate ids, a switch with no resolvable recipients, a body that violates channel constraints, a provider type that does not serve the requested channel, a switch name that violates HAP naming.
+Blocking issues (the platform registers nothing and cached accessories stay): invalid provider credentials format, invalid or duplicate ids, a switch with no resolvable recipients, a body that violates channel constraints, a provider type that does not serve the requested channel, a switch name that violates HAP naming, an action that references a provider or group that does not exist.
 
-Warnings (the platform starts): a group with no addresses, a provider that no switch uses, a sender not in the provider's list when only one sender exists (it is used anyway), and a switch that targets a group holding addresses on a channel none of its actions send on (an uncovered channel; logged once per switch and channel with the switch name, the group ids and the channel, because those people receive nothing).
+An empty `providers` or `switches` list is not an error. No switches means nothing is registered and every cached accessory is removed (section 4, item 9); it is logged as a warning.
+
+Warnings (the platform starts): no providers, no switches, a group with no addresses, a provider that no switch uses, a sender not in the provider's list when only one sender exists (it is used anyway), and a switch that targets a group holding addresses on a channel none of its actions send on (an uncovered channel; logged once per switch and channel with the switch name, the group ids and the channel, because those people receive nothing).
 
 Phone numbers without a leading plus sign are normalized using `defaultCountry`; the normalized value is logged once at startup so the user can correct config.json if desired.
 
@@ -309,14 +314,18 @@ Built with `@homebridge/plugin-ui-utils`. Replaces the schema form with a three-
 
 Additional behavior beyond the schema form:
 
-1. Phone number entry: country dropdown (flag, name, dial code) defaulting to `defaultCountry`, national number field with local placeholder, live validation and formatting via libphonenumber-js, storage as E.164, paste normalization that also sets the country.
+1. Phone number entry: country dropdown (flag, name, dial code) defaulting to `defaultCountry`, and a national number field with a local placeholder. Nothing is reformatted while the field has focus; it accepts digits, spaces, dashes, dots, parentheses, and a leading plus (other characters are dropped as typed, the caret stays in place). On blur the text is parsed with libphonenumber-js using the selected country as the hint, stored as E.164, the country is re-derived from the parsed number (a +1 305 number selects United States even if Canada was selected) and the dropdown updated, and the field shows the national format. The "Stored as +…" line appears only when parsing succeeds; otherwise an inline error is shown and the raw text is kept. Changing the country re-parses the current text. Applies to every phone field: provider sender numbers, group SMS lists, and extra SMS recipients.
 2. SMS body: live character count, segment count, and a warning when a non-GSM-7 character is present with the offending character highlighted.
 3. "Test connection" per provider: SMTP runs nodemailer `verify()`; Twilio lists one message (GET `/2010-04-01/Accounts/{accountSid}/Messages.json?PageSize=1` with the API key pair, so Restricted keys scoped to Messaging pass as well as Standard keys); Telegram calls `getMe`. Twilio failures include Twilio's error code and message when the response carries them. Credentials from the form are used in memory only and never returned or written.
-4. "Test send" per switch: sends the switch's actions to the configured recipients and shows per-recipient results. Requires an explicit confirmation click since it sends real messages.
-5. "Find chat IDs" for Telegram: calls `getUpdates` and lists chats that have messaged the bot, with a one-click add to the current group.
+4. "Test send" per switch: sends the switch's actions to the configured recipients and shows per-recipient results. Requires an explicit confirmation click since it sends real messages (layout in item 11).
+5. "Find people and groups" on the Telegram provider card: calls `getUpdates` (including `my_chat_member` updates, so a group appears as soon as the bot is added to it, before anyone posts) and lists the distinct chats the bot has seen: first name and username for private chats, the title for groups and channels (negative ids). Each row has an Add button that appends the id to the recipient group chosen in the dropdown next to the button; with no group chosen, the button prompts to choose one. A single group is preselected.
 6. Switch `id` generation on create.
 7. Reference pickers: provider and group selectors are dropdowns populated from the current config, not free text.
 8. Uncovered channel warnings: for each switch, the channels present in the groups (and extra recipients) it targets are compared with the channels its actions cover. Each uncovered channel shows a warning on the switch card (copy in section 11.3) with an "Add … action" button, worded per channel, that appends an action for that channel with the first provider that serves it preselected and the targeted groups that hold addresses on that channel selected. This is a warning, not a validation error: the Save button stays enabled. The same check is shared with startup validation (section 10).
+9. Twilio "Look up numbers": a button on the Twilio provider card, enabled once `accountSid`, `apiKeySid` and `apiKeySecret` are filled. Through the UI server it calls GET `/2010-04-01/Accounts/{accountSid}/IncomingPhoneNumbers.json?PageSize=20` and GET `https://messaging.twilio.com/v1/Services?PageSize=20` with the same Basic auth. The result is a dropdown of phone numbers with their friendly names and a separate dropdown of Messaging Services; choosing a number appends it to the senders list (once), choosing a service fills the Messaging Service SID field. When either response reports more than the page holds, the status line ends with "Showing the first 20; enter others manually." When the key may not list numbers (HTTP 401 or 403) the status line reads "This API key cannot list numbers. Enter them manually." (Messaging Services are still listed when that call succeeds). Manual entry remains available. The Messaging Service SID field sits under the card's "Advanced" disclosure together with the credentials file, and the disclosure opens when either is set.
+10. Telegram onboarding: the Telegram provider card is a three-step guided flow (copy in section 11.3). Step 1 "Create your bot" has an "Open BotFather" link button to `https://t.me/BotFather`, a QR code of the same link, four numbered instructions, and the bot token field; once the token matches the token pattern the UI server calls `getMe` and the card shows "Connected to @{username}" or the error. Step 2 "Choose how people receive messages" has two selectable cards, "Family group chat (recommended)" (with an "Add bot to a group" link button to `https://t.me/{username}?startgroup=true` and a QR code of it) and "Individual chats". Step 3 "Invite people" shows a QR code for `https://t.me/{username}?start=join` with an Enlarge button (full-page modal), a "Copy link" button and a "Copy invite message" button. Links and QR codes appear once `getMe` succeeded; before that the steps show "Connect your bot in step 1 to get the links and QR codes." Step 4 is "Find people and groups" (item 5). QR codes are generated as inline SVG in the UI bundle by `qrcode-generator`, a dev-time dependency; the plugin has no new runtime dependency.
+11. Card button layout: each switch card has "Add action" as a link-style button directly under the actions list, left aligned, and a footer row with "Remove switch" as a red text button on the left and "Test send" as the only outlined primary button on the right. Clicking Test send replaces the button in place with "Send to {n} recipients now?" ({n} is the number of distinct recipients across the switch's actions, "recipient" when it is 1), a primary "Send" button and a text "Cancel" button; Escape or Cancel restores the original button. Per-recipient results render below the footer with a Dismiss link. Provider cards use the same footer ("Remove provider" left, "Test connection" right, the result below) and group cards too ("Remove group" left, nothing on the right). No two primary buttons are ever adjacent in a card footer; the layout smoke test asserts it.
+12. Settings > Advanced: a disclosure at the bottom of the Settings section, collapsed by default, with three actions. "Download backup" exports the current platform block as `notify-switch-backup-YYYY-MM-DD.json` (local date); the line above the button states that the file contains credentials. "Restore from backup" is a file picker; the file is parsed as JSON, accepted as either a platform block or a whole config.json holding one, and checked against the same rules the form applies (which mirror `config.schema.json` and startup validation) before anything changes; failures are listed under the picker; on success the form state is replaced and Save is enabled. "Reset plugin to fresh install" is a red text button that opens a confirmation modal listing what is removed (all providers, groups, switches, and settings; switches disappear from the Home app after the next restart; credentials files on disk are not touched) with a "Download backup first" button, a text field that must contain `RESET`, and a red Confirm button that is disabled until it does. Confirming replaces the form with the empty default configuration (`platform`, `name`, `configVersion`, empty `providers`, `groups` and `switches`; the exported block also carries the default `defaultCountry`, `masterSwitch` and `debug` values) and enables Save. Startup behavior after saving is in section 4, item 9.
 
 ### 11.3 In-app copy
 
@@ -345,10 +354,24 @@ SMTP field help:
 `password`: "Most providers require an app password rather than your login password. Fastmail: Settings > Privacy & Security > App passwords, scope SMTP. Gmail: Google Account > Security > App passwords. iCloud: appleid.apple.com > Sign-In and Security > App-Specific Passwords."
 `from.address`: "Must be an address your provider allows you to send from."
 
-Telegram field help:
+Telegram field help (schema form):
 
 `botToken`: "Message @BotFather in Telegram, send /newbot, and follow the prompts. BotFather replies with the token. Then open a chat with your new bot and send it any message so it can find you."
-Group `telegram` list: "Chat IDs are numbers, not usernames. Use Find chat IDs above after messaging the bot. Group chats have negative IDs."
+
+Telegram onboarding flow (custom UI, section 11.2, item 10):
+
+Step 1 title: "Create your bot". Button: "Open BotFather" (links to https://t.me/BotFather, with a QR code of the same link). Instructions, numbered: "Send /newbot." "Choose a display name such as Home Alerts." "Choose a username ending in bot." "Paste the token below."
+`botToken` help: "BotFather replies with the token, which looks like 123456789:AAF… Treat it as a password; anyone with the token can send as the bot."
+Connection line: "Connected to @{username}" on success; otherwise the error from the UI server.
+Step 2 title: "Choose how people receive messages". Card 1: "Family group chat (recommended)": "Everyone in the group gets every message. Nobody has to opt in individually." Button: "Add bot to a group" (links to https://t.me/{username}?startgroup=true, with a QR code of the same link). Card 2: "Individual chats": "Each person opens the bot and taps Start once."
+Step 3 title: "Invite people". A QR code for https://t.me/{username}?start=join with the buttons "Enlarge", "Copy link", and "Copy invite message". The invite message copied is: "Tap this link and press Start to get alerts from our home: https://t.me/{username}?start=join"
+Before the bot is connected, steps 2 and 3 show: "Connect your bot in step 1 to get the links and QR codes."
+Step 4 title and button: "Find people and groups". Help: "Lists everyone who has opened the bot and every group it has been added to. Choose a recipient group, then add people to it." Group dropdown placeholder: "Choose a recipient group…". Add without a group chosen: "Choose a recipient group first." Add with no groups configured: "Add a recipient group under Recipient Groups first." After adding: "Added to {group name}". No results: "No people or groups found yet. Open the bot and press Start, or add it to a group, then try again. Telegram only keeps recent updates, and a webhook set on the bot hides them."
+Group `telegram` list: "Chat IDs are numbers, not usernames. Use Find people and groups on the Telegram provider to add them. Group chats have negative IDs."
+
+Twilio "Look up numbers" (section 11.2, item 9):
+
+Button: "Look up numbers". Help: "Lists the phone numbers and Messaging Services on your Twilio account so you can pick instead of typing. Manual entry always works." Dropdown labels: "Add a phone number from your account" (placeholder "Choose a phone number…") and "Use a Messaging Service from your account" (placeholder "Choose a Messaging Service…"). Status: "Found {n} phone numbers and {m} Messaging Services." More than a page: "Showing the first 20; enter others manually." No permission: "This API key cannot list numbers. Enter them manually."
 
 Recipient Groups section:
 
@@ -372,7 +395,13 @@ email: "This switch sends to a group with email addresses, but it has no email a
 sms: "This switch sends to a group with phone numbers, but it has no SMS action. Those recipients will not receive anything." Button: "Add SMS action".
 telegram: "This switch sends to a group with Telegram chat IDs, but it has no Telegram action. Those recipients will not receive anything." Button: "Add Telegram action".
 
-Test send confirmation (switch card): "Send now" is the primary button and "Cancel" is neutral. Red is reserved for Remove buttons throughout the page.
+Test send confirmation (switch card footer, section 11.2, item 11): the Test send button is replaced by "Send to {n} recipients now?" ("Send to 1 recipient now?" for one) with "Send" as the primary button and "Cancel" as a text button. Results carry a "Dismiss" link. Red is reserved for the Remove buttons ("Remove provider", "Remove group", "Remove switch", "Remove action", "Remove") and the reset flow ("Reset plugin to fresh install", "Confirm") throughout the page.
+
+Card footers: "Remove provider" and "Test connection" (provider cards); "Remove group" (group cards); "Remove switch" and "Test send" (switch cards); "Add action" under the actions list.
+
+Settings > Advanced (section 11.2, item 12):
+
+Disclosure: "Advanced". Backup note: "The backup file contains your provider credentials. Store it like a password." Button: "Download backup". Restore label: "Restore from backup". Restore help: "Choose a backup file. It is checked before anything changes; if it passes, the form is replaced with its contents and Save is enabled." Restore failure heading: "The backup could not be loaded:" followed by the list of problems. Restore success toast: "Backup loaded. Review the form, then click Save." Reset button: "Reset plugin to fresh install". Modal title: "Reset plugin to fresh install?" Modal list: "All providers, groups, switches, and settings are removed." "Switches disappear from the Home app after the next restart." "Credentials files on disk are not touched." Modal buttons: "Download backup first", "Confirm". Field label: "Type RESET to confirm." Reset toast: "The configuration has been reset. Click Save, then restart Homebridge."
 
 Using it in HomeKit (bottom of page):
 
@@ -388,7 +417,7 @@ Using it in HomeKit (bottom of page):
 6. TLS verification cannot be disabled.
 7. Email subject and from name have CR and LF stripped. Telegram defaults to plain text.
 8. Cooldown and master switch limit abuse from runaway automations.
-9. Dependencies: nodemailer at runtime; libphonenumber-js in the UI bundle; everything else dev-only. `package-lock.json` is committed. Dependabot is enabled.
+9. Dependencies: nodemailer at runtime; libphonenumber-js and qrcode-generator in the UI bundle; everything else dev-only. `package-lock.json` is committed. Dependabot is enabled.
 10. Publishing uses GitHub Actions with npm trusted publishing and provenance after the first release. Branch protection on `main` requires a pull request.
 
 ## 13. Packaging and release

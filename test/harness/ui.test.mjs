@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { SmtpProvider } from '../../dist/providers/smtp.js';
-import { findChats, testProvider, testSend } from '../../dist/ui/handlers.js';
+import { findChats, lookupTwilio, telegramBot, testProvider, testSend } from '../../dist/ui/handlers.js';
 import { fakeLogger, installFetch, platformConfig, SMTP, storageDir, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
@@ -145,7 +145,7 @@ test('test-provider telegram: getMe reports the bot username and the token never
   }
 });
 
-test('find-chats: getUpdates is reduced to distinct chats with readable titles', async () => {
+test('find-chats: getUpdates is reduced to distinct chats with readable titles, and a group appears from my_chat_member alone', async () => {
   const updates = [
     { update_id: 1, message: { chat: { id: 123456789, type: 'private', first_name: 'Alex', last_name: 'R', username: 'alexr' } } },
     { update_id: 2, message: { chat: { id: 123456789, type: 'private', first_name: 'Alex' } } },
@@ -159,14 +159,194 @@ test('find-chats: getUpdates is reduced to distinct chats with readable titles',
     assert.equal(result.ok, true);
     assert.equal(result.message, 'Found 3 chats.');
     assert.deepEqual(result.chats, [
-      { id: '123456789', title: 'Alex R @alexr', type: 'private' },
+      { id: '123456789', title: 'Alex (@alexr)', type: 'private' },
       { id: '-1001234567890', title: 'Family', type: 'supergroup' },
       { id: '-1009876543210', title: 'Alerts', type: 'channel' },
     ]);
     assert.equal(fetch.calls[0].url, `https://api.telegram.org/bot${TELEGRAM.botToken}/getUpdates`);
+    assert.ok(JSON.parse(fetch.calls[0].body).allowed_updates.includes('my_chat_member'), 'my_chat_member updates are requested');
     assertNoSecrets(result);
   } finally {
     fetch.restore();
+  }
+  // A freshly added group has only a my_chat_member update, no message yet.
+  const added = installFetch(() => ({ status: 200, body: JSON.stringify({ ok: true, result: [
+    { update_id: 9, my_chat_member: { chat: { id: -4001234567, type: 'group', title: 'Home Alerts' }, new_chat_member: { status: 'member' } } },
+  ] }) }));
+  try {
+    const result = await findChats(TELEGRAM);
+    assert.deepEqual(result.chats, [{ id: '-4001234567', title: 'Home Alerts', type: 'group' }]);
+  } finally {
+    added.restore();
+  }
+});
+
+test('telegram-bot: getMe reports "Connected to @username" for the onboarding flow and rejects an unusable username', async () => {
+  let fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ ok: true, result: { username: 'home_alerts_bot', first_name: 'Home' } }) }));
+  try {
+    const result = await telegramBot(TELEGRAM);
+    assert.deepEqual(result, { ok: true, message: 'Connected to @home_alerts_bot', username: 'home_alerts_bot' });
+    assert.equal(fetch.calls[0].url, `https://api.telegram.org/bot${TELEGRAM.botToken}/getMe`);
+    assertNoSecrets(result);
+  } finally {
+    fetch.restore();
+  }
+  fetch = installFetch(() => ({ status: 200, body: JSON.stringify({ ok: true, result: { username: 'bad name/../x' } }) }));
+  try {
+    const result = await telegramBot(TELEGRAM);
+    assert.equal(result.ok, false);
+    assert.equal(result.username, undefined);
+  } finally {
+    fetch.restore();
+  }
+  fetch = installFetch(() => ({ status: 401, body: JSON.stringify({ ok: false, error_code: 401, description: 'Unauthorized' }) }));
+  try {
+    const result = await telegramBot(TELEGRAM);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /rejected the bot token/);
+    assertNoSecrets(result);
+  } finally {
+    fetch.restore();
+  }
+  const other = installFetch(() => ({ status: 200 }));
+  try {
+    const result = await telegramBot(TWILIO);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /Telegram providers only/);
+    assert.equal(other.calls.length, 0);
+  } finally {
+    other.restore();
+  }
+});
+
+const NUMBERS_URL = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO.accountSid}/IncomingPhoneNumbers.json?PageSize=20`;
+const SERVICES_URL = 'https://messaging.twilio.com/v1/Services?PageSize=20';
+
+function numbersBody(count, nextPage = null) {
+  return JSON.stringify({
+    incoming_phone_numbers: Array.from({ length: count }, (_, i) => ({
+      sid: `PN${String(i).padStart(32, '0')}`, phone_number: `+1678555${String(100 + i).padStart(4, '0')}`, friendly_name: `Line ${i + 1}`,
+    })),
+    page_size: 20, next_page_uri: nextPage,
+  });
+}
+
+function servicesBody(count, nextPage = null) {
+  return JSON.stringify({
+    services: Array.from({ length: count }, (_, i) => ({ sid: `MG${String(i).padStart(32, '0')}`, friendly_name: `Service ${i + 1}` })),
+    meta: { page_size: 20, next_page_url: nextPage },
+  });
+}
+
+test('twilio-lookup: lists numbers and Messaging Services with the same Basic auth, one page of 20 each', async () => {
+  const fetch = installFetch((call) => {
+    if (call.url === NUMBERS_URL) {
+      return { status: 200, body: numbersBody(2) };
+    }
+    if (call.url === SERVICES_URL) {
+      return { status: 200, body: servicesBody(1) };
+    }
+    return { status: 404, body: '' };
+  });
+  try {
+    const result = await lookupTwilio(TWILIO);
+    assert.deepEqual(result, {
+      ok: true,
+      message: 'Found 2 phone numbers and 1 Messaging Service.',
+      numbers: [
+        { phoneNumber: '+16785550100', friendlyName: 'Line 1' },
+        { phoneNumber: '+16785550101', friendlyName: 'Line 2' },
+      ],
+      services: [{ sid: 'MG00000000000000000000000000000000', friendlyName: 'Service 1' }],
+      truncated: false,
+    });
+    assert.deepEqual(fetch.calls.map((call) => call.url).sort(), [NUMBERS_URL, SERVICES_URL]);
+    const expectedAuth = 'Basic ' + Buffer.from(`${TWILIO.apiKeySid}:${TWILIO.apiKeySecret}`, 'utf8').toString('base64');
+    for (const call of fetch.calls) {
+      assert.equal(call.init.method, 'GET');
+      assert.equal(call.headers.Authorization, expectedAuth);
+      assert.equal(call.body, '', 'a lookup sends nothing');
+    }
+    assertNoSecrets(result);
+  } finally {
+    fetch.restore();
+  }
+});
+
+test('twilio-lookup: a page that reports more entries adds the "first 20" note', async () => {
+  const fetch = installFetch((call) => {
+    if (call.url === NUMBERS_URL) {
+      return { status: 200, body: numbersBody(20, `/2010-04-01/Accounts/${TWILIO.accountSid}/IncomingPhoneNumbers.json?PageSize=20&Page=1`) };
+    }
+    return { status: 200, body: servicesBody(0) };
+  });
+  try {
+    const result = await lookupTwilio(TWILIO);
+    assert.equal(result.ok, true);
+    assert.equal(result.truncated, true);
+    assert.equal(result.numbers.length, 20);
+    assert.equal(result.message, 'Found 20 phone numbers and 0 Messaging Services. Showing the first 20; enter others manually.');
+  } finally {
+    fetch.restore();
+  }
+  const services = installFetch((call) => {
+    if (call.url === NUMBERS_URL) {
+      return { status: 200, body: numbersBody(1) };
+    }
+    return { status: 200, body: servicesBody(20, 'https://messaging.twilio.com/v1/Services?PageSize=20&PageToken=x') };
+  });
+  try {
+    const result = await lookupTwilio(TWILIO);
+    assert.equal(result.truncated, true);
+    assert.match(result.message, /Showing the first 20; enter others manually\.$/);
+  } finally {
+    services.restore();
+  }
+});
+
+test('twilio-lookup: a key without permission (401 or 403) gets the manual entry message, and other failures are described', async () => {
+  for (const status of [401, 403]) {
+    const fetch = installFetch(() => ({ status, body: JSON.stringify({ code: 20003, message: 'Permission Denied', status }) }));
+    try {
+      const result = await lookupTwilio(TWILIO);
+      assert.deepEqual(result, { ok: false, message: 'This API key cannot list numbers. Enter them manually.', numbers: [], services: [], truncated: false });
+      assert.equal(fetch.calls.length, 2, `${status} is not retried`);
+      assertNoSecrets(result);
+    } finally {
+      fetch.restore();
+    }
+  }
+  // Numbers denied but services readable: the services still come back with the manual entry message.
+  const partial = installFetch((call) => (call.url === NUMBERS_URL
+    ? { status: 403, body: JSON.stringify({ code: 20003, message: 'Permission Denied', status: 403 }) }
+    : { status: 200, body: servicesBody(1) }));
+  try {
+    const result = await lookupTwilio(TWILIO);
+    assert.equal(result.ok, true);
+    assert.equal(result.message, 'This API key cannot list numbers. Enter them manually.');
+    assert.deepEqual(result.numbers, []);
+    assert.equal(result.services.length, 1);
+  } finally {
+    partial.restore();
+  }
+  const broken = installFetch(() => ({ status: 500, body: JSON.stringify({ code: 20500, message: 'Internal Server Error', status: 500 }) }));
+  try {
+    const result = await lookupTwilio(TWILIO);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /Twilio error 20500/);
+  } finally {
+    broken.restore();
+  }
+  const invalid = installFetch(() => ({ status: 200 }));
+  try {
+    const result = await lookupTwilio({ ...TWILIO, apiKeySid: 'nope' });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /Fix these fields first/);
+    assert.equal(invalid.calls.length, 0);
+    const other = await lookupTwilio(TELEGRAM);
+    assert.match(other.message, /Twilio providers only/);
+  } finally {
+    invalid.restore();
   }
 });
 
@@ -176,7 +356,7 @@ test('find-chats: no updates gives guidance, a webhook conflict is explained, no
     const result = await findChats(TELEGRAM);
     assert.equal(result.ok, true);
     assert.deepEqual(result.chats, []);
-    assert.match(result.message, /No chats found/);
+    assert.match(result.message, /No people or groups found yet/);
   } finally {
     fetch.restore();
   }

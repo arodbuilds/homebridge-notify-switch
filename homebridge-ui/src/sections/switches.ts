@@ -4,8 +4,10 @@ import { PROVIDER_CHANNELS } from '../../../src/types.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App } from '../app.js';
-import { SWITCHES_SECTION, SWITCH_HELP } from '../copy.js';
-import { button, checkboxField, clear, el, numberField, paragraph, selectField, statusBox, textField, textareaField } from '../dom.js';
+import { SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import {
+  button, cardFooter, checkboxField, clear, dangerLinkButton, el, linkButton, numberField, paragraph, selectField, statusBox, textField, textareaField,
+} from '../dom.js';
 import { exportConfig, newAction, newSwitch } from '../model.js';
 import type { UiAction, UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
@@ -219,30 +221,40 @@ function recipientCount(app: App, s: UiSwitch): number {
   return seen.size;
 }
 
-function testSendPanel(app: App, s: UiSwitch): HTMLElement {
-  const status = statusBox();
-  const results = el('div', { class: 'test-results' });
-  const controls = el('div', { class: 'd-flex flex-wrap align-items-center gap-2' });
-  const confirm = el('span', { class: 'd-inline-flex flex-wrap align-items-center gap-2', hidden: true });
+interface TestSendPanel {
+  /** The footer control: the Test send button, replaced in place by the confirmation while it is open. */
+  control: HTMLElement;
+  /** Per-recipient results, rendered below the footer with a Dismiss link. */
+  results: HTMLElement;
+}
 
-  const confirmText = el('span', { class: 'small' });
+/**
+ * Test send (SPEC section 11.2, item 4, and section 11.3): the outlined Test send button is replaced in
+ * place by "Send to {n} recipients now?" with a primary Send button and a text Cancel button. Escape or
+ * Cancel restores the button. Results appear below the card footer with a Dismiss link.
+ */
+function testSendPanel(app: App, s: UiSwitch): TestSendPanel {
+  const status = statusBox();
+  const results = el('div', { class: 'ns-card-results test-results' });
+  const control = el('span', { class: 'd-inline-flex flex-wrap align-items-center gap-2 test-send' });
+
   const start = el('button', { type: 'button', class: 'btn btn-outline-primary btn-sm' }, 'Test send');
+  let onKey: (event: KeyboardEvent) => void = () => undefined;
   const reset = (): void => {
-    confirm.hidden = true;
-    start.hidden = false;
+    document.removeEventListener('keydown', onKey);
+    clear(control);
+    control.appendChild(start);
   };
-  start.addEventListener('click', () => {
-    const count = recipientCount(app, s);
-    confirmText.textContent = `This sends real messages to ${count} recipient${count === 1 ? '' : 's'} now.`;
-    start.hidden = true;
-    confirm.hidden = false;
-  });
-  const send = button('Send now', async () => {
-    reset();
+  onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      reset();
+    }
+  };
+  const showResults = (result: TestSendResult): void => {
     clear(results);
-    status.set('info', 'Sending…');
-    const result = await callServer<TestSendResult>('/test-send', { config: exportConfig(app.config), switchId: s.id });
     status.set(result.ok ? 'success' : 'danger', result.message);
+    results.appendChild(status.el);
     for (const error of result.errors ?? []) {
       results.appendChild(el('div', { class: 'small text-danger font-monospace' }, error));
     }
@@ -261,13 +273,24 @@ function testSendPanel(app: App, s: UiSwitch): HTMLElement {
       table.appendChild(tbody);
       results.appendChild(table);
     }
-  }, 'btn btn-primary btn-sm');
-  confirm.appendChild(confirmText);
-  confirm.appendChild(send);
-  confirm.appendChild(button('Cancel', reset, 'btn btn-outline-secondary btn-sm'));
-  controls.appendChild(start);
-  controls.appendChild(confirm);
-  return el('div', { class: 'test-send mt-2' }, controls, status.el, results);
+    results.appendChild(linkButton(TEST_SEND.dismiss, () => clear(results)));
+  };
+  start.addEventListener('click', () => {
+    const count = recipientCount(app, s);
+    clear(control);
+    control.appendChild(el('span', { class: 'small test-send-question' }, TEST_SEND.confirm(count)));
+    control.appendChild(button(TEST_SEND.send, async () => {
+      reset();
+      clear(results);
+      status.set('info', 'Sending…');
+      results.appendChild(status.el);
+      showResults(await callServer<TestSendResult>('/test-send', { config: exportConfig(app.config), switchId: s.id }));
+    }, 'btn btn-primary btn-sm'));
+    control.appendChild(linkButton(TEST_SEND.cancel, reset));
+    document.addEventListener('keydown', onKey);
+  });
+  control.appendChild(start);
+  return { control, results };
 }
 
 function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HTMLElement {
@@ -277,13 +300,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     host.replaceChild(switchCard(app, s, index, host), card);
   };
   const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center' },
-    title,
-    button('Remove', () => {
-      app.config.switches.splice(index, 1);
-      app.rerender('switches');
-    }, 'btn btn-outline-danger btn-sm'),
-  );
+  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center' }, title);
   const body = el('div', { class: 'card-body' });
 
   body.appendChild(textField('Name', s.name, (value) => {
@@ -339,18 +356,26 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   }
   actions.appendChild(el('div', { class: 'invalid-feedback' }));
   body.appendChild(actions);
-  body.appendChild(coverage.el);
-  body.appendChild(button('Add action', () => {
+  // Add action: a secondary, link-style button directly under the actions list (SPEC section 11.2, item 11).
+  body.appendChild(el('div', { class: 'ns-add-action' }, linkButton('Add action', () => {
     const first = app.config.providers.find((p) => p.id.trim());
     s.actions.push(newAction(first?.id.trim() ?? '', first ? PROVIDER_CHANNELS[first.type][0] : 'sms'));
     app.changed();
     rerenderSwitch();
-  }, 'btn btn-outline-secondary btn-sm'));
+  })));
+  body.appendChild(coverage.el);
 
-  body.appendChild(testSendPanel(app, s));
+  // Footer: Remove switch on the left, Test send on the right; results below the footer.
+  const testSend = testSendPanel(app, s);
+  const remove = dangerLinkButton('Remove switch', () => {
+    app.config.switches.splice(index, 1);
+    app.rerender('switches');
+  });
 
   card.appendChild(header);
   card.appendChild(body);
+  card.appendChild(cardFooter(remove, testSend.control));
+  card.appendChild(testSend.results);
   return card;
 }
 

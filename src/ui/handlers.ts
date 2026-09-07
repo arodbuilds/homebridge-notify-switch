@@ -3,7 +3,9 @@ import type { Logging } from 'homebridge';
 import { PluginLogger } from '../logging.js';
 import { renderAction, sendAction } from '../send.js';
 import { buildTemplateVariables } from '../template.js';
-import type { ChatSummary, Channel, ConnectionTestResult, ProviderDiagnostics, RecipientResult, ValidationIssue } from '../types.js';
+import type {
+  BotIdentity, ChatSummary, Channel, ConnectionTestResult, ProviderDiagnostics, RecipientResult, TwilioLookupResult, ValidationIssue,
+} from '../types.js';
 import { validateConfig, validateProvider } from '../validation.js';
 
 /**
@@ -80,7 +82,7 @@ export async function testProvider(rawProvider: unknown, options: HandlerOptions
   }
 }
 
-/** Find chat IDs for a Telegram provider block as submitted by the form. */
+/** Find people and groups for a Telegram provider block as submitted by the form. */
 export async function findChats(rawProvider: unknown, options: HandlerOptions = {}): Promise<FindChatsResult> {
   try {
     const validated = await validateProvider(rawProvider, silentLogger(), { storagePath: options.storagePath });
@@ -89,11 +91,46 @@ export async function findChats(rawProvider: unknown, options: HandlerOptions = 
       return { ok: false, message: `Fix these fields first: ${errors.map(formatIssue).join('; ') || 'provider is not valid'}`, chats: [] };
     }
     if (!hasDiagnostics(validated.provider) || !validated.provider.findChats) {
-      return { ok: false, message: 'Find chat IDs works with Telegram providers only.', chats: [] };
+      return { ok: false, message: 'Find people and groups works with Telegram providers only.', chats: [] };
     }
     return await validated.provider.findChats();
   } catch (err) {
     return { ok: false, message: `Lookup failed: ${describeError(err)}`, chats: [] };
+  }
+}
+
+/** Telegram bot identity for the onboarding flow (SPEC section 11.2, item 10). */
+export async function telegramBot(rawProvider: unknown, options: HandlerOptions = {}): Promise<BotIdentity> {
+  try {
+    const validated = await validateProvider(rawProvider, silentLogger(), { storagePath: options.storagePath });
+    const errors = validated.issues.filter((issue) => issue.level === 'error');
+    if (!validated.provider || errors.length > 0) {
+      return { ok: false, message: `Fix these fields first: ${errors.map(formatIssue).join('; ') || 'provider is not valid'}` };
+    }
+    if (!hasDiagnostics(validated.provider) || !validated.provider.getMe) {
+      return { ok: false, message: 'Bot lookup works with Telegram providers only.' };
+    }
+    return await validated.provider.getMe();
+  } catch (err) {
+    return { ok: false, message: `Lookup failed: ${describeError(err)}` };
+  }
+}
+
+/** Twilio "Look up numbers" (SPEC section 11.2, item 9): the account's phone numbers and Messaging Services. */
+export async function lookupTwilio(rawProvider: unknown, options: HandlerOptions = {}): Promise<TwilioLookupResult> {
+  const empty = { numbers: [], services: [], truncated: false };
+  try {
+    const validated = await validateProvider(rawProvider, silentLogger(), { storagePath: options.storagePath });
+    const errors = validated.issues.filter((issue) => issue.level === 'error');
+    if (!validated.provider || errors.length > 0) {
+      return { ok: false, message: `Fix these fields first: ${errors.map(formatIssue).join('; ') || 'provider is not valid'}`, ...empty };
+    }
+    if (!hasDiagnostics(validated.provider) || !validated.provider.lookupSenders) {
+      return { ok: false, message: 'Look up numbers works with Twilio providers only.', ...empty };
+    }
+    return await validated.provider.lookupSenders();
+  } catch (err) {
+    return { ok: false, message: `Lookup failed: ${describeError(err)}`, ...empty };
   }
 }
 

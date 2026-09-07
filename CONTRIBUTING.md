@@ -37,7 +37,7 @@ npm test
 
 This builds the plugin, then runs the harness in `test/harness` with Node's built-in test runner against the compiled `dist` output. `fetch` and the nodemailer transport are mocked, so the tests never touch the network and need no credentials. Each provider's success, per-recipient failure, timeout, and rate limit paths are covered, along with startup validation, `credentialsFile`, and the settings UI server handlers (including a check that no response contains a credential). The harness is excluded from the published package.
 
-One test, `test/harness/ui-layout.test.mjs`, opens the built settings UI in headless Chromium through `playwright-core` and checks that nothing is clipped or overflows at phone and desktop widths. It needs a Chromium or Chrome binary: set `NOTIFY_SWITCH_CHROMIUM` (or `CHROMIUM_PATH` / `CHROME_BIN`) to one, or have Chrome installed in its usual location. Without a browser the test is skipped locally; on CI (where Chrome is present) it fails instead, so it cannot silently disappear. Nothing is downloaded.
+The `test/harness/ui-*.test.mjs` files open the built settings UI in headless Chromium through `playwright-core` (shared helpers in `test/harness/browser.mjs`): the layout test checks that nothing is clipped or overflows at phone and desktop widths and that card footers never put two primary buttons side by side, and the phone, Twilio, Telegram and backup tests drive the phone entry, Look up numbers, the Telegram onboarding flow, and backup, restore and reset with a stubbed plugin server. They need a Chromium or Chrome binary: set `NOTIFY_SWITCH_CHROMIUM` (or `CHROMIUM_PATH` / `CHROME_BIN`) to one, or have Chrome installed in its usual location. Without a browser the test is skipped locally; on CI (where Chrome is present) it fails instead, so it cannot silently disappear. Nothing is downloaded.
 
 ## Before opening a pull request
 
@@ -59,7 +59,7 @@ All four must pass. `npm run lint` fails on any warning. Then:
 
 ## Releases
 
-1. Set the new version in `package.json` (and `package-lock.json`; `npm version <version> --no-git-tag-version` updates both).
+1. Set the new version in `package.json` (and `package-lock.json`; `npm version <version> --no-git-tag-version` updates both). Nothing else carries the version: README, SPEC and this file stay as they are.
 2. Move the Unreleased section of `CHANGELOG.md` into an entry for that version.
 3. Merge to `latest`, then publish a GitHub release whose tag is `v<version>`. Mark it as a pre-release for beta versions.
 4. The release workflow lints, builds, tests, and publishes to npm: pre-releases under the `beta` tag, releases under `latest`.
