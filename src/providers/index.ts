@@ -19,5 +19,9 @@ export async function createProvider(config: ProviderConfig, log: PluginLogger):
     const { TelegramProvider } = await import('./telegram.js');
     return new TelegramProvider(config, log);
   }
+  case 'ntfy': {
+    const { NtfyProvider } = await import('./ntfy.js');
+    return new NtfyProvider(config, log);
+  }
   }
 }

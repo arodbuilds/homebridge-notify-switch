@@ -1,7 +1,7 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
 import { helpToggle, idField } from '../card.js';
-import { GROUP_NAME_HELP, GROUPS_SECTION, ID_FIELD, REMOVE, TELEGRAM_HELP } from '../copy.js';
+import { GROUP_NAME_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
 import { addButton, cardFooter, dangerLinkButton, disclosure, el, helpText, inlineConfirm, paragraph, textField } from '../dom.js';
 import { createGroup, slugify, uniqueSlug } from '../model.js';
 import type { UiGroup } from '../model.js';
@@ -46,7 +46,7 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   }, { path: `${path}.name`, required: true, placeholder: 'e.g. Family', help: GROUP_NAME_HELP }));
 
   const onChange = (): void => app.changed(true);
-  const list = (channel: 'sms' | 'email' | 'telegram'): HTMLElement => addressList({
+  const list = (channel: 'sms' | 'email' | 'telegram' | 'ntfy'): HTMLElement => addressList({
     channel, values: g[channel], defaultCountry: app.config.defaultCountry, path: `${path}.${channel}`, onChange,
     onRemove: (i) => app.entryRemoved(`${path}.${channel}`, i),
   }).el;
@@ -56,6 +56,11 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     el('label', { class: 'form-label' }, 'Telegram chat IDs'),
     list('telegram'),
     helpText(TELEGRAM_HELP.chatIds),
+  ));
+  body.appendChild(el('div', { class: 'mb-3' },
+    el('label', { class: 'form-label' }, 'ntfy topics'),
+    list('ntfy'),
+    helpText(NTFY_HELP.topics),
   ));
   body.appendChild(disclosure('Advanced', [id], { attrs: { 'data-advanced': path } }));
 

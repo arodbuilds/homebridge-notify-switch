@@ -1,4 +1,4 @@
-import type { ProviderType } from '../../src/types.js';
+import type { NtfyAuth, NtfyPriority, ProviderType } from '../../src/types.js';
 
 /**
  * In-app copy, verbatim from SPEC section 11.3. Field help is one sentence; anything longer is a
@@ -31,6 +31,7 @@ export const PROVIDER_CHOOSER: Record<ProviderType, { title: string; help: strin
   twilio: { title: 'Twilio', help: 'SMS text messages, and email if you have a Twilio-authenticated domain.', name: 'Twilio' },
   smtp: { title: 'Email (SMTP)', help: 'Send from a mailbox you already have, such as Fastmail, Gmail, iCloud, or Outlook.', name: 'Email' },
   telegram: { title: 'Telegram', help: 'Free messages through a bot you create. Best for family group chats.', name: 'Telegram' },
+  ntfy: { title: 'ntfy', help: 'Free push notifications to the ntfy app. No account needed for public topics.', name: 'ntfy' },
 };
 
 export const CHOOSER = {
@@ -40,7 +41,7 @@ export const CHOOSER = {
 };
 
 /** Provider type badge text in card headers and dropdowns (SPEC section 11.2, item 13). */
-export const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = { twilio: 'Twilio', smtp: 'SMTP', telegram: 'Telegram' };
+export const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = { twilio: 'Twilio', smtp: 'SMTP', telegram: 'Telegram', ntfy: 'ntfy' };
 
 /** Provider Name field help, with examples (SPEC section 11.3). */
 export const PROVIDER_NAME_HELP = 'How this provider is listed when you set up a switch. For example: Twilio, Home Gmail, Family bot.';
@@ -117,6 +118,43 @@ export const TELEGRAM_HELP = {
   parseMode: 'How Telegram reads the message. Plain text is the safest choice.',
 };
 
+/** ntfy provider card (SPEC section 11.2, item 24, and section 11.3). */
+export const NTFY_HELP = {
+  intro: 'ntfy delivers to the ntfy app on your phone. Install the app, subscribe to a topic name of your choosing, and add that topic to a group. '
+    + 'Anyone who knows the topic name can read it, so pick something unguessable or use an access token.',
+  introLink: { text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#ntfy' } as HelpLink,
+  server: 'Leave as ntfy.sh unless you run your own server.',
+  authLabel: 'Authentication',
+  auth: {
+    none: 'No credentials. Works for public topics on ntfy.sh; anyone who guesses the topic name can publish to it too.',
+    token: 'Recommended. Create an access token in the ntfy app or web app under Account, then reserve your topic so only you can publish to it.',
+    basic: 'Sign in with your ntfy username and password. An access token is safer because it can be revoked on its own.',
+  } as Record<NtfyAuth, string>,
+  authOptions: [
+    { value: 'none', label: 'None' },
+    { value: 'token', label: 'Access token (recommended)' },
+    { value: 'basic', label: 'Username and password' },
+  ] as Array<{ value: NtfyAuth; label: string }>,
+  authLink: { text: WHERE_LINK, href: 'https://github.com/arodbuilds/homebridge-notify-switch#ntfy' } as HelpLink,
+  token: 'Paste the access token. It starts with tk_ and is shown once.',
+  username: 'Your ntfy username.',
+  password: 'Your ntfy password.',
+  topics: 'Topic names as subscribed in the ntfy app. Letters, numbers, dashes and underscores.',
+  priorityLabel: 'Priority',
+  priority: 'How the app announces it. Urgent and high can break through Do Not Disturb; min shows no notification.',
+  priorityOptions: [
+    { value: 'min', label: 'Min' },
+    { value: 'low', label: 'Low' },
+    { value: 'default', label: 'Default' },
+    { value: 'high', label: 'High' },
+    { value: 'urgent', label: 'Urgent' },
+  ] as Array<{ value: NtfyPriority; label: string }>,
+  tagsLabel: 'Tags',
+  tags: 'Optional. Up to 8, separated by commas. Emoji short codes such as warning or house show as icons in the app.',
+  tagsPlaceholder: 'e.g. warning, house',
+  title: 'Optional. Defaults to the switch name.',
+};
+
 export const GROUPS_SECTION = 'A group is a list of people. Switches send to groups, so you enter each person once.';
 
 /** Group Name field help, with examples (SPEC section 11.3). */
@@ -170,6 +208,12 @@ export const VALIDATION = {
   botToken: 'That does not look like a bot token. BotFather sends it as numbers, a colon, then letters. Paste the whole thing.',
   port: 'Port is usually 465 or 587.',
   switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
+  /** Provider, group and platform names (SPEC section 5). */
+  name: 'Use letters, numbers, spaces, and punctuation, up to 64 characters.',
+  ntfyServer: 'That does not look like a server address. It starts with https:// or http://, for example https://ntfy.sh.',
+  ntfyTopic: (topic: string): string => `Topic "${topic}" is not a topic name. Use letters, numbers, dashes and underscores, up to 64 characters.`,
+  ntfyTag: (tag: string): string => `Tag "${tag}" is not a tag. Use letters, numbers, dashes, underscores and plus signs, up to 32 characters.`,
+  ntfyTags: 'Use at most 8 tags.',
   /** Shown instead of the issue list while every remaining issue is on a card nobody has touched yet (SPEC section 11.2, item 15). */
   finishNew: (what: string): string => `Fill in the new ${what} to enable Save.`,
 };
@@ -267,6 +311,8 @@ export const BACKUP = {
   restore: 'Restore from backup',
   restoreHelp: 'Choose a backup file. It is checked before anything changes; if it passes, the form is replaced with its contents and Save is enabled.',
   restoreFailed: 'The backup could not be loaded:',
+  restoreTooLarge: 'The file is larger than 1 MB, which a Notify Switch backup never is.',
+  restoreForbiddenKey: (path: string): string => `The file contains a key named "${path}", which is not allowed.`,
   restored: 'Backup loaded. Review the form, then click Save.',
   restoredWithoutCredentials: 'Backup loaded. Enter the credentials it left out, then click Save.',
   reset: 'Reset plugin to fresh install',

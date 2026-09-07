@@ -11,6 +11,7 @@ import { fakeLogger, platformConfig, SMTP, TELEGRAM, TWILIO } from './helpers.mj
  */
 
 const FAMILY = { id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: ['123456789'] };
+const PUSH = { id: 'push', name: 'Push', sms: [], email: [], telegram: [], ntfy: ['home-alerts'] };
 const NEIGHBOURS = { id: 'neighbours', name: 'Neighbours', sms: [], email: ['n@example.com'], telegram: [] };
 const EMPTY = { id: 'empty', name: 'Empty', sms: [], email: [' '], telegram: [] };
 
@@ -32,6 +33,11 @@ test('coverage: every action channel counts as covered, and only targeted groups
   assert.deepEqual(uncoveredChannels(extraOnly, [FAMILY]), [{ channel: 'telegram', groups: ['family'] }],
     'an action with extra recipients only still covers its channel');
   assert.deepEqual(uncoveredChannels(actions, [NEIGHBOURS]), [], 'a group nobody targets is ignored');
+  assert.deepEqual(uncoveredChannels([{ channel: 'sms', groups: ['family', 'push'], recipients: [] }], [FAMILY, PUSH]), [
+    { channel: 'email', groups: ['family'] },
+    { channel: 'telegram', groups: ['family'] },
+    { channel: 'ntfy', groups: ['push'] },
+  ], 'ntfy topics are a channel like the others, last in channel order');
 });
 
 test('coverage: groups are listed once each in configuration order, ids are matched trimmed, blanks and unknown groups are ignored', () => {
@@ -54,9 +60,12 @@ test('coverage: the settings UI copy is the SPEC section 11.3 wording, varied pe
     'This switch sends to a group with phone numbers, but it has no SMS action. Those recipients will not receive anything.');
   assert.equal(uncoveredChannelWarning('telegram'),
     'This switch sends to a group with Telegram chat IDs, but it has no Telegram action. Those recipients will not receive anything.');
+  assert.equal(uncoveredChannelWarning('ntfy'),
+    'This switch sends to a group with ntfy topics, but it has no ntfy action. Those recipients will not receive anything.');
   assert.equal(addActionLabel('email'), 'Add email action');
   assert.equal(addActionLabel('sms'), 'Add SMS action');
   assert.equal(addActionLabel('telegram'), 'Add Telegram action');
+  assert.equal(addActionLabel('ntfy'), 'Add ntfy action');
 });
 
 test('coverage: startup logs one warning per switch and channel with the switch name, and the platform still starts', async () => {

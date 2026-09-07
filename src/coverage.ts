@@ -23,6 +23,7 @@ export interface CoverageGroup {
   sms: string[];
   email: string[];
   telegram: string[];
+  ntfy: string[];
 }
 
 export interface UncoveredChannel {
@@ -37,7 +38,7 @@ function hasEntries(list: string[] | undefined): boolean {
 
 /**
  * Channels present in the groups (and extra recipients) a switch targets that none of its actions
- * send on. Returned in channel order (sms, email, telegram); empty when everyone is covered.
+ * send on. Returned in channel order (sms, email, telegram, ntfy); empty when everyone is covered.
  * Group ids are matched trimmed so the UI can pass its editable model directly. Unknown group ids
  * are ignored here; validation reports them separately.
  */
@@ -74,6 +75,7 @@ export const CHANNEL_ADDRESS_NOUN: Readonly<Record<Channel, string>> = {
   sms: 'phone numbers',
   email: 'email addresses',
   telegram: 'Telegram chat IDs',
+  ntfy: 'ntfy topics',
 };
 
 /** Human label for a channel in warnings and button text. */
@@ -81,6 +83,7 @@ export const CHANNEL_ACTION_LABEL: Readonly<Record<Channel, string>> = {
   sms: 'SMS',
   email: 'email',
   telegram: 'Telegram',
+  ntfy: 'ntfy',
 };
 
 /**

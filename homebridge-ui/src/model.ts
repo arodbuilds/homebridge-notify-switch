@@ -1,10 +1,14 @@
-import type { Channel, FailureMode, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
-import { CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES } from '../../src/types.js';
+import type { Channel, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
+import {
+  CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES,
+} from '../../src/types.js';
+import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
 
 /**
  * The configuration object the settings UI edits. It is the platform block from config.json with
  * every known field present (defaults filled in) so the sections can bind inputs to it directly.
- * Unknown top-level keys are preserved; unknown keys inside providers, groups and switches are dropped.
+ * Unknown top-level keys are preserved (except `__proto__`, `constructor` and `prototype`, which are
+ * never carried); unknown keys inside providers, groups and switches are dropped.
  */
 
 export interface UiEmailIdentity {
@@ -24,7 +28,7 @@ export interface UiProvider {
   smsSenders: string[];
   messagingServiceSid: string;
   emailFrom: UiEmailIdentity;
-  // smtp
+  // smtp (username and password are shared with ntfy's basic auth)
   host: string;
   port: number;
   security: SmtpSecurity;
@@ -36,6 +40,10 @@ export interface UiProvider {
   // telegram
   botToken: string;
   parseMode: TelegramParseMode;
+  // ntfy
+  server: string;
+  auth: NtfyAuth;
+  token: string;
 }
 
 export interface UiGroup {
@@ -44,6 +52,7 @@ export interface UiGroup {
   sms: string[];
   email: string[];
   telegram: string[];
+  ntfy: string[];
 }
 
 export interface UiAction {
@@ -52,10 +61,15 @@ export interface UiAction {
   sender: string;
   groups: string[];
   recipients: string[];
+  /** Email subject, or the ntfy title. */
   subject: string;
   body: string;
   /** Email only: hide recipients from each other (SPEC section 6.2 and 6.3). */
   bcc: boolean;
+  /** ntfy only. */
+  priority: NtfyPriority;
+  /** ntfy only. */
+  tags: string[];
 }
 
 export interface UiSwitch {
@@ -81,6 +95,9 @@ export interface UiConfig {
   switches: UiSwitch[];
   [extra: string]: unknown;
 }
+
+/** Bytes of a backup file, or of a stored draft, past which it is rejected without being parsed (SPEC section 12, item 12). */
+export const MAX_BACKUP_BYTES = 1024 * 1024;
 
 type Raw = Record<string, unknown>;
 
@@ -119,15 +136,16 @@ export function newProvider(type: ProviderType = 'twilio'): UiProvider {
     accountSid: '', apiKeySid: '', apiKeySecret: '', smsSenders: [], messagingServiceSid: '', emailFrom: { address: '', name: '' },
     host: '', port: 465, security: 'ssl', username: '', password: '', from: { address: '', name: '' }, smtpPreset: '',
     botToken: '', parseMode: 'none',
+    server: NTFY_DEFAULT_SERVER, auth: 'none', token: '',
   };
 }
 
 export function newGroup(): UiGroup {
-  return { id: '', name: '', sms: [], email: [], telegram: [] };
+  return { id: '', name: '', sms: [], email: [], telegram: [], ntfy: [] };
 }
 
 export function newAction(providerId = '', channel: Channel = 'sms'): UiAction {
-  return { providerId, channel, sender: '', groups: [], recipients: [], subject: '', body: '', bcc: false };
+  return { providerId, channel, sender: '', groups: [], recipients: [], subject: '', body: '', bcc: false, priority: 'default', tags: [] };
 }
 
 /** RFC 4122 v4 UUID. `crypto.randomUUID` needs a secure context, which a LAN Homebridge UI over http is not. */
@@ -182,12 +200,15 @@ function readProvider(raw: unknown): UiProvider {
   p.smtpPreset = str(r.smtpPreset);
   p.botToken = str(r.botToken);
   p.parseMode = oneOf(r.parseMode, TELEGRAM_PARSE_MODES, 'none');
+  p.server = str(r.server, NTFY_DEFAULT_SERVER) || NTFY_DEFAULT_SERVER;
+  p.auth = oneOf(r.auth, NTFY_AUTHS, 'none');
+  p.token = str(r.token);
   return p;
 }
 
 function readGroup(raw: unknown): UiGroup {
   const r = isRaw(raw) ? raw : {};
-  return { id: str(r.id), name: str(r.name), sms: list(r.sms), email: list(r.email), telegram: list(r.telegram) };
+  return { id: str(r.id), name: str(r.name), sms: list(r.sms), email: list(r.email), telegram: list(r.telegram), ntfy: list(r.ntfy) };
 }
 
 function readAction(raw: unknown): UiAction {
@@ -201,6 +222,8 @@ function readAction(raw: unknown): UiAction {
     subject: str(r.subject),
     body: str(r.body),
     bcc: bool(r.bcc, false),
+    priority: oneOf(r.priority, NTFY_PRIORITIES, 'default'),
+    tags: list(r.tags),
   };
 }
 
@@ -218,12 +241,23 @@ function readSwitch(raw: unknown): UiSwitch {
   };
 }
 
+/** The unknown top-level keys of a block that are carried through unchanged; the forbidden names never are. */
+function extraKeys(r: Raw): Raw {
+  const out: Raw = {};
+  for (const key of Object.keys(r)) {
+    if (!FORBIDDEN_KEYS.includes(key)) {
+      out[key] = r[key];
+    }
+  }
+  return out;
+}
+
 /** Builds the editable model from a platform block (or nothing, for a fresh install). */
 export function readConfig(raw: unknown): UiConfig {
   const r = isRaw(raw) ? raw : {};
   const master = isRaw(r.masterSwitch) ? r.masterSwitch : {};
   return {
-    ...r,
+    ...extraKeys(r),
     platform: 'NotifySwitch',
     name: str(r.name, 'Notify Switch'),
     configVersion: int(r.configVersion, 1),
@@ -292,6 +326,19 @@ export function exportProvider(p: UiProvider): Raw {
     out.botToken = p.botToken.trim();
     out.parseMode = p.parseMode;
     break;
+  case 'ntfy':
+    out.server = p.server.trim() || NTFY_DEFAULT_SERVER;
+    out.auth = p.auth;
+    if (p.auth === 'token' && p.token.trim()) {
+      out.token = p.token.trim();
+    }
+    if (p.auth === 'basic') {
+      out.username = p.username.trim();
+      if (p.password) {
+        out.password = p.password;
+      }
+    }
+    break;
   }
   return out;
 }
@@ -303,11 +350,20 @@ function exportAction(a: UiAction): Raw {
   }
   out.groups = [...a.groups];
   out.recipients = trimList(a.recipients);
-  if (a.channel === 'email' && a.subject.trim()) {
+  if ((a.channel === 'email' || a.channel === 'ntfy') && a.subject.trim()) {
     out.subject = a.subject.trim();
   }
   if (a.channel === 'email' && a.bcc) {
     out.bcc = true;
+  }
+  if (a.channel === 'ntfy') {
+    if (a.priority !== 'default') {
+      out.priority = a.priority;
+    }
+    const tags = trimList(a.tags);
+    if (tags.length > 0) {
+      out.tags = tags;
+    }
   }
   out.body = a.body;
   return out;
@@ -325,7 +381,7 @@ export function exportConfig(config: UiConfig): Raw {
     debug: config.debug,
     providers: config.providers.map(exportProvider),
     groups: config.groups.map((g) => ({
-      id: g.id.trim(), name: g.name.trim(), sms: trimList(g.sms), email: trimList(g.email), telegram: trimList(g.telegram),
+      id: g.id.trim(), name: g.name.trim(), sms: trimList(g.sms), email: trimList(g.email), telegram: trimList(g.telegram), ntfy: trimList(g.ntfy),
     })),
     switches: config.switches.map((s) => ({
       id: s.id,
@@ -340,19 +396,26 @@ export function exportConfig(config: UiConfig): Raw {
   };
 }
 
-/** The one field per provider type that is a secret on its own (SPEC section 5.2). */
-const SECRET_FIELDS: Readonly<Record<ProviderType, readonly string[]>> = {
-  twilio: ['apiKeySecret'],
-  smtp: ['password'],
-  telegram: ['botToken'],
-};
+/** The fields per provider type that are secrets on their own (SPEC section 5.2). ntfy's depend on its auth mode. */
+function ownSecretFields(p: UiProvider): string[] {
+  switch (p.type) {
+  case 'twilio':
+    return ['apiKeySecret'];
+  case 'smtp':
+    return ['password'];
+  case 'telegram':
+    return ['botToken'];
+  case 'ntfy':
+    return p.auth === 'token' ? ['token'] : p.auth === 'basic' ? ['password'] : [];
+  }
+}
 
 /**
  * The fields a backup without credentials empties (SPEC section 11.2, item 12): the provider's secret, and,
  * when a `credentialsFile` is set, every key that file may supply, since those values are credentials too.
  */
 export function secretFields(p: UiProvider): string[] {
-  const keys = new Set<string>(SECRET_FIELDS[p.type]);
+  const keys = new Set<string>(ownSecretFields(p));
   if (p.credentialsFile.trim()) {
     for (const key of CREDENTIAL_KEYS[p.type]) {
       keys.add(key);
@@ -437,11 +500,16 @@ export function emptyConfig(): UiConfig {
 
 /**
  * Reads a backup file's JSON into a platform block: either the block itself or a whole config.json
- * holding one under `platforms`. Returns the block, or the reason it was rejected.
+ * holding one under `platforms`. Returns the block, or the reason it was rejected. A key named
+ * `__proto__`, `constructor` or `prototype` at any nesting level rejects the file (SPEC section 12, item 12).
  */
-export function backupBlock(parsed: unknown): { block?: Raw; error?: string } {
+export function backupBlock(parsed: unknown): { block?: Raw; error?: string; forbiddenKey?: string } {
   if (!isRaw(parsed)) {
     return { error: 'The file does not contain a JSON object.' };
+  }
+  const forbiddenKey = findForbiddenKey(parsed);
+  if (forbiddenKey !== undefined) {
+    return { forbiddenKey };
   }
   let block: Raw = parsed;
   if (Array.isArray(parsed.platforms)) {

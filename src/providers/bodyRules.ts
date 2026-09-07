@@ -3,6 +3,8 @@ import type { Channel, ValidationIssue } from '../types.js';
 
 export const EMAIL_MAX_LENGTH = 10000;
 export const TELEGRAM_MAX_LENGTH = 4096;
+/** ntfy.sh accepts messages up to 4096 bytes; a self-hosted server may allow more, the plugin does not (SPEC section 5.5, item 8). */
+export const NTFY_MAX_LENGTH = 4096;
 
 /** Number of user-perceived characters (code points) in a string. */
 export function charCount(text: string): number {
@@ -44,6 +46,12 @@ export function validateBodyForChannel(channel: Channel, body: string): Validati
   case 'telegram': {
     if (length > TELEGRAM_MAX_LENGTH) {
       issues.push({ path: 'body', level: 'error', message: `telegram body is ${length} characters; the limit is ${TELEGRAM_MAX_LENGTH}` });
+    }
+    break;
+  }
+  case 'ntfy': {
+    if (length > NTFY_MAX_LENGTH) {
+      issues.push({ path: 'body', level: 'error', message: `ntfy body is ${length} characters; the limit is ${NTFY_MAX_LENGTH}` });
     }
     break;
   }

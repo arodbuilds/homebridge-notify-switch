@@ -44,7 +44,7 @@ test('guided empty state: a Get started card with the chooser tiles, disabled Ad
     assert.equal(await card.count(), 1);
     assert.equal(await card.locator('.card-header').textContent(), 'Get started');
     assert.equal(await card.locator('.ns-get-started-intro').textContent(), 'Choose how you want to send messages. You can add more providers later.');
-    assert.deepEqual(await card.locator('.ns-chooser-tile .fw-semibold').allTextContents(), ['Twilio', 'Email (SMTP)', 'Telegram']);
+    assert.deepEqual(await card.locator('.ns-chooser-tile .fw-semibold').allTextContents(), ['Twilio', 'Email (SMTP)', 'Telegram', 'ntfy']);
     assert.equal(await providers.locator('.section-copy').count(), 0, 'the section intro gives way to the card');
     assert.equal(await providers.getByRole('button', { name: 'Add provider' }).count(), 0);
     assert.equal(await providers.locator('.form-text').count(), 0, 'no "No providers yet" line either');

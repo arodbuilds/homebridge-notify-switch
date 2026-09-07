@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { validateConfig } from '../../dist/validation.js';
-import { fakeLogger, platformConfig, SMTP, storageDir, TELEGRAM, TWILIO } from './helpers.mjs';
+import { fakeLogger, NTFY, platformConfig, SMTP, storageDir, TELEGRAM, TWILIO } from './helpers.mjs';
 
 const SMS_ACTION = { providerId: 'twilio-main', channel: 'sms', groups: ['family'], body: 'hi' };
 const TWILIO_EMAIL_ACTION = { providerId: 'twilio-main', channel: 'email', groups: ['family'], body: 'hi' };
 const SMTP_ACTION = { providerId: 'fastmail', channel: 'email', groups: ['family'], body: 'hi' };
 const TELEGRAM_ACTION = { providerId: 'telegram-home', channel: 'telegram', groups: ['family'], body: 'hi' };
+const NTFY_ACTION = { providerId: 'ntfy-home', channel: 'ntfy', groups: ['family'], body: 'hi' };
 
 function errors(result) {
   return result.issues.filter((issue) => issue.level === 'error').map((issue) => `${issue.path}: ${issue.message}`);
@@ -19,14 +20,63 @@ function warnings(result) {
 
 test('validation: every channel validates without a "not yet implemented" warning', async () => {
   const config = platformConfig({
-    providers: [TWILIO, SMTP, TELEGRAM],
-    actions: [SMS_ACTION, TWILIO_EMAIL_ACTION, SMTP_ACTION, TELEGRAM_ACTION],
+    providers: [TWILIO, SMTP, TELEGRAM, NTFY],
+    actions: [SMS_ACTION, TWILIO_EMAIL_ACTION, SMTP_ACTION, TELEGRAM_ACTION, NTFY_ACTION],
   });
   const result = await validateConfig(config, fakeLogger().log);
   assert.deepEqual(errors(result), []);
   assert.deepEqual(warnings(result), []);
-  assert.equal(result.switches[0].actions.length, 4);
-  assert.deepEqual([...result.providers.keys()].sort(), ['fastmail', 'telegram-home', 'twilio-main']);
+  assert.equal(result.switches[0].actions.length, 5);
+  assert.deepEqual([...result.providers.keys()].sort(), ['fastmail', 'ntfy-home', 'telegram-home', 'twilio-main']);
+});
+
+test('validation: an ntfy action carries its title, priority and tags; subject is accepted on ntfy and ignored elsewhere', async () => {
+  const config = platformConfig({
+    providers: [NTFY, TWILIO],
+    groups: [{ id: 'family', name: 'Family', sms: ['+16785550101'], ntfy: ['home-alerts', 'garage'] }],
+    actions: [
+      { ...NTFY_ACTION, subject: 'Leak', priority: 'urgent', tags: ['warning', 'house', 'warning'] },
+      NTFY_ACTION,
+      { ...SMS_ACTION, subject: 'x', priority: 'high', tags: ['a'] },
+    ],
+  });
+  const result = await validateConfig(config, fakeLogger().log);
+  assert.deepEqual(errors(result), []);
+  assert.deepEqual(warnings(result), [
+    'switches[0].actions[2].subject: only applies to the email and ntfy channels and is ignored for sms',
+    'switches[0].actions[2].priority: only applies to the ntfy channel and is ignored for sms',
+    'switches[0].actions[2].tags: only applies to the ntfy channel and is ignored for sms',
+  ]);
+  const [first, second, sms] = result.switches[0].actions;
+  assert.deepEqual([first.subject, first.priority, first.tags, first.recipients], ['Leak', 'urgent', ['warning', 'house'], ['home-alerts', 'garage']]);
+  assert.deepEqual([second.subject, second.priority, second.tags], ['Water Leak Alert', 'default', undefined], 'the title defaults to the switch name');
+  assert.deepEqual([sms.subject, sms.priority, sms.tags], [undefined, undefined, undefined]);
+  assert.equal(result.config.providers[0].server, 'https://ntfy.sh');
+
+  const bad = platformConfig({
+    providers: [{ ...NTFY, server: 'ntfy.sh', auth: 'basic' }, { ...NTFY, id: 'ntfy-2', auth: 'token', token: undefined }],
+    groups: [{ id: 'family', name: 'Family', ntfy: ['bad topic!'] }],
+    actions: [{ ...NTFY_ACTION, tags: ['ok', 'not ok'], priority: 'loud' }],
+  });
+  assert.deepEqual(errors(await validateConfig(bad, fakeLogger().log)), [
+    'providers[0].server: must be a URL such as https://ntfy.sh',
+    'providers[0].username: is required when auth is basic',
+    'providers[0].password: is required when auth is basic',
+    'providers[1].token: is required when auth is token',
+    'groups[0].ntfy[0]: "bad topic!" is not an ntfy topic name (letters, digits, dashes and underscores, up to 64 characters)',
+    'switches[0].actions[0].priority: must be one of min, low, default, high, urgent',
+    'switches[0].actions[0].tags[1]: "not ok" is not a tag; use letters, digits, dashes, underscores and plus signs, up to 32 characters',
+    'switches[0].actions[0]: no recipients resolve for ntfy; add a group with ntfy addresses or list recipients directly',
+  ]);
+});
+
+test('credentialsFile: ntfy takes token, username and password from the file', async () => {
+  const storagePath = storageDir({ 'ntfy.json': { token: 'tk_from_file' } });
+  const config = platformConfig({ providers: [{ ...NTFY, token: undefined, credentialsFile: 'ntfy.json' }], actions: [NTFY_ACTION] });
+  const result = await validateConfig(config, fakeLogger().log, { storagePath });
+  assert.deepEqual(errors(result), []);
+  assert.equal(result.config.providers[0].token, 'tk_from_file');
+  assert.equal(result.notices.find((line) => line.includes('credentialsFile')), 'providers[0].credentialsFile: using token from "ntfy.json"');
 });
 
 test('validation: bcc is carried into the resolved email action, defaults to off, and is ignored with a warning on other channels', async () => {

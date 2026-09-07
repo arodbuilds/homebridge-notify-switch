@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+The first half of 1.1.0: a security review of the 1.0.1 code with its fixes, the provider and group name rule, and the ntfy provider. The version stays 1.0.1 until the second pull request.
+
+### Added
+
+- **ntfy provider** (`type: ntfy`), serving the new `ntfy` channel: free push notifications to the ntfy app through a topic name. Provider fields: `server` (default `https://ntfy.sh`, http or https), `auth` (`none`, `token`, `basic`), `token`, `username` and `password`; `credentialsFile` may supply `token`, `username` and `password`. Groups gain a fourth list, `ntfy`, of topic names matching `^[A-Za-z0-9_-]{1,64}$`. Actions on the ntfy channel take an optional `priority` (`min`, `low`, `default`, `high`, `urgent`) and up to 8 `tags`, and use `subject` as the notification title (default: the switch name). One POST per topic to `{server}/{topic}` with a plain text body and the `Title`, `Priority`, `Tags` and `Authorization` headers; concurrency 5, 10 s timeout, one retry, `Retry-After` honored on 429; success is HTTP 200 with a JSON `id`. 401 and 403 read "ntfy rejected the credentials for topic {topic}", 404 "ntfy server not found"; the token and password never appear in a result. Test connection GETs `/v1/health` and, with credentials, `/v1/account`, where 401 means bad credentials; nothing is published. A non-ASCII title is RFC 2047 encoded (SPEC sections 3, 5, 6.5, 11.2 and 11.3).
+- Settings UI: a fourth provider tile, "ntfy: Free push notifications to the ntfy app. No account needed for public topics." (the tiles are now four across on wide screens, two by two between 600px and 768px, stacked below 600px); the ntfy card with its intro, Server field, Authentication picker (None, Access token (recommended), Username and password) that shows only the fields the mode needs, and Test connection; an "ntfy topics" list on every group card; Title, Priority and Tags on ntfy actions; the uncovered-channel warning, its "Add ntfy action" button, the Test send confirmation and gating treat ntfy like the other channels.
+- Name rule for provider and group names (and the platform name, which Homebridge prefixes every log line with): printable characters only, no control characters, no angle brackets, 1 to 64 characters. Enforced by `config.schema.json`, by the settings UI with the message "Use letters, numbers, spaces, and punctuation, up to 64 characters.", and at startup as a warning naming the field, never an error, so an existing configuration keeps starting (SPEC section 5).
+- Size and time bounds, stated in SPEC section 12: 100 recipients per action after deduplication, 200 entries per address list, 20 actions per switch, 100 providers, groups and switches each, 8 tags per action, 1 MiB of any provider response body, 100 distinct chats from one `getUpdates` call, 1 MB per backup file or draft, 64 characters of Test send switch id; the existing 10 s timeout, one retry, 60 s retry-after cap and 5 in-flight requests per provider are listed with them.
+- Harness: `ntfy.test.mjs` (success, per-recipient failure, 401, 403, 404, 413, 429 with Retry-After, timeout, credentials never in output or logs, header shapes for the three auth modes, the response body cap, and every Test connection path), `security.test.mjs` (log line escaping, quoted values in validation messages, the name rule, forbidden keys at every level, credentials file messages, the bounds, the switch id bound) and `ui-ntfy.test.mjs` (the ntfy card, topics, actions, the uncovered warning, the name rule message, restore and draft guards).
+- README: an ntfy setup guide with the app links and the topic-name warning, ntfy in the intro, the provider table, the action table, the credentials file table and troubleshooting.
+
+### Changed
+
+- Every log line written through the plugin's logger has control characters escaped (`\n`, `\u001b`), and every configuration value quoted in a startup message is escaped and cut to 80 characters, so a value in config.json or a provider's reply can never start a new log line or emit a terminal escape sequence. With `debug` on, a multi-line body is logged on one line with `\n` in it.
+- `EMAIL_PATTERN` rejects control and Unicode format characters, which the old pattern let through into log lines.
+- `credentialsFile` warnings quote a key name from the file escaped and cut to 64 characters; they never carried values, and still do not.
+- Telegram Find people and groups lists at most 100 distinct chats.
+- The `subject` warning now reads "only applies to the email and ntfy channels".
+- README: the "Help text is hard to read in dark mode" troubleshooting entry is gone (fixed in 1.0.0).
+- SPEC.md: sections 3, 5, 6, 8, 10, 11.2, 11.3 and 12 record the above.
+
+### Security
+
+Findings of the 1.1.0 adversarial review (each item is in the pull request with its verdict):
+
+- Restore from backup and draft recovery reject a key named `__proto__`, `constructor` or `prototype` at any nesting level (the file is refused with the offending path; a draft is discarded), and so does startup validation and every UI server endpoint. Before this, such a key in a backup was carried into the platform block as an unknown key. The settings UI never carries those three names forward as unknown top-level keys.
+- Backup files over 1 MB are refused before they are read; a draft over 1 MB is neither written nor loaded.
+- Provider HTTP responses are read up to 1 MiB and the stream is cancelled past that, so a server the user points the plugin at cannot make it buffer an unbounded reply.
+- The settings UI re-checks the bot username against `^[A-Za-z0-9_]{5,32}$` before building a Telegram link or QR code from it, so only a bot username can ever be embedded, whatever the server answered.
+- The Test send endpoint refuses a switch id over 64 characters.
+- Dependency review: the runtime tree (`nodemailer`, `@homebridge/plugin-ui-utils`) has no install scripts and `npm audit` reports no advisories; the lockfile is committed. The dev tree carries `esbuild` (postinstall) and `fsevents` (optional, macOS), both dev-only and not in the published package.
+
 ## [1.0.1] - 2026-09-07
 
 Closes the remaining pre-release audit findings and adds the brand assets. The only user-visible changes are the SMTP Test connection success line and the mark in the settings page footer.

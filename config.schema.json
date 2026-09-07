@@ -101,6 +101,12 @@
                   "enum": [
                     "telegram"
                   ]
+                },
+                {
+                  "title": "ntfy (push notifications)",
+                  "enum": [
+                    "ntfy"
+                  ]
                 }
               ],
               "description": "The messaging service this provider connects to."
@@ -108,12 +114,15 @@
             "name": {
               "title": "Name",
               "type": "string",
-              "description": "Display name for this provider."
+              "description": "Display name for this provider. Letters, numbers, spaces, and punctuation, up to 64 characters.",
+              "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]{1,64}$",
+              "minLength": 1,
+              "maxLength": 64
             },
             "credentialsFile": {
               "title": "Credentials File",
               "type": "string",
-              "description": "Optional. A JSON file, relative to the Homebridge storage directory, that holds this provider's secrets so they stay out of config.json (Twilio: accountSid, apiKeySid, apiKeySecret. SMTP: username, password. Telegram: botToken). Read once when Homebridge starts."
+              "description": "Optional. A JSON file, relative to the Homebridge storage directory, that holds this provider's secrets so they stay out of config.json (Twilio: accountSid, apiKeySid, apiKeySecret. SMTP: username, password. Telegram: botToken. ntfy: token, username, password). Read once when Homebridge starts."
             },
             "accountSid": {
               "title": "Account SID",
@@ -235,9 +244,9 @@
             "username": {
               "title": "Username",
               "type": "string",
-              "description": "Usually your full email address.",
+              "description": "SMTP: usually your full email address. ntfy: your ntfy username.",
               "condition": {
-                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]] && (model.providers[arrayIndices[0]].type === 'smtp' || (model.providers[arrayIndices[0]].type === 'ntfy' && model.providers[arrayIndices[0]].auth === 'basic'));"
               }
             },
             "password": {
@@ -246,9 +255,9 @@
               "x-schema-form": {
                 "type": "password"
               },
-              "description": "Use an app password, not your login password. Most providers require it. The README section App passwords shows where to create one.",
+              "description": "SMTP: use an app password, not your login password. Most providers require it. The README section App passwords shows where to create one. ntfy: your ntfy password.",
               "condition": {
-                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'smtp';"
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]] && (model.providers[arrayIndices[0]].type === 'smtp' || (model.providers[arrayIndices[0]].type === 'ntfy' && model.providers[arrayIndices[0]].auth === 'basic'));"
               }
             },
             "from": {
@@ -326,6 +335,56 @@
               "condition": {
                 "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'telegram';"
               }
+            },
+            "server": {
+              "title": "Server",
+              "type": "string",
+              "default": "https://ntfy.sh",
+              "pattern": "^https?://[^\\s/?#]+(/[^\\s?#]*)?$",
+              "description": "Leave as ntfy.sh unless you run your own server. Must start with http:// or https://.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'ntfy';"
+              }
+            },
+            "auth": {
+              "title": "Authentication",
+              "type": "string",
+              "default": "none",
+              "oneOf": [
+                {
+                  "title": "None",
+                  "enum": [
+                    "none"
+                  ]
+                },
+                {
+                  "title": "Access token (recommended)",
+                  "enum": [
+                    "token"
+                  ]
+                },
+                {
+                  "title": "Username and password",
+                  "enum": [
+                    "basic"
+                  ]
+                }
+              ],
+              "description": "None works for public topics on ntfy.sh. Access token (recommended): create one in the ntfy app or web app under Account and reserve your topic. Username and password: sign in with your ntfy account.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'ntfy';"
+              }
+            },
+            "token": {
+              "title": "Access token",
+              "type": "string",
+              "x-schema-form": {
+                "type": "password"
+              },
+              "description": "Paste the access token. It starts with tk_ and is shown once.",
+              "condition": {
+                "functionBody": "return model.providers && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]] && model.providers[arrayIndices[0]].type === 'ntfy' && model.providers[arrayIndices[0]].auth === 'token';"
+              }
             }
           }
         }
@@ -350,7 +409,10 @@
             "name": {
               "title": "Name",
               "type": "string",
-              "description": "Display name for this group."
+              "description": "Display name for this group. Letters, numbers, spaces, and punctuation, up to 64 characters.",
+              "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029<>]{1,64}$",
+              "minLength": 1,
+              "maxLength": 64
             },
             "sms": {
               "title": "SMS",
@@ -384,6 +446,17 @@
                 "pattern": "^-?\\d+$"
               },
               "description": "Use Find people and groups on your Telegram provider. IDs are numbers, not usernames."
+            },
+            "ntfy": {
+              "title": "ntfy",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "title": "Topic",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              },
+              "description": "Topic names as subscribed in the ntfy app. Letters, numbers, dashes and underscores. Anyone who knows a topic name can read it, so pick something unguessable."
             }
           }
         }
@@ -510,6 +583,12 @@
                         "enum": [
                           "telegram"
                         ]
+                      },
+                      {
+                        "title": "ntfy",
+                        "enum": [
+                          "ntfy"
+                        ]
                       }
                     ],
                     "description": "The kind of message to send. Only a channel the selected provider serves is valid."
@@ -542,14 +621,14 @@
                       "title": "Recipient",
                       "type": "string"
                     },
-                    "description": "Optional individual recipients for this action in addition to the groups: phone numbers for SMS, email addresses for email, chat IDs for Telegram."
+                    "description": "Optional individual recipients for this action in addition to the groups: phone numbers for SMS, email addresses for email, chat IDs for Telegram, topic names for ntfy."
                   },
                   "subject": {
-                    "title": "Subject",
+                    "title": "Subject or title",
                     "type": "string",
-                    "description": "Optional. Defaults to the switch name. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}.",
+                    "description": "Optional. The email subject or the ntfy notification title. Defaults to the switch name. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}.",
                     "condition": {
-                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'email';"
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && (a.channel === 'email' || a.channel === 'ntfy');"
                     }
                   },
                   "bcc": {
@@ -561,6 +640,62 @@
                       "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'email';"
                     }
                   },
+                  "priority": {
+                    "title": "Priority",
+                    "type": "string",
+                    "default": "default",
+                    "oneOf": [
+                      {
+                        "title": "Min",
+                        "enum": [
+                          "min"
+                        ]
+                      },
+                      {
+                        "title": "Low",
+                        "enum": [
+                          "low"
+                        ]
+                      },
+                      {
+                        "title": "Default",
+                        "enum": [
+                          "default"
+                        ]
+                      },
+                      {
+                        "title": "High",
+                        "enum": [
+                          "high"
+                        ]
+                      },
+                      {
+                        "title": "Urgent",
+                        "enum": [
+                          "urgent"
+                        ]
+                      }
+                    ],
+                    "description": "ntfy only. How the app announces it. Urgent and high can break through Do Not Disturb; min shows no notification.",
+                    "condition": {
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'ntfy';"
+                    }
+                  },
+                  "tags": {
+                    "title": "Tags",
+                    "type": "array",
+                    "maxItems": 8,
+                    "uniqueItems": true,
+                    "items": {
+                      "title": "Tag",
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_+-]{1,32}$"
+                    },
+                    "description": "ntfy only. Up to 8 tags. Emoji short codes such as warning or house show as icons in the app.",
+                    "condition": {
+                      "functionBody": "var s = model.switches && model.switches[arrayIndices[0]]; var a = s && s.actions && s.actions[arrayIndices[1]]; return !!a && a.channel === 'ntfy';"
+                    }
+                  },
                   "body": {
                     "title": "Message",
                     "type": "string",
@@ -568,7 +703,7 @@
                     "x-schema-form": {
                       "type": "textarea"
                     },
-                    "description": "SMS: Up to 160 plain characters. Emoji and special symbols are not allowed for SMS. Email and Telegram: Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}."
+                    "description": "SMS: Up to 160 plain characters. Emoji and special symbols are not allowed for SMS. Email, Telegram and ntfy: Plain text. Variables: {{switchName}}, {{time}}, {{date}}, {{datetime}}."
                   }
                 }
               }

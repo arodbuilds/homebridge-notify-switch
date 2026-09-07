@@ -39,6 +39,8 @@ export async function sendAction(action: ResolvedAction, provider: Provider | un
       subject: rendered.subject,
       body: rendered.body,
       bcc: action.bcc,
+      priority: action.priority,
+      tags: action.tags,
     });
   } catch (err) {
     // Providers never throw by contract; treat a rejection as a failure for every recipient.

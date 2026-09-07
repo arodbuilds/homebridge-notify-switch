@@ -1,10 +1,11 @@
-import { PROVIDER_MAX_RETRY_AFTER_MS, PROVIDER_RETRY_BACKOFF_MS, PROVIDER_TIMEOUT_MS } from '../settings.js';
+import { MAX_RESPONSE_BYTES, PROVIDER_MAX_RETRY_AFTER_MS, PROVIDER_RETRY_BACKOFF_MS, PROVIDER_TIMEOUT_MS } from '../settings.js';
 import type { RecipientResult } from '../types.js';
 
 /**
  * Small HTTP layer shared by the HTTP-based providers. Implements SPEC section 6 rules 2 and 3:
  * a 10 second timeout, at most one retry with a 2 second backoff (or the provider's retry-after
- * on a rate limit response, honored once), and a per-provider in-flight cap via `Semaphore`.
+ * on a rate limit response, honored once), a per-provider in-flight cap via `Semaphore`, and a cap on
+ * how much of a response body is read (SPEC section 12, item 12).
  * Nothing here throws; every failure resolves to an `HttpOutcome` with a sanitized error string.
  */
 
@@ -88,12 +89,41 @@ class RequestTimeoutError extends Error {
   }
 }
 
+/**
+ * Reads at most `MAX_RESPONSE_BYTES` of a response body. A server the user points the plugin at (an
+ * ntfy server, for example) must not be able to make the plugin buffer an unbounded reply; anything
+ * past the cap is discarded and the stream is cancelled.
+ */
+async function readBody(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return response.text();
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      chunks.push(value);
+      total += value.byteLength;
+      if (total >= MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
+    }
+  }
+  return Buffer.concat(chunks).subarray(0, MAX_RESPONSE_BYTES).toString('utf8');
+}
+
 async function attempt(url: string, init: RequestInit, options: RequestOptions): Promise<HttpOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new RequestTimeoutError()), PROVIDER_TIMEOUT_MS);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    const text = await response.text();
+    const text = await readBody(response);
     return { ok: true, response: { status: response.status, text, headers: response.headers } };
   } catch (err) {
     const reason = controller.signal.aborted ? controller.signal.reason : err;

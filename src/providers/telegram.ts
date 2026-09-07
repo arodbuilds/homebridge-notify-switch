@@ -1,6 +1,6 @@
 import type { PluginLogger } from '../logging.js';
 import { BOT_TOKEN_PATTERN } from '../patterns.js';
-import { PROVIDER_CONCURRENCY } from '../settings.js';
+import { MAX_LISTED_CHATS, PROVIDER_CONCURRENCY } from '../settings.js';
 import type {
   BotIdentity, Channel, ChatSummary, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TelegramProviderConfig,
   ValidationIssue,
@@ -135,7 +135,8 @@ export class TelegramProvider implements Provider, ProviderDiagnostics {
   /**
    * Settings UI Find people and groups (SPEC section 11.2, item 5): `getUpdates` reduced to the distinct
    * chats the bot has seen. `my_chat_member` updates are included so a group appears as soon as the bot is
-   * added to it, before anyone posts. Only chat ids, titles and types leave this method.
+   * added to it, before anyone posts. Only chat ids, titles and types leave this method: one call, at most
+   * 100 updates, at most `MAX_LISTED_CHATS` distinct chats, titles cut to 64 characters (SPEC section 12, item 12).
    */
   async findChats(): Promise<{ ok: boolean; message: string; chats: ChatSummary[] }> {
     const outcome = await this.call('getUpdates', { limit: 100, allowed_updates: ['message', 'channel_post', 'my_chat_member'] });
@@ -154,7 +155,7 @@ export class TelegramProvider implements Provider, ProviderDiagnostics {
           continue;
         }
         const id = String(chat.id);
-        if (!chats.has(id)) {
+        if (!chats.has(id) && chats.size < MAX_LISTED_CHATS) {
           chats.set(id, { id, title: describeChat(chat), type: typeof chat.type === 'string' ? chat.type : 'chat' });
         }
       }
