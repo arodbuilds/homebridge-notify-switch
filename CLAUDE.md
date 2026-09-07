@@ -18,7 +18,7 @@ Project conventions for every session working in this repository.
 ## Code rules
 
 - TypeScript `strict` stays on and `npm run lint` must pass with zero warnings (`--max-warnings=0`).
-- No new runtime dependencies without stating why in the pull request. Runtime dependencies today: `nodemailer` only.
+- `nodemailer` and `@homebridge/plugin-ui-utils` are the only runtime dependencies; no new runtime dependencies without stating why in the PR.
 - Never throw from a provider. Every failure resolves to a `RecipientResult` with a sanitized `error` string.
 - Never log credentials at any level. Never log message bodies at info level (only when `debug` is on, via `PluginLogger.debug`).
 - Mask addresses in info logs through `PluginLogger.address()`.

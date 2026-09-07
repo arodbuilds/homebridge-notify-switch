@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub issue forms replace the markdown issue templates: a bug report (versions, host, area, what happened, expected, steps, log lines, backup without credentials, and two confirmation checkboxes), a feature request, and a provider request, each with a title prefix and label. Blank issues are off; the chooser links to the README setup guide and the Homebridge Discord.
+- README: Getting help links straight to the bug report form.
+- CLAUDE.md: the runtime dependency rule names `nodemailer` and `@homebridge/plugin-ui-utils`, matching package.json and SPEC section 12.
+
 ## [1.0.0] - 2026-09-07
 
 The first stable release. The configuration format is final: a configuration written by any 0.1.0 beta loads unchanged, and the full behaviour is described in SPEC.md.

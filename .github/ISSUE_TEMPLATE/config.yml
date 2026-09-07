@@ -1,5 +1,8 @@
-# blank_issues_enabled: false
-# contact_links:
-#   - name: Homebridge Discord Community
-#     url: https://discord.gg/kqNCe2D
-#     about: Ask your questions in the #YOUR_CHANNEL_HERE channel
+blank_issues_enabled: false
+contact_links:
+  - name: Setup guide
+    url: https://github.com/arodbuilds/homebridge-notify-switch#provider-setup-guides
+    about: The README walks through Twilio, SMTP and Telegram setup, groups, switches and troubleshooting.
+  - name: Homebridge Discord
+    url: https://discord.gg/kqNCe2D
+    about: Ask for help from the Homebridge community.
