@@ -113,9 +113,9 @@ Messages from a standard US long code to US phone numbers must come from a numbe
 
 Registration notes:
 
-1. **Sole Proprietor 10DLC registration** is the lightest path for a household: a one-time brand and campaign fee plus a small monthly campaign fee. It allows one campaign per brand, one phone number per campaign, and a throughput of 1 message per second. See [Sole Proprietor registration](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/direct-sole-proprietor-registration-overview).
+1. **Sole Proprietor 10DLC registration** is the lightest path for a household: a one-time brand and campaign fee plus a small monthly campaign fee. It allows one campaign per brand, one phone number per campaign, and a throughput of 1 message per second (as of September 2026, per Twilio's [Sole Proprietor Brands FAQ](https://support.twilio.com/hc/en-us/articles/9550596959643-A2P-10DLC-Sole-Proprietor-Brands-FAQ)). See [Sole Proprietor registration](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/direct-sole-proprietor-registration-overview).
 2. **Toll-free verification** is an alternative that skips brand and campaign registration. Verification is free, but the form asks for privacy policy and terms URLs. See [Toll-free verification in the Console](https://www.twilio.com/docs/messaging/compliance/toll-free/console-onboarding).
-3. **Fees.** As of September 2026, Sole Proprietor registration costs $4 once for the brand, $15 once for campaign vetting, and $2 per month per campaign; toll-free verification is free. Twilio's per-message price and the carrier surcharges are on [Twilio's US SMS pricing page](https://www.twilio.com/en-us/sms/pricing/us), and nothing else in this document repeats them.
+3. **Fees.** As of September 2026, Sole Proprietor registration costs $4 once for the brand, $15 once for campaign vetting, and $2 per month per campaign, per Twilio's [Sole Proprietor Brands FAQ](https://support.twilio.com/hc/en-us/articles/9550596959643-A2P-10DLC-Sole-Proprietor-Brands-FAQ); toll-free verification is free. Twilio's per-message price and the carrier surcharges are on [Twilio's US SMS pricing page](https://www.twilio.com/en-us/sms/pricing/us), and nothing else in this document repeats them.
 
 #### Email through Twilio
 
