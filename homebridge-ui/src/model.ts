@@ -1,5 +1,5 @@
 import type { Channel, FailureMode, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
-import { CHANNELS, FAILURE_MODES, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES } from '../../src/types.js';
+import { CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, PROVIDER_TYPES, SMTP_SECURITIES, TELEGRAM_PARSE_MODES } from '../../src/types.js';
 
 /**
  * The configuration object the settings UI edits. It is the platform block from config.json with
@@ -338,6 +338,58 @@ export function exportConfig(config: UiConfig): Raw {
       actions: s.actions.map(exportAction),
     })),
   };
+}
+
+/** The one field per provider type that is a secret on its own (SPEC section 5.2). */
+const SECRET_FIELDS: Readonly<Record<ProviderType, readonly string[]>> = {
+  twilio: ['apiKeySecret'],
+  smtp: ['password'],
+  telegram: ['botToken'],
+};
+
+/**
+ * The fields a backup without credentials empties (SPEC section 11.2, item 12): the provider's secret, and,
+ * when a `credentialsFile` is set, every key that file may supply, since those values are credentials too.
+ */
+export function secretFields(p: UiProvider): string[] {
+  const keys = new Set<string>(SECRET_FIELDS[p.type]);
+  if (p.credentialsFile.trim()) {
+    for (const key of CREDENTIAL_KEYS[p.type]) {
+      keys.add(key);
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * The platform block for a backup without credentials: the same JSON as `exportConfig`, with every secret
+ * field replaced by an empty string and a top-level `credentialsRemoved: true` so Restore knows what to expect.
+ */
+export function exportConfigWithoutCredentials(config: UiConfig): Raw {
+  const out = exportConfig(config);
+  out.providers = config.providers.map((p) => {
+    const raw = exportProvider(p);
+    for (const key of secretFields(p)) {
+      raw[key] = '';
+    }
+    return raw;
+  });
+  out.credentialsRemoved = true;
+  return out;
+}
+
+/** The field paths (`providers[0].apiKeySecret`) of the secret fields that are empty in `config`. */
+export function emptySecretPaths(config: UiConfig): string[] {
+  const paths: string[] = [];
+  config.providers.forEach((p, i) => {
+    for (const key of secretFields(p)) {
+      const value = (p as unknown as Record<string, unknown>)[key];
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        paths.push(`providers[${i}].${key}`);
+      }
+    }
+  });
+  return paths;
 }
 
 /** Lowercase slug from a display name, for suggesting provider and group ids. */

@@ -248,14 +248,22 @@ class Page implements App {
     this.revalidate();
   }
 
-  /** Every field on the page counts as touched (a restored draft: SPEC section 11.2, item 23). */
-  private touchAll(): void {
-    for (const node of this.root.querySelectorAll<HTMLElement>('[data-path]')) {
-      if (node.dataset.path) {
-        this.touched.add(node.dataset.path);
-      }
+  touchFields(paths: string[]): void {
+    for (const path of paths) {
+      this.touched.add(path);
     }
     this.revalidate();
+  }
+
+  /** Every field on the page counts as touched (a restored draft: SPEC section 11.2, item 23). */
+  private touchAll(): void {
+    const paths: string[] = [];
+    for (const node of this.root.querySelectorAll<HTMLElement>('[data-path]')) {
+      if (node.dataset.path) {
+        paths.push(node.dataset.path);
+      }
+    }
+    this.touchFields(paths);
   }
 
   /**

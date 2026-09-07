@@ -260,12 +260,15 @@ export const TEST_SEND = {
 /** Settings > Advanced: backup, restore and reset (SPEC section 11.2, item 12). */
 export const BACKUP = {
   summary: 'Advanced',
-  backupNote: 'The backup file contains your provider credentials. Store it like a password.',
+  backupNote: 'The full backup contains your provider credentials; store it like a password. '
+    + 'The version without credentials is safe to share when asking for help.',
   download: 'Download backup',
+  downloadWithoutCredentials: 'Download backup without credentials',
   restore: 'Restore from backup',
   restoreHelp: 'Choose a backup file. It is checked before anything changes; if it passes, the form is replaced with its contents and Save is enabled.',
   restoreFailed: 'The backup could not be loaded:',
   restored: 'Backup loaded. Review the form, then click Save.',
+  restoredWithoutCredentials: 'Backup loaded. Enter the credentials it left out, then click Save.',
   reset: 'Reset plugin to fresh install',
   resetTitle: 'Reset plugin to fresh install?',
   resetList: [
