@@ -66,7 +66,6 @@
       "providers": {
         "title": "Providers",
         "type": "array",
-        "minItems": 1,
         "description": "A provider is a connection to a messaging service. Twilio sends SMS and, with an authenticated domain, email. SMTP sends email through an account you already have, such as Fastmail, Gmail, or iCloud. Telegram sends to a chat through a bot you create. Add only the providers you plan to use. Use Test connection to confirm credentials before saving.",
         "items": {
           "type": "object",
@@ -370,7 +369,7 @@
                 "type": "string",
                 "pattern": "^-?\\d+$"
               },
-              "description": "Chat IDs are numbers, not usernames. Use Find chat IDs above after messaging the bot. Group chats have negative IDs."
+              "description": "Chat IDs are numbers, not usernames. Use Find people and groups on the Telegram provider to add them. Group chats have negative IDs."
             }
           }
         }
@@ -378,7 +377,6 @@
       "switches": {
         "title": "Switches",
         "type": "array",
-        "minItems": 1,
         "description": "Each switch appears in the Home app. Turning it on sends every action listed below it, then the switch turns itself off. Add one action per channel you want to use. Cooldown prevents an automation that fires repeatedly from sending the same message over and over. The failure sensor is optional; turn it on if you want a HomeKit automation to tell you when a message did not go out.",
         "items": {
           "type": "object",

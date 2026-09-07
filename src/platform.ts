@@ -90,6 +90,15 @@ export class NotifySwitchPlatform implements DynamicPlatformPlugin {
       return;
     }
 
+    if (result.switches.length === 0) {
+      // SPEC section 4, item 9: a valid configuration with no switches leaves nothing in HomeKit. Every cached
+      // accessory goes, including the master switch, and with them the persisted master switch and failure
+      // sensor state kept in their contexts.
+      this.removeAll();
+      this.log.info('No switches configured; nothing is registered');
+      return;
+    }
+
     const keep = new Set<string>();
     this.registerMasterSwitch(result.config.masterSwitch, keep);
     for (const sw of result.switches) {
@@ -142,6 +151,17 @@ export class NotifySwitchPlatform implements DynamicPlatformPlugin {
     this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     this.cached.set(uuid, accessory);
     return accessory;
+  }
+
+  /** Unregisters every cached accessory and clears the state persisted in their contexts. */
+  private removeAll(): void {
+    for (const accessory of this.cached.values()) {
+      const context = accessory.context as Record<string, unknown>;
+      for (const key of Object.keys(context)) {
+        delete context[key];
+      }
+    }
+    this.removeStale(new Set());
   }
 
   /** Unregisters cached accessories whose switch id is no longer in the configuration (SPEC section 4, item 4). */

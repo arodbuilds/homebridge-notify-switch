@@ -187,3 +187,105 @@ export function statusBox(): { el: HTMLElement; set(kind: 'success' | 'danger' |
     },
   };
 }
+
+/** A link-style (text) button: no border or background, used for secondary actions such as Add action and Cancel. */
+export function linkButton(label: string, onClick: () => void, extra = ''): HTMLButtonElement {
+  return button(label, onClick, `btn btn-link btn-sm p-0 ns-link-button${extra ? ` ${extra}` : ''}`);
+}
+
+/** A red text button: Remove and Reset only (SPEC section 11.3). */
+export function dangerLinkButton(label: string, onClick: () => void): HTMLButtonElement {
+  return linkButton(label, onClick, 'text-danger');
+}
+
+/**
+ * Card footer row (SPEC section 11.2, item 11): the red text button on the left, at most one outlined
+ * primary button on the right. `right` may be empty.
+ */
+export function cardFooter(left: HTMLElement | null, right: HTMLElement | null): HTMLElement {
+  return el('div', { class: 'card-footer ns-card-footer' },
+    el('div', { class: 'ns-footer-left' }, left),
+    el('div', { class: 'ns-footer-right' }, right),
+  );
+}
+
+export interface ModalHandle {
+  el: HTMLElement;
+  close(): void;
+}
+
+/**
+ * A full-page modal over the settings page, closed by its Close button, the backdrop, or Escape.
+ * `body` is the content; `actions` go in the footer row. The Homebridge UI's own modal does not
+ * reach into the iframe, so the page draws its own.
+ */
+export function openModal(opts: { title: string; body: Node; actions?: Node[]; wide?: boolean }): ModalHandle {
+  const backdrop = el('div', { class: 'ns-modal-backdrop', role: 'presentation' });
+  const dialog = el('div', { class: `ns-modal${opts.wide ? ' ns-modal-wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title });
+  let onKey: (event: KeyboardEvent) => void = () => undefined;
+  const close = (): void => {
+    document.removeEventListener('keydown', onKey);
+    backdrop.remove();
+  };
+  onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', (event) => {
+    if (event.target === backdrop) {
+      close();
+    }
+  });
+  const closeButton = el('button', { type: 'button', class: 'btn-close', 'aria-label': 'Close' });
+  closeButton.addEventListener('click', close);
+  dialog.appendChild(el('div', { class: 'ns-modal-header' }, el('div', { class: 'fw-semibold' }, opts.title), closeButton));
+  dialog.appendChild(el('div', { class: 'ns-modal-body' }, opts.body));
+  if (opts.actions && opts.actions.length > 0) {
+    dialog.appendChild(el('div', { class: 'ns-modal-actions' }, ...opts.actions));
+  }
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+  return { el: dialog, close };
+}
+
+/**
+ * Copies text to the clipboard. The Homebridge UI usually runs over plain http on the LAN, where the
+ * async clipboard API is unavailable, so a hidden textarea and `execCommand` are the fallback.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+  try {
+    const area = el('textarea', { class: 'ns-clipboard', 'aria-hidden': 'true' });
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** A button that copies `text` and briefly reads "Copied" afterwards. */
+export function copyButton(label: string, text: () => string, cls = 'btn btn-outline-secondary btn-sm'): HTMLButtonElement {
+  const node = button(label, () => {
+    copyText(text()).then((ok) => {
+      node.textContent = ok ? 'Copied' : 'Could not copy';
+      window.setTimeout(() => {
+        node.textContent = label;
+      }, 1500);
+    }).catch(() => undefined);
+  }, cls);
+  return node;
+}

@@ -3,7 +3,8 @@ import type { PluginLogger } from '../logging.js';
 import { PROVIDER_CONCURRENCY } from '../settings.js';
 import { stripLineBreaks } from '../template.js';
 import type {
-  Channel, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TwilioProviderConfig, ValidationIssue,
+  Channel, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TwilioLookupResult, TwilioNumber, TwilioProviderConfig,
+  TwilioService, ValidationIssue,
 } from '../types.js';
 import { PROVIDER_CHANNELS } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
@@ -11,6 +12,20 @@ import { parseJson, request, Semaphore, sendEach, shortMessage } from './http.js
 
 const TWILIO_API = 'https://api.twilio.com/2010-04-01';
 const TWILIO_EMAIL_API = 'https://comms.twilio.com/v1/Emails';
+const TWILIO_MESSAGING_API = 'https://messaging.twilio.com/v1';
+
+/** Page size of the "Look up numbers" lists (SPEC section 11.2, item 9). */
+export const TWILIO_LOOKUP_PAGE_SIZE = 20;
+
+/** Copy from SPEC section 11.3 for the "Look up numbers" outcomes. */
+export const TWILIO_LOOKUP_TRUNCATED = 'Showing the first 20; enter others manually.';
+export const TWILIO_LOOKUP_DENIED = 'This API key cannot list numbers. Enter them manually.';
+
+type ListOutcome<T> = { ok: true; items: T[]; more: boolean } | { ok: false; denied: boolean; error: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' };
 
@@ -132,6 +147,92 @@ export class TwilioProvider implements Provider, ProviderDiagnostics {
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  /**
+   * Settings UI "Look up numbers" (SPEC section 11.2, item 9): the account's phone numbers and Messaging
+   * Services, one page of each, with the same Basic auth as everything else. Nothing is sent. A key that
+   * may not list numbers (401 or 403) gets the fixed copy from section 11.3; a page that reports more
+   * entries than it holds sets `truncated`.
+   */
+  async lookupSenders(): Promise<TwilioLookupResult> {
+    try {
+      const account = encodeURIComponent(this.config.accountSid);
+      const [numbers, services] = await Promise.all([
+        this.list<TwilioNumber>(
+          `${TWILIO_API}/Accounts/${account}/IncomingPhoneNumbers.json?PageSize=${TWILIO_LOOKUP_PAGE_SIZE}`,
+          'incoming_phone_numbers',
+          (json) => typeof json.next_page_uri === 'string' && json.next_page_uri.length > 0,
+          (item) => {
+            const phoneNumber = typeof item.phone_number === 'string' ? item.phone_number : '';
+            return E164_PATTERN.test(phoneNumber) ? { phoneNumber, friendlyName: shortMessage(item.friendly_name ?? '', 64) } : undefined;
+          },
+        ),
+        this.list<TwilioService>(
+          `${TWILIO_MESSAGING_API}/Services?PageSize=${TWILIO_LOOKUP_PAGE_SIZE}`,
+          'services',
+          (json) => isRecord(json.meta) && typeof json.meta.next_page_url === 'string' && json.meta.next_page_url.length > 0,
+          (item) => {
+            const sid = typeof item.sid === 'string' ? item.sid : '';
+            return MESSAGING_SERVICE_SID_PATTERN.test(sid) ? { sid, friendlyName: shortMessage(item.friendly_name ?? '', 64) } : undefined;
+          },
+        ),
+      ]);
+      if (!numbers.ok && !services.ok) {
+        return { ok: false, message: numbers.denied ? TWILIO_LOOKUP_DENIED : numbers.error, numbers: [], services: [], truncated: false };
+      }
+      const truncated = (numbers.ok && numbers.more) || (services.ok && services.more);
+      const parts: string[] = [];
+      if (numbers.ok) {
+        parts.push(`Found ${numbers.items.length} phone number${numbers.items.length === 1 ? '' : 's'}`);
+      }
+      if (services.ok) {
+        parts.push(`${numbers.ok ? 'and ' : 'Found '}${services.items.length} Messaging Service${services.items.length === 1 ? '' : 's'}`);
+      }
+      let message = `${parts.join(' ')}.`;
+      if (!numbers.ok) {
+        message = numbers.denied ? TWILIO_LOOKUP_DENIED : `Phone numbers could not be listed: ${numbers.error}`;
+      } else if (!services.ok) {
+        message += services.denied ? ' This API key cannot list Messaging Services.' : ` Messaging Services could not be listed: ${services.error}`;
+      }
+      if (truncated) {
+        message += ` ${TWILIO_LOOKUP_TRUNCATED}`;
+      }
+      return {
+        ok: true, message, truncated,
+        numbers: numbers.ok ? numbers.items : [],
+        services: services.ok ? services.items : [],
+      };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err), numbers: [], services: [], truncated: false };
+    }
+  }
+
+  /** One GET of a Twilio list resource, reduced to the items `pick` accepts and a "more pages" flag. */
+  private async list<T>(
+    url: string, key: string, hasMore: (json: Record<string, unknown>) => boolean, pick: (item: Record<string, unknown>) => T | undefined,
+  ): Promise<ListOutcome<T>> {
+    const outcome = await request(url, { method: 'GET', headers: this.headers() }, { redact: [this.config.apiKeySecret, this.config.apiKeySid] });
+    if (!outcome.ok) {
+      return { ok: false, denied: false, error: outcome.error };
+    }
+    const { status, text } = outcome.response;
+    const json = parseJson(text);
+    if (status === 401 || status === 403) {
+      return { ok: false, denied: true, error: this.describeFailure(status, json) };
+    }
+    if (status !== 200 || !json) {
+      return { ok: false, denied: false, error: this.describeFailure(status, json) };
+    }
+    const raw = Array.isArray(json[key]) ? (json[key] as unknown[]) : [];
+    const items: T[] = [];
+    for (const item of raw) {
+      const picked = isRecord(item) ? pick(item) : undefined;
+      if (picked !== undefined) {
+        items.push(picked);
+      }
+    }
+    return { ok: true, items, more: hasMore(json) || raw.length > TWILIO_LOOKUP_PAGE_SIZE };
   }
 
   /** Request headers: Basic auth of `apiKeySid:apiKeySecret` (never the Account SID) plus a content type when there is a body. */

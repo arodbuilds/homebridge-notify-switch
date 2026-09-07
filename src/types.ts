@@ -167,11 +167,42 @@ export interface ConnectionTestResult {
   message: string;
 }
 
-/** A chat that has messaged a Telegram bot, as listed by Find chat IDs (SPEC section 11.2, item 5). */
+/** A chat the bot has seen, as listed by Find people and groups (SPEC section 11.2, item 5). */
 export interface ChatSummary {
   id: string;
+  /** First name and username for a private chat; the title for a group, supergroup or channel. */
   title: string;
   type: string;
+}
+
+/** Outcome of the Telegram bot lookup behind the onboarding flow (SPEC section 11.2, item 10). */
+export interface BotIdentity {
+  ok: boolean;
+  message: string;
+  /** The bot's username without the leading @, present only when `ok`. */
+  username?: string;
+}
+
+/** A Twilio phone number the account owns (SPEC section 11.2, item 9). */
+export interface TwilioNumber {
+  phoneNumber: string;
+  friendlyName: string;
+}
+
+/** A Twilio Messaging Service on the account (SPEC section 11.2, item 9). */
+export interface TwilioService {
+  sid: string;
+  friendlyName: string;
+}
+
+/** Outcome of the Twilio "Look up numbers" request (SPEC section 11.2, item 9). */
+export interface TwilioLookupResult {
+  ok: boolean;
+  message: string;
+  numbers: TwilioNumber[];
+  services: TwilioService[];
+  /** True when either list has more entries than the page returned. */
+  truncated: boolean;
 }
 
 /**
@@ -181,8 +212,12 @@ export interface ChatSummary {
 export interface ProviderDiagnostics {
   /** Checks the credentials against the service without sending anything. Never throws. */
   testConnection(): Promise<ConnectionTestResult>;
-  /** Telegram only: lists chats that have messaged the bot. Never throws. */
+  /** Telegram only: lists chats the bot has seen. Never throws. */
   findChats?(): Promise<{ ok: boolean; message: string; chats: ChatSummary[] }>;
+  /** Telegram only: `getMe`, for the onboarding flow. Never throws. */
+  getMe?(): Promise<BotIdentity>;
+  /** Twilio only: lists the account's phone numbers and Messaging Services. Never throws. */
+  lookupSenders?(): Promise<TwilioLookupResult>;
 }
 
 export interface Provider {

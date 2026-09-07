@@ -19,7 +19,7 @@ Do not claim it. Once the plugin is verified, replace this comment with the badg
 
 A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Turn a switch on from a HomeKit automation or scene, it sends one or more preset messages by SMS, email, or Telegram, and it turns itself back off. Any HomeKit event can notify people.
 
-> **Status:** beta. `0.1.0-beta.1` is the first public release. The configuration format is final and covered by the full specification in [SPEC.md](https://github.com/arodbuilds/homebridge-notify-switch/blob/latest/SPEC.md). Please report problems in the [issue tracker](https://github.com/arodbuilds/homebridge-notify-switch/issues).
+> **Status:** beta. The current release is shown in the badge above. The configuration format is final and covered by the full specification in [SPEC.md](https://github.com/arodbuilds/homebridge-notify-switch/blob/latest/SPEC.md). Please report problems in the [issue tracker](https://github.com/arodbuilds/homebridge-notify-switch/issues).
 
 ## Contents
 
@@ -37,6 +37,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 - [Cooldown and master switch](#cooldown-and-master-switch)
 - [Failure sensor](#failure-sensor)
 - [Keeping secrets out of config.json with credentialsFile](#keeping-secrets-out-of-configjson-with-credentialsfile)
+- [Backup, restore, and reset](#backup-restore-and-reset)
 - [Child bridge](#child-bridge)
 - [Security notes](#security-notes)
 - [Troubleshooting](#troubleshooting)
@@ -70,7 +71,7 @@ The plugin does nothing until it is configured, and it never registers accessori
 
 1. Sign in to the [Twilio Console](https://console.twilio.com) and copy the **Account SID** from **Account Info** on the home page. It starts with `AC`.
 2. Open [API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys) and create an API key. A **Standard** key works; so does a **Restricted** key with read and write access to Messaging. Copy the **SID** (starts with `SK`) and the **Secret**. The secret is shown once; keep it in a password manager. The Auth Token is deliberately not accepted, because an API key can be revoked without rotating your account's master credential.
-3. Open [Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming) and copy a Twilio phone number you own, including the country code, for example `+16785550100`. If you send to US numbers, read [A2P 10DLC](#a2p-10dlc-registration-for-us-numbers) below; unregistered US long codes are filtered by the carriers.
+3. Open [Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming) and copy a Twilio phone number you own, including the country code, for example `+16785550100`. Or skip this step: once the three credentials are in the form, **Look up numbers** lists your numbers and Messaging Services to pick from. If you send to US numbers, read [A2P 10DLC](#a2p-10dlc-registration-for-us-numbers) below; unregistered US long codes are filtered by the carriers.
 4. In the Homebridge UI open the plugin settings and add a **Twilio** provider with those values, then click **Test connection**. Add a **Recipient group** with the phone numbers to notify (pick the country from the dropdown and type the national number). Add a **Switch**, give it a name such as `Water Leak Alert`, and add an **SMS** action on the Twilio provider to that group with a message body.
 5. Click **Test send** on the switch to send it for real, then save and restart Homebridge. In the Home app create an automation with a trigger such as a leak sensor detecting water and add the switch with **Turn On** as the action.
 
@@ -86,8 +87,8 @@ Twilio serves the `sms` channel and, once a domain is authenticated, the `email`
 | --- | --- |
 | `accountSid` | [Console home page](https://console.twilio.com), **Account Info**. Starts with `AC`. |
 | `apiKeySid` and `apiKeySecret` | [Account > API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys). Create a **Standard** key, or a **Restricted** key with read and write access to Messaging. |
-| `smsSenders` | [Phone Numbers > Manage > Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming). E.164 format with the country code. |
-| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. |
+| `smsSenders` | [Phone Numbers > Manage > Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming). E.164 format with the country code. In the settings UI, **Look up numbers** lists them for you. |
+| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. In the settings UI it is under the Twilio card's **Advanced** disclosure, and **Look up numbers** can fill it. |
 | `emailFrom` | Optional. Required only for the `email` channel. The domain must be authenticated (see below). |
 
 #### API keys
@@ -100,7 +101,7 @@ A Standard key can send messages but cannot manage the account, and a Restricted
 
 #### Phone numbers
 
-List every Twilio number you want to send from in `smsSenders`. An SMS action with a `sender` uses that number; an action without one uses the provider's only number, or the Messaging Service when `messagingServiceSid` is set. If you need to buy a number, use [Phone Numbers > Manage > Buy a number](https://console.twilio.com/us1/develop/phone-numbers/manage/search) and make sure it is SMS capable.
+List every Twilio number you want to send from in `smsSenders`. In the settings UI, click **Look up numbers** on the Twilio card once the Account SID, API Key SID and API Key Secret are filled: it lists the first 20 numbers on the account with their friendly names and the first 20 Messaging Services, and picking one adds it to the list or fills the Messaging Service SID. A Restricted key without permission to list numbers gets "This API key cannot list numbers. Enter them manually." and typing them still works. An SMS action with a `sender` uses that number; an action without one uses the provider's only number, or the Messaging Service when `messagingServiceSid` is set. If you need to buy a number, use [Phone Numbers > Manage > Buy a number](https://console.twilio.com/us1/develop/phone-numbers/manage/search) and make sure it is SMS capable.
 
 Trial accounts can only send to phone numbers verified under [Verified Caller IDs](https://console.twilio.com/us1/develop/phone-numbers/manage/verified) and prefix every message with a trial notice. Upgrade the account before relying on it for alerts.
 
@@ -172,23 +173,36 @@ Any server that accepts an authenticated SMTP login works, including a mail rela
 
 ### Telegram
 
-Telegram serves the `telegram` channel through a bot you create. Bots cannot start a conversation, so every person and group must message the bot once first.
+Telegram serves the `telegram` channel through a bot you create. The Telegram provider card in the settings UI walks you through it in three steps; the same steps are below for the schema form.
 
-1. In Telegram open [@BotFather](https://t.me/BotFather), send `/newbot`, and follow the prompts for a display name and a username ending in `bot`.
-2. BotFather replies with the bot token, which looks like `123456789:AAF...`. Put it in `botToken`. Treat it as a password; anyone with the token can send as the bot.
-3. Open a chat with your new bot and send it any message. For a group chat, add the bot to the group and send a message that mentions it, or type `/start`, so the bot receives the message.
-4. In the plugin settings, click **Find chat IDs** on a recipient group. The plugin calls the bot's `getUpdates` and lists every chat that has messaged it, with one-click **Add**. Private chats have positive IDs; groups and channels have negative IDs such as `-1001234567890`.
+**Step 1: Create your bot.** Click **Open BotFather** (or scan the QR code next to it) to open [@BotFather](https://t.me/BotFather) in Telegram, then:
+
+1. Send /newbot.
+2. Choose a display name such as Home Alerts.
+3. Choose a username ending in bot.
+4. Paste the token below.
+
+BotFather replies with the token, which looks like `123456789:AAF…`. Treat it as a password; anyone with the token can send as the bot. As soon as you paste a valid token, the card checks it with Telegram and shows "Connected to @yourbot" or the error.
+
+**Step 2: Choose how people receive messages.** Pick one of the two cards:
+
+- **Family group chat (recommended)**: everyone in the group gets every message. Nobody has to opt in individually. Click **Add bot to a group** (or scan its QR code) to open Telegram with your bot ready to be added to a group you choose.
+- **Individual chats**: each person opens the bot and taps Start once.
+
+**Step 3: Invite people.** The card shows a QR code that opens the bot with a Start button. **Enlarge** shows it full screen for people in the room to scan, **Copy link** copies the link, and **Copy invite message** copies a ready-to-send text: "Tap this link and press Start to get alerts from our home: https://t.me/yourbot?start=join".
+
+Then click **Find people and groups**. The plugin calls the bot's `getUpdates` and lists everyone who has opened the bot (first name and username) and every group the bot has been added to (the group title; groups appear as soon as the bot joins, before anyone posts). Choose the recipient group in the dropdown and click **Add** next to each person or group. Private chats have positive IDs; groups and channels have negative IDs such as `-1001234567890`.
 
 `parseMode` is `none` by default, so the body is sent as plain text. Choose `markdown` or `html` only if you write bodies in [Telegram's formatting syntax](https://core.telegram.org/bots/api#formatting-options); a body that does not parse in the selected mode is rejected by Telegram with error 400.
 
-If **Find chat IDs** reports error 409, a webhook is set on the bot from another tool, and `getUpdates` cannot be used. Remove it with `deleteWebhook` or create a separate bot for Homebridge. More on bots: [Bots: An introduction for developers](https://core.telegram.org/bots).
+If **Find people and groups** reports error 409, a webhook is set on the bot from another tool, and `getUpdates` cannot be used. Remove it with `deleteWebhook` or create a separate bot for Homebridge. More on bots: [Bots: An introduction for developers](https://core.telegram.org/bots).
 
 ## Recipient groups
 
 A group is a named list of people. Each group has three lists: `sms` (phone numbers), `email` (email addresses), and `telegram` (chat IDs). A switch's action sends to whichever list matches its channel, so one `Family` group can serve an SMS action and an email action at the same time.
 
-- Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number; pasting a number that already has a country code sets the country for you. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
-- Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find chat IDs** after messaging the bot.
+- Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
+- Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them.
 - A group with no addresses is valid but produces a startup warning if a switch uses it.
 
 Group and provider IDs are short slugs suggested from the name. They are how switches refer to groups, so renaming a group in the UI does not break the switches that use it.
@@ -220,7 +234,7 @@ Each action has:
 
 Recipients from every group plus `recipients` are merged and deduplicated before sending. Each SMS and each Telegram message is one request per recipient with at most five in flight per provider; email is one message per action. Every request has a 10 second timeout and one retry.
 
-The **Test send** button on a switch sends its actions to the real recipients after you confirm and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save as long as the switch has no validation errors.
+The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends its actions to the real recipients and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save as long as the switch has no validation errors.
 
 The plugin checks the whole configuration when Homebridge starts and logs every problem with its field path, for example:
 
@@ -228,7 +242,7 @@ The plugin checks the whole configuration when Homebridge starts and logs every 
 switches[0].actions[0].providerId: no provider with id "twillio-main" (did you mean "twilio-main"?)
 ```
 
-While there are errors nothing is registered. Cached accessories are left in place, so your HomeKit automations survive while you fix a typo. The settings UI runs the same checks and keeps **Save** disabled while any remain.
+While there are errors nothing is registered. Cached accessories are left in place, so your HomeKit automations survive while you fix a typo. The settings UI runs the same checks and keeps **Save** disabled while any remain. A configuration with no switches at all is valid: nothing is registered and every cached accessory is removed from HomeKit (see [Backup, restore, and reset](#backup-restore-and-reset)).
 
 <details>
 <summary>Example platform block in config.json</summary>
@@ -377,6 +391,16 @@ Example: `notify-switch-twilio.json` in the storage directory containing `{ "api
 
 The file is read once at startup, and again when the settings UI runs **Test connection** or **Test send**. A missing or malformed file is reported as a configuration error with the field path and nothing is registered. Make the file readable only by the user Homebridge runs as, for example `chmod 600`.
 
+## Backup, restore, and reset
+
+At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure holds three actions:
+
+- **Download backup** saves the current platform configuration as `notify-switch-backup-YYYY-MM-DD.json`. The file contains your provider credentials, so store it like a password.
+- **Restore from backup** takes such a file (or a whole Homebridge `config.json` holding a NotifySwitch block), checks it against the same rules the form applies, and lists every problem if it fails. If it passes, the form is replaced with the file's contents and **Save** is enabled; nothing is written until you click Save.
+- **Reset plugin to fresh install** opens a confirmation that lists what happens: all providers, groups, switches, and settings are removed; switches disappear from the Home app after the next restart; credentials files on disk are not touched. It offers **Download backup first**, and the red **Confirm** button stays disabled until you type `RESET`. Confirming replaces the form with the empty default configuration and enables **Save**.
+
+After you save a configuration with no switches and restart Homebridge, the plugin removes every accessory it had registered, including the master switch, and forgets the master switch position and any failure sensor state. A configuration with errors never does this: cached accessories stay until the errors are fixed.
+
 ## Child bridge
 
 Running this plugin as a [child bridge](https://github.com/homebridge/homebridge/wiki/Child-Bridges) is recommended. Sending goes out over the internet, and a slow or unreachable messaging service then cannot delay your other accessories. In the Homebridge UI open the plugin's menu, choose **Bridge Settings**, enable the child bridge, save, restart, and pair the new bridge in the Home app with the QR code shown.
@@ -386,7 +410,8 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 - **Homebridge UI backups contain `config.json`.** A backup archive includes every provider password, API key secret, and bot token you configured inline. Store backups as you would a password file and delete old ones. [`credentialsFile`](#keeping-secrets-out-of-configjson-with-credentialsfile) keeps secrets out of the backup.
 - Twilio accepts API keys only, never the Auth Token, so a leaked key can be revoked without touching the account. SMTP setups should use an app password that you can revoke on its own. A Telegram bot token only controls that bot; revoke it with BotFather's `/revoke`.
 - Credentials are never written to the log at any level. Phone numbers and email addresses are partially masked at info level (`+1678***0101`, `a***@example.com`), and message bodies are logged only when `debug` is on. Provider errors are reduced to a code and a short message before logging.
-- The settings UI's **Test connection**, **Find chat IDs**, and **Test send** use the credentials from the form in memory for that one request and never store, log, or return them. They only connect to the mail host you configured and to Twilio's and Telegram's APIs.
+- The settings UI's **Test connection**, **Look up numbers**, **Find people and groups**, and **Test send** use the credentials from the form in memory for that one request and never store, log, or return them. They only connect to the mail host you configured and to Twilio's and Telegram's APIs.
+- **Download backup** writes the same credentials into the file you download. Treat it like `config.json`.
 - TLS certificate verification cannot be disabled.
 - Email subjects and from names have line breaks removed. Telegram bodies are sent as plain text unless you choose a `parseMode`.
 - Cooldown and the master switch limit the damage from a runaway automation.
@@ -450,18 +475,19 @@ Temporary replies (421, 450, 451, 452) and rate limits are retried once after 2 
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| 400 | Chat not found, or the message was rejected | The chat ID is wrong, or the body does not parse in the selected `parseMode`. Use **Find chat IDs** and set `parseMode` to `none` to test. |
+| 400 | Chat not found, or the message was rejected | The chat ID is wrong, or the body does not parse in the selected `parseMode`. Use **Find people and groups** and set `parseMode` to `none` to test. |
 | 401 | The bot token was rejected | The token is wrong or was revoked. Copy it again from BotFather. |
 | 403 | The bot is blocked or was never started | The person has not messaged the bot, or blocked it, or the bot was removed from the group. Open the bot in Telegram and send it any message. |
-| 409 | A webhook is set (only for **Find chat IDs**) | Another tool set a webhook on this bot. Remove it with `deleteWebhook` or use a separate bot. |
+| 409 | A webhook is set (only for **Find people and groups**) | Another tool set a webhook on this bot. Remove it with `deleteWebhook` or use a separate bot. |
 | 429 | Too many requests | Telegram's rate limit; the plugin honors `retry_after` once. Reduce recipients or add a cooldown. |
 
-Group chat IDs are negative. If a group was upgraded to a supergroup, its ID changed; run **Find chat IDs** again after sending a new message in the group.
+Group chat IDs are negative. If a group was upgraded to a supergroup, its ID changed; run **Find people and groups** again.
 
 ### Settings UI
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
 - **Save is disabled**: the list at the top of the page shows what to fix. Every item names the provider, group, or switch it belongs to.
+- **Look up numbers says the key cannot list numbers**: a Restricted API key needs permission to read Phone Numbers; a Standard key has it. Enter the numbers manually or grant the permission.
 - **Test connection succeeds but Test send fails**: the credentials are right but the sender, domain, or recipient is not. The per-recipient result shows the provider's error.
 
 If you are stuck, open an [issue](https://github.com/arodbuilds/homebridge-notify-switch/issues) with the log lines (remove any addresses you do not want public) and your configuration with the secrets removed.

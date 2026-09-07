@@ -1,6 +1,6 @@
 import { HomebridgePluginUiServer } from '@homebridge/plugin-ui-utils';
 
-import { findChats, payloadProvider, payloadTestSend, testProvider, testSend } from './handlers.js';
+import { findChats, lookupTwilio, payloadProvider, payloadTestSend, telegramBot, testProvider, testSend } from './handlers.js';
 
 /**
  * Server side of the custom settings UI (SPEC section 11.2). Started by the Homebridge UI as a child
@@ -14,6 +14,8 @@ class NotifySwitchUiServer extends HomebridgePluginUiServer {
     const options = (): { storagePath?: string } => ({ storagePath: this.homebridgeStoragePath });
     this.onRequest('/test-provider', (payload: unknown) => testProvider(payloadProvider(payload), options()));
     this.onRequest('/find-chats', (payload: unknown) => findChats(payloadProvider(payload), options()));
+    this.onRequest('/telegram-bot', (payload: unknown) => telegramBot(payloadProvider(payload), options()));
+    this.onRequest('/twilio-lookup', (payload: unknown) => lookupTwilio(payloadProvider(payload), options()));
     this.onRequest('/test-send', (payload: unknown) => {
       const { config, switchId } = payloadTestSend(payload);
       return testSend(config, switchId, options());

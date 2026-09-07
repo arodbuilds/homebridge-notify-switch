@@ -12,4 +12,6 @@ export interface App {
   changed(refs?: boolean): void;
   /** Items were added or removed, or a type changed: re-render the section (and the Switches section when `refs`). */
   rerender(section: Section, refs?: boolean): void;
+  /** Replaces the whole configuration (restore from backup, reset) and re-renders every section. */
+  replaceConfig(config: UiConfig): void;
 }

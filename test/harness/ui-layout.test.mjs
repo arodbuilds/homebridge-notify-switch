@@ -1,60 +1,19 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { pathToFileURL } from 'node:url';
 
-import { chromium } from 'playwright-core';
-
+import { launchOrSkip, openSettings } from './browser.mjs';
 import { SMTP, TELEGRAM, TWILIO } from './helpers.mjs';
 
 /**
  * Headless Chromium smoke test for the built settings UI (homebridge-ui/public). The page is loaded
- * the way the Homebridge UI loads it (the plugin's own stylesheet first, then the host's Bootstrap
- * appended after it, and a `window.homebridge` stub in place of the injected one) and checked for:
+ * the way the Homebridge UI loads it (see browser.mjs) and checked for:
  *   - no rendered element starting left of the viewport or ending past it, at 400px and 900px;
  *   - no horizontal page scroll;
  *   - the two-column grids stacking to one column below 600px;
- *   - the uncovered channel warning with its copy and "Add … action" button, with Save left enabled.
- *
- * Needs a Chromium or Chrome binary: `NOTIFY_SWITCH_CHROMIUM` (or `CHROMIUM_PATH` / `CHROME_BIN`), one of
- * the usual install locations, or the `chrome` channel. Without one the test is skipped locally and
- * fails on CI (where Chrome is always present), so the check cannot silently disappear.
+ *   - the uncovered channel warning with its copy and "Add … action" button, with Save left enabled;
+ *   - the card footers (SPEC section 11.2, item 11): the red text button on the left, one outlined
+ *     primary on the right, and never two primary buttons next to each other.
  */
-
-const require = createRequire(import.meta.url);
-const ROOT = resolve(import.meta.dirname, '..', '..');
-const PUBLIC = join(ROOT, 'homebridge-ui', 'public');
-const BOOTSTRAP = require.resolve('bootstrap/dist/css/bootstrap.min.css');
-
-const CANDIDATES = [
-  process.env.NOTIFY_SWITCH_CHROMIUM,
-  process.env.CHROMIUM_PATH,
-  process.env.CHROME_BIN,
-  '/opt/pw-browsers/chromium',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-].filter((candidate) => typeof candidate === 'string' && candidate.length > 0);
-
-async function launch() {
-  const executablePath = CANDIDATES.find((candidate) => existsSync(candidate));
-  const attempts = executablePath ? [{ executablePath }] : [{ channel: 'chrome' }, { channel: 'chromium' }];
-  let lastError;
-  for (const attempt of attempts) {
-    try {
-      return await chromium.launch({ ...attempt, headless: true, chromiumSandbox: false });
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw new Error(`no Chromium available (${lastError instanceof Error ? lastError.message.split('\n')[0] : String(lastError)})`);
-}
 
 /** A valid configuration whose only switch leaves the family group's Telegram chat uncovered. */
 const CONFIG = {
@@ -74,44 +33,6 @@ const CONFIG = {
     ],
   }],
 };
-
-/** Stands in for the `homebridge` object the Homebridge UI injects into the settings iframe. */
-function homebridgeStub(config) {
-  return `
-    window.__hb = { updates: [], save: [] };
-    window.homebridge = {
-      getPluginConfig: async () => [${JSON.stringify(config)}],
-      updatePluginConfig: async (blocks) => { window.__hb.updates.push(blocks); },
-      savePluginConfig: async () => undefined,
-      showSpinner() {}, hideSpinner() {},
-      enableSaveButton() { window.__hb.save.push(true); },
-      disableSaveButton() { window.__hb.save.push(false); },
-      toast: { error() {}, success() {}, warning() {}, info() {} },
-      request: async () => ({ ok: true, message: 'stub' }),
-      addEventListener() {},
-    };`;
-}
-
-function writePage() {
-  const dir = mkdtempSync(join(tmpdir(), 'notify-switch-ui-'));
-  const file = join(dir, 'index.html');
-  // Same order as the Homebridge UI: the plugin's index.html links its own stylesheet, then the host appends its own.
-  writeFileSync(file, `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Notify Switch settings</title>
-    <link rel="stylesheet" href="${pathToFileURL(join(PUBLIC, 'index.css')).href}">
-    <link rel="stylesheet" href="${pathToFileURL(BOOTSTRAP).href}">
-  </head>
-  <body>
-    <div id="app" class="notify-switch-ui"></div>
-    <script src="${pathToFileURL(join(PUBLIC, 'index.js')).href}"></script>
-  </body>
-</html>`);
-  return pathToFileURL(file).href;
-}
 
 /** Every rendered element whose box starts left of the viewport or ends past it, plus the page's scroll width. */
 async function audit(page) {
@@ -145,24 +66,46 @@ async function gridColumns(page) {
   }).filter((grid) => grid.children >= 2));
 }
 
-test('settings UI layout: nothing is clipped at the left edge or overflows the iframe, and grids stack on a phone', async (t) => {
-  let browser;
-  try {
-    browser = await launch();
-  } catch (err) {
-    if (process.env.CI) {
-      throw err;
+/**
+ * For every card footer: the classes of its visible buttons in document order, plus whether any two
+ * primary buttons (filled or outlined) are adjacent siblings.
+ */
+async function footerButtons(page) {
+  return page.evaluate(() => [...document.querySelectorAll('.card-footer')].map((footer) => {
+    const buttons = [...footer.querySelectorAll('button, a[role="button"]')].filter((node) => node.getBoundingClientRect().height > 0);
+    const isPrimary = (node) => /\bbtn-(outline-)?primary\b/.test(node.className);
+    let adjacentPrimary = false;
+    for (const node of buttons) {
+      if (!isPrimary(node)) {
+        continue;
+      }
+      for (const sibling of [node.previousElementSibling, node.nextElementSibling]) {
+        if (sibling && sibling.matches('button, a[role="button"]') && isPrimary(sibling)) {
+          adjacentPrimary = true;
+        }
+      }
     }
-    t.skip(`${err.message}; set NOTIFY_SWITCH_CHROMIUM to run the layout smoke test`);
+    const left = footer.querySelector('.ns-footer-left');
+    const right = footer.querySelector('.ns-footer-right');
+    const leftRect = left?.getBoundingClientRect();
+    const rightRect = right?.getBoundingClientRect();
+    return {
+      labels: buttons.map((node) => node.textContent.trim()),
+      primary: buttons.filter(isPrimary).map((node) => node.textContent.trim()),
+      red: buttons.filter((node) => /\btext-danger\b|\bbtn-(outline-)?danger\b/.test(node.className)).map((node) => node.textContent.trim()),
+      adjacentPrimary,
+      leftFirst: leftRect && rightRect && rightRect.width > 0 ? leftRect.left < rightRect.left : true,
+    };
+  }));
+}
+
+test('settings UI layout: nothing is clipped at the left edge or overflows the iframe, and grids stack on a phone', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
     return;
   }
   try {
-    const url = writePage();
-    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
-    page.on('pageerror', (err) => assert.fail(`page error: ${err.message}`));
-    await page.addInitScript(homebridgeStub(CONFIG));
-    await page.goto(url);
-    await page.waitForSelector('.card');
+    const page = await openSettings(browser, CONFIG);
     assert.equal(await page.locator('.alert-danger').count(), 0, 'the configuration loaded');
 
     // Every section heading and label starts inside the page, with the container's 16px padding on both sides.
@@ -216,16 +159,48 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
     assert.deepEqual(pushed, { providerId: 'telegram-home', channel: 'telegram', groups: ['family'], recipients: [], body: '' });
     assert.deepEqual(await page.evaluate(() => window.__hb.save.at(-1)), false, 'the empty message is a validation issue until filled in');
 
-    // Test send confirmation: Send now is the primary button, Cancel neutral; red is reserved for Remove.
+    // Card footers (SPEC section 11.2, item 11): red text button on the left, one outlined primary on the right.
+    let footers = await footerButtons(page);
+    assert.equal(footers.length, 3 + 1 + 1, 'one footer per provider, group and switch card');
+    for (const footer of footers) {
+      assert.equal(footer.adjacentPrimary, false, `no two primary buttons are adjacent: ${footer.labels.join(', ')}`);
+      assert.ok(footer.primary.length <= 1, `at most one primary button per footer: ${footer.labels.join(', ')}`);
+      assert.equal(footer.red.length, 1, `one red text button per footer: ${footer.labels.join(', ')}`);
+      assert.match(footer.red[0], /^Remove (provider|group|switch)$/);
+      assert.equal(footer.leftFirst, true, 'the red button is on the left');
+    }
+    assert.deepEqual(footers.map((footer) => footer.primary), [['Test connection'], ['Test connection'], ['Test connection'], [], ['Test send']]);
+    // "Add action" is a link-style button directly under the actions list, left aligned, not in the footer.
+    const addAction = page.getByRole('button', { name: 'Add action' });
+    assert.match(await addAction.getAttribute('class'), /\bbtn-link\b/);
+    const addActionBox = await addAction.boundingBox();
+    const actionsBox = await page.locator('.actions').boundingBox();
+    assert.ok(addActionBox.y >= actionsBox.y + actionsBox.height - 1, 'Add action sits under the actions list');
+    assert.ok(Math.abs(addActionBox.x - actionsBox.x) < 2, 'Add action is left aligned with the actions list');
+
+    // Test send confirmation: the button is replaced in place by the question, a primary Send and a text Cancel.
     await page.getByRole('button', { name: 'Test send' }).click();
-    const sendNow = page.getByRole('button', { name: 'Send now' });
-    assert.match(await sendNow.getAttribute('class'), /\bbtn-primary\b/);
-    assert.match(await page.getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-outline-secondary\b/);
+    assert.equal(await page.locator('.test-send-question').textContent(), 'Send to 5 recipients now?');
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    assert.match(await send.getAttribute('class'), /\bbtn-primary\b/);
+    assert.match(await page.getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-link\b/);
+    assert.equal(await page.getByRole('button', { name: 'Test send' }).count(), 0, 'Test send is replaced, not duplicated');
+    footers = await footerButtons(page);
+    assert.equal(footers[4].adjacentPrimary, false, `Send and Cancel: ${footers[4].labels.join(', ')}`);
+    assert.deepEqual(footers[4].primary, ['Send']);
+    // Escape restores the button; so does Cancel.
+    await page.keyboard.press('Escape');
+    assert.equal(await page.getByRole('button', { name: 'Test send' }).count(), 1);
+    await page.getByRole('button', { name: 'Test send' }).click();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    assert.equal(await page.getByRole('button', { name: 'Test send' }).count(), 1);
+    // Red is reserved for Remove buttons and the reset flow.
     const redButtons = await page.evaluate(() => [...document.querySelectorAll('button')]
-      .filter((node) => /\bbtn-(outline-)?danger\b/.test(node.className))
+      .filter((node) => /\btext-danger\b|\bbtn-(outline-)?danger\b/.test(node.className))
       .map((node) => node.textContent.trim()));
     assert.ok(redButtons.length > 0);
-    assert.ok(redButtons.every((label) => /^Remove/.test(label)), `only Remove buttons are red: ${redButtons.join(', ')}`);
+    assert.ok(redButtons.every((label) => /^(Remove|Reset plugin to fresh install)/.test(label)),
+      `only Remove and Reset buttons are red: ${redButtons.join(', ')}`);
 
     // With validation issues showing, the sticky issues box is inside the viewport too.
     await page.setViewportSize({ width: 400, height: 700 });

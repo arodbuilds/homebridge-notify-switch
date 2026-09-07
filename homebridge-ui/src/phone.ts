@@ -1,4 +1,4 @@
-import { AsYouType, getCountries, getCountryCallingCode, getExampleNumber, parsePhoneNumberFromString } from 'libphonenumber-js/min';
+import { getCountries, getCountryCallingCode, getExampleNumber, parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { CountryCode } from 'libphonenumber-js/min';
 import examples from 'libphonenumber-js/examples.mobile.json';
 
@@ -6,8 +6,9 @@ import { el, uniqueId } from './dom.js';
 
 /**
  * Phone number entry (SPEC section 11.2, item 1): a country dropdown with flag, name and dial code,
- * a national number field with a local placeholder, live validation and formatting, storage as
- * E.164, and paste normalization that also sets the country.
+ * and a national number field. Nothing is reformatted while the field has focus; on blur the text
+ * is parsed with the selected country as the hint, stored as E.164, the country is re-derived from
+ * the parsed number, and the field shows the national format.
  */
 
 export interface Country {
@@ -55,15 +56,42 @@ export function countryOptions(): Array<{ value: string; label: string }> {
   return countries().map((c) => ({ value: c.code, label: `${c.flag} ${c.name} (+${c.dial})` }));
 }
 
+export interface ParsedPhone {
+  e164: string;
+  country: CountryCode;
+  national: string;
+}
+
+/**
+ * Parses free text with `country` as the hint (a leading plus or `00` wins over the hint). The country
+ * comes back from the parsed number, so a +1 305 number is United States even when Canada was selected.
+ * Undefined when the text is not a valid number.
+ */
+export function parsePhone(text: string, country: CountryCode): ParsedPhone | undefined {
+  const raw = text.trim().replace(/^00/, '+');
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = parsePhoneNumberFromString(raw, country);
+  if (!parsed || !parsed.isValid()) {
+    return undefined;
+  }
+  return { e164: parsed.number, country: parsed.country ?? country, national: parsed.formatNational() };
+}
+
 /** Parses free text to E.164, using `country` when there is no leading plus. Undefined when not valid. */
 export function toE164(text: string, country: CountryCode): string | undefined {
-  const raw = text.trim().replace(/^00/, '+');
-  const parsed = raw.startsWith('+') ? parsePhoneNumberFromString(raw) : parsePhoneNumberFromString(raw, country);
-  return parsed && parsed.isValid() ? parsed.number : undefined;
+  return parsePhone(text, country)?.e164;
 }
 
 export function isE164(text: string): boolean {
   return /^\+[1-9]\d{6,14}$/.test(text);
+}
+
+/** Digits, spaces, dashes, dots, parentheses and one leading plus are the characters the field accepts. */
+export function sanitizePhoneText(text: string): string {
+  const kept = text.replace(/[^\d\s().+-]/g, '');
+  return kept.replace(/(?!^)\+/g, '');
 }
 
 function placeholderFor(country: CountryCode): string {
@@ -86,8 +114,8 @@ export interface PhoneInputOptions {
 /** A phone number row: country select plus national number input. Returns the row element. */
 export function phoneInput(opts: PhoneInputOptions): HTMLElement {
   let country: CountryCode = isCountry(opts.defaultCountry) ? (opts.defaultCountry.toUpperCase() as CountryCode) : 'US';
-  const initial = opts.value.trim() ? parsePhoneNumberFromString(opts.value.trim()) : undefined;
-  if (initial?.country) {
+  const initial = parsePhone(opts.value, country);
+  if (initial) {
     country = initial.country;
   }
 
@@ -110,77 +138,90 @@ export function phoneInput(opts: PhoneInputOptions): HTMLElement {
     'aria-label': opts.label ?? 'Phone number',
     placeholder: placeholderFor(country),
   });
-  input.value = initial?.country ? initial.formatNational() : opts.value;
+  input.value = initial ? initial.national : opts.value;
 
   const feedback = el('div', { class: 'form-text phone-feedback' });
 
-  const report = (): void => {
+  const countryName = (): string => countries().find((c) => c.code === country)?.name ?? country;
+
+  const showStored = (e164: string): void => {
+    feedback.textContent = `Stored as ${e164}`;
+    feedback.className = 'form-text phone-feedback text-success';
+    input.classList.remove('is-invalid');
+  };
+  const showError = (): void => {
+    feedback.textContent = `Not a valid number for ${countryName()}. Include the area code, or enter the full number with its country code.`;
+    feedback.className = 'form-text phone-feedback text-danger';
+    input.classList.add('is-invalid');
+  };
+  const showNothing = (): void => {
+    feedback.textContent = '';
+    feedback.className = 'form-text phone-feedback';
+    input.classList.remove('is-invalid');
+  };
+
+  /** Blur (and country change): parse, store E.164, re-derive the country, show the national format. */
+  const commit = (): void => {
     const text = input.value.trim();
     if (!text) {
-      feedback.textContent = '';
-      feedback.className = 'form-text phone-feedback';
-      input.classList.remove('is-invalid');
+      showNothing();
       opts.onChange('');
       return;
     }
-    const e164 = toE164(text, country);
-    if (e164) {
-      feedback.textContent = `Stored as ${e164}`;
-      feedback.className = 'form-text phone-feedback text-success';
-      input.classList.remove('is-invalid');
-      opts.onChange(e164);
-    } else {
-      const name = countries().find((c) => c.code === country)?.name ?? country;
-      feedback.textContent = `Not a valid number for ${name}. Include the area code, or paste the full number with its country code.`;
-      feedback.className = 'form-text phone-feedback text-danger';
-      input.classList.add('is-invalid');
+    const parsed = parsePhone(text, country);
+    if (!parsed) {
+      // Keep the raw text so the user can see and fix what they typed.
+      showError();
       opts.onChange(text);
+      return;
     }
+    if (parsed.country !== country && isCountry(parsed.country)) {
+      country = parsed.country;
+      select.value = country;
+      input.placeholder = placeholderFor(country);
+    }
+    input.value = parsed.national;
+    showStored(parsed.e164);
+    opts.onChange(parsed.e164);
   };
 
   select.addEventListener('change', () => {
     if (isCountry(select.value)) {
       country = select.value as CountryCode;
       input.placeholder = placeholderFor(country);
-      // Re-read the digits the user typed against the new country.
-      const digits = input.value.replace(/[^\d+]/g, '');
-      if (!digits.startsWith('+')) {
-        input.value = new AsYouType(country).input(digits);
+      if (input.value.trim()) {
+        commit();
       }
-      report();
     }
   });
 
   input.addEventListener('input', () => {
+    // No formatting while typing. Only characters outside the accepted set are dropped, with the caret kept in place.
     const raw = input.value;
-    const normalized = raw.trim().replace(/^00/, '+');
-    if (normalized.startsWith('+')) {
-      // Pasted or typed with a country code: take the country from the number and show it nationally.
-      const parsed = parsePhoneNumberFromString(normalized);
-      if (parsed?.country) {
-        country = parsed.country;
-        select.value = country;
-        input.placeholder = placeholderFor(country);
-        input.value = parsed.formatNational();
-      } else {
-        input.value = new AsYouType().input(normalized);
-      }
-    } else if (input.selectionEnd === raw.length) {
-      // Only reformat while the caret is at the end, so editing in the middle does not jump.
-      input.value = new AsYouType(country).input(raw);
+    const clean = sanitizePhoneText(raw);
+    if (clean !== raw) {
+      const caret = input.selectionStart ?? raw.length;
+      const removedBefore = raw.slice(0, caret).length - sanitizePhoneText(raw.slice(0, caret)).length;
+      input.value = clean;
+      const next = Math.max(0, caret - removedBefore);
+      input.setSelectionRange(next, next);
     }
-    report();
+    // The model always holds what is in the field, so validation and Save track it; the parse waits for blur.
+    opts.onChange(input.value.trim());
+  });
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commit();
+    }
   });
 
-  if (input.value.trim() && !initial?.country) {
+  if (initial) {
+    showStored(initial.e164);
+  } else if (input.value.trim()) {
     // Stored value did not parse: show why without emitting a change.
-    const name = countries().find((c) => c.code === country)?.name ?? country;
-    feedback.textContent = `Not a valid number for ${name}.`;
-    feedback.className = 'form-text phone-feedback text-danger';
-    input.classList.add('is-invalid');
-  } else if (initial?.country) {
-    feedback.textContent = `Stored as ${initial.number}`;
-    feedback.className = 'form-text phone-feedback text-success';
+    showError();
   }
 
   return el('div', { class: 'phone-row' },

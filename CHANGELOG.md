@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-09-07
+
+### Added
+
+- Twilio **Look up numbers** on the provider card, enabled once the Account SID, API Key SID and API Key Secret are filled. Through the settings UI server it lists the first 20 phone numbers on the account (`GET /2010-04-01/Accounts/{accountSid}/IncomingPhoneNumbers.json?PageSize=20`) and the first 20 Messaging Services (`GET https://messaging.twilio.com/v1/Services?PageSize=20`) with the same Basic auth as everything else, and shows them as two dropdowns with friendly names. Picking a number appends it to the senders list; picking a service fills the Messaging Service SID. When a page reports more entries the status ends with "Showing the first 20; enter others manually."; a key that may not list numbers (401 or 403) gets "This API key cannot list numbers. Enter them manually." Manual entry remains available. Harness tests cover success, the paging note and the permission failure with mocked `fetch`, and a browser test drives the dropdowns.
+- Telegram onboarding flow replacing the Telegram provider card: step 1 "Create your bot" with an Open BotFather link, a QR code of it, four numbered instructions and the token field, which checks the token with `getMe` as soon as it looks valid and shows "Connected to @username"; step 2 "Choose how people receive messages" with the "Family group chat (recommended)" and "Individual chats" cards, the former with an "Add bot to a group" link and QR code; step 3 "Invite people" with a QR code for the bot's start link, Enlarge (full-page modal), Copy link and Copy invite message; then **Find people and groups** (the renamed Find chat IDs), which lists private chats by first name and username and groups by title, includes `my_chat_member` updates so a group appears as soon as the bot is added, and adds each entry to the recipient group chosen in a dropdown, prompting for one when none is chosen. QR codes are inline SVG generated in the UI bundle by `qrcode-generator`, a dev dependency; no new runtime dependency. All copy is in SPEC section 11.3 and the README Telegram section mirrors the three steps.
+- Settings > **Advanced** (collapsed by default) with **Download backup** (`notify-switch-backup-YYYY-MM-DD.json`, with a line stating the file contains credentials), **Restore from backup** (a file picker whose JSON is checked against the form's rules before anything changes, listing the problems if it fails and replacing the form and enabling Save if it passes; a whole config.json holding a NotifySwitch block is accepted too), and **Reset plugin to fresh install** (a red text button opening a confirmation that lists what is removed, offers Download backup first, and requires typing RESET before the red Confirm button enables; confirming replaces the form with the empty default configuration and enables Save). Browser tests cover all three.
+- Startup: a configuration that passes validation with zero switches now unregisters every cached accessory, the master switch included, and clears the master switch position and failure sensor state persisted in their contexts. A configuration that fails validation still leaves cached accessories untouched. `test/harness/platform.test.mjs` drives both paths and a normal start against a fake Homebridge API.
+- SPEC section 2 notes the 1.1 plan: WhatsApp via Twilio with a single approved utility template carrying the body as its variable, and voice calls via Twilio as a candidate for the same release.
+- Browser tests for phone entry (typing with the caret mid-field, editing an existing number, pasting E.164, and the +1 region re-derivation), with the Chromium helpers shared in `test/harness/browser.mjs`.
+
+### Changed
+
+- Phone entry no longer reformats while typing. The field accepts digits, spaces, dashes, dots, parentheses and a leading plus while it has focus (anything else is dropped as typed with the caret kept in place). On blur the text is parsed with libphonenumber-js using the selected country as the hint, stored as E.164, the country is re-derived from the number (a +1 305 number selects United States even if Canada was selected) and the dropdown updated, and the field shows the national format. "Stored as +…" appears only when parsing succeeds; otherwise an inline error shows and the raw text stays. Applies to sender numbers, group SMS lists and extra SMS recipients.
+- Messaging Service SID moved under the Twilio card's **Advanced** disclosure next to the credentials file, with the same help text; the disclosure opens when either is set.
+- Card buttons: **Add action** is a link-style button directly under the actions list, left aligned. Every switch card has a footer with **Remove switch** as a red text button on the left and **Test send** as the only outlined primary button on the right; clicking it replaces the button in place with "Send to {n} recipients now?", a primary **Send** and a text **Cancel** (Escape or Cancel restores it), and per-recipient results render below the footer with a Dismiss link. Provider cards (Remove provider, Test connection) and group cards (Remove group) use the same footer. The layout smoke test asserts that no two primary buttons are adjacent in any card footer. Red is reserved for Remove buttons and the reset flow.
+- An empty `providers` or `switches` list is a warning rather than a blocking error at startup and in the settings UI, so an empty (reset) configuration can be saved; `config.schema.json` no longer sets `minItems` on those two lists. An action that references a missing provider is still an error.
+- Telegram private chats are listed as "First (@username)"; the empty result message now points at pressing Start or adding the bot to a group.
+- README status line no longer names a version ("The current release is shown in the badge above."). README, CONTRIBUTING and SPEC carry no hardcoded version, so a release touches only `CHANGELOG.md` and `package.json`.
+- Version bumped to `0.1.0-beta.4`.
+
 ## [0.1.0-beta.3] - 2026-09-06
 
 ### Added
@@ -80,7 +101,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.4...HEAD
+[0.1.0-beta.4]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/arodbuilds/homebridge-notify-switch/releases/tag/v0.1.0-beta.1

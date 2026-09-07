@@ -332,3 +332,35 @@ export function exportConfig(config: UiConfig): Raw {
 export function slugify(name: string): string {
   return name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 }
+
+/** The empty default configuration written by Reset plugin to fresh install (SPEC section 11.2, item 12). */
+export function emptyConfig(): UiConfig {
+  return readConfig({ platform: 'NotifySwitch', name: 'Notify Switch', configVersion: 1, providers: [], groups: [], switches: [] });
+}
+
+/**
+ * Reads a backup file's JSON into a platform block: either the block itself or a whole config.json
+ * holding one under `platforms`. Returns the block, or the reason it was rejected.
+ */
+export function backupBlock(parsed: unknown): { block?: Raw; error?: string } {
+  if (!isRaw(parsed)) {
+    return { error: 'The file does not contain a JSON object.' };
+  }
+  let block: Raw = parsed;
+  if (Array.isArray(parsed.platforms)) {
+    const found = parsed.platforms.find((entry: unknown) => isRaw(entry) && entry.platform === 'NotifySwitch');
+    if (!isRaw(found)) {
+      return { error: 'The file is a Homebridge config.json without a NotifySwitch platform block.' };
+    }
+    block = found;
+  }
+  if (block.platform !== 'NotifySwitch') {
+    return { error: 'The file is not a Notify Switch backup: "platform" must be "NotifySwitch".' };
+  }
+  for (const key of ['providers', 'groups', 'switches']) {
+    if (block[key] !== undefined && block[key] !== null && !Array.isArray(block[key])) {
+      return { error: `"${key}" must be a list.` };
+    }
+  }
+  return { block };
+}

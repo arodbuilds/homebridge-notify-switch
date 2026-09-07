@@ -2,7 +2,8 @@ import type { PluginLogger } from '../logging.js';
 import { BOT_TOKEN_PATTERN } from '../patterns.js';
 import { PROVIDER_CONCURRENCY } from '../settings.js';
 import type {
-  Channel, ChatSummary, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TelegramProviderConfig, ValidationIssue,
+  BotIdentity, Channel, ChatSummary, ConnectionTestResult, Provider, ProviderDiagnostics, RecipientResult, SendRequest, TelegramProviderConfig,
+  ValidationIssue,
 } from '../types.js';
 import { PROVIDER_CHANNELS, TELEGRAM_PARSE_MODES } from '../types.js';
 import { validateBodyForChannel } from './bodyRules.js';
@@ -35,16 +36,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Human readable label for a chat object: the title for groups and channels, the person's name for private chats. */
+/**
+ * Human readable label for a chat object (SPEC section 11.2, item 5): the title for groups, supergroups
+ * and channels; the first name and username for private chats.
+ */
 function describeChat(chat: Record<string, unknown>): string {
   const title = shortMessage(chat.title ?? '', 64);
   if (title) {
     return title;
   }
-  const name = [chat.first_name, chat.last_name].filter((part) => typeof part === 'string' && part.length > 0).join(' ');
-  const username = typeof chat.username === 'string' && chat.username.length > 0 ? `@${chat.username}` : '';
-  const label = [shortMessage(name, 64), username].filter((part) => part.length > 0).join(' ');
-  return label || 'Unnamed chat';
+  const name = shortMessage(chat.first_name ?? '', 64);
+  const username = typeof chat.username === 'string' && chat.username.length > 0 ? `@${shortMessage(chat.username, 32)}` : '';
+  if (name && username) {
+    return `${name} (${username})`;
+  }
+  return name || username || 'Unnamed chat';
+}
+
+/** Telegram bot usernames are 5 to 32 letters, digits and underscores; anything else is not put in a link. */
+function cleanUsername(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9_]{5,32}$/.test(value) ? value : undefined;
 }
 
 /**
@@ -107,9 +118,24 @@ export class TelegramProvider implements Provider, ProviderDiagnostics {
     return { ok: true, message: `Connected to Telegram as ${username ? `@${username}` : (name || 'the bot')}.` };
   }
 
+  /** Onboarding flow (SPEC section 11.2, item 10): `getMe`, reporting the bot's username so the UI can build links. */
+  async getMe(): Promise<BotIdentity> {
+    const outcome = await this.call('getMe');
+    if (!outcome.ok) {
+      return { ok: false, message: outcome.message };
+    }
+    const result = isRecord(outcome.result) ? outcome.result : {};
+    const username = cleanUsername(result.username);
+    if (!username) {
+      return { ok: false, message: 'Telegram answered without a bot username. Check the token from BotFather.' };
+    }
+    return { ok: true, message: `Connected to @${username}`, username };
+  }
+
   /**
-   * Settings UI Find chat IDs (SPEC section 11.2, item 5): `getUpdates` reduced to the distinct chats
-   * that have messaged the bot. Only chat ids, titles and types leave this method.
+   * Settings UI Find people and groups (SPEC section 11.2, item 5): `getUpdates` reduced to the distinct
+   * chats the bot has seen. `my_chat_member` updates are included so a group appears as soon as the bot is
+   * added to it, before anyone posts. Only chat ids, titles and types leave this method.
    */
   async findChats(): Promise<{ ok: boolean; message: string; chats: ChatSummary[] }> {
     const outcome = await this.call('getUpdates', { limit: 100, allowed_updates: ['message', 'channel_post', 'my_chat_member'] });
@@ -135,7 +161,8 @@ export class TelegramProvider implements Provider, ProviderDiagnostics {
     }
     const list = [...chats.values()];
     const message = list.length === 0
-      ? 'No chats found. Send the bot a message in Telegram, then try again. Telegram only keeps recent messages, and a webhook set on the bot hides them.'
+      ? 'No people or groups found yet. Open the bot and press Start, or add it to a group, then try again. '
+        + 'Telegram only keeps recent updates, and a webhook set on the bot hides them.'
       : `Found ${list.length} chat${list.length === 1 ? '' : 's'}.`;
     return { ok: true, message, chats: list };
   }

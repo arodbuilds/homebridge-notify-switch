@@ -613,8 +613,11 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   // Providers
   const providerConfigs = new Map<string, ProviderConfig>();
   const providerIds = new Set<string>();
-  if (!Array.isArray(raw.providers) || raw.providers.length === 0) {
-    c.error('providers', 'no providers configured; add at least one provider');
+  if (raw.providers !== undefined && raw.providers !== null && !Array.isArray(raw.providers)) {
+    c.error('providers', 'must be a list');
+  } else if (!Array.isArray(raw.providers) || raw.providers.length === 0) {
+    // Not an error: a fresh install or a reset configuration has no providers (SPEC section 10).
+    c.warn('providers', 'no providers configured');
   } else {
     raw.providers.forEach((item, i) => {
       const provider = readProvider(c, item, `providers[${i}]`, providerIds, defaultCountry, options.storagePath);
@@ -665,8 +668,11 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
   const switchConfigs: Array<{ config: SwitchConfig; path: string }> = [];
   const switchIds = new Set<string>();
   const switchNames = new Set<string>();
-  if (!Array.isArray(raw.switches) || raw.switches.length === 0) {
-    c.error('switches', 'no switches configured; add at least one switch');
+  if (raw.switches !== undefined && raw.switches !== null && !Array.isArray(raw.switches)) {
+    c.error('switches', 'must be a list');
+  } else if (!Array.isArray(raw.switches) || raw.switches.length === 0) {
+    // Valid, with nothing to register: startup removes every cached accessory (SPEC section 4, item 9).
+    c.warn('switches', 'no switches configured; every cached accessory will be removed');
   } else {
     raw.switches.forEach((item, i) => {
       const sw = readSwitch(c, item, `switches[${i}]`, switchIds, switchNames, defaultCountry);
@@ -728,7 +734,7 @@ export interface ProviderValidationResult {
 }
 
 /**
- * Validates one provider block on its own, for the settings UI's Test connection and Find chat IDs
+ * Validates one provider block on its own, for the settings UI's Test connection, lookups and Find people and groups
  * (SPEC section 11.2, items 3 and 5). Applies `credentialsFile` the same way startup does. Never throws.
  */
 export async function validateProvider(rawProvider: unknown, log: PluginLogger, options: ValidateOptions = {}): Promise<ProviderValidationResult> {
