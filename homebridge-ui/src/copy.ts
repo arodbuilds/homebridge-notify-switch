@@ -1,4 +1,4 @@
-import type { NtfyAuth, NtfyPriority, ProviderType } from '../../src/types.js';
+import type { Channel, NtfyAuth, NtfyPriority, ProviderType } from '../../src/types.js';
 
 /**
  * In-app copy, verbatim from SPEC section 11.3. Field help is one sentence; anything longer is a
@@ -160,8 +160,86 @@ export const GROUPS_SECTION = 'A group is a list of people. Switches send to gro
 /** Group Name field help, with examples (SPEC section 11.3). */
 export const GROUP_NAME_HELP = 'Who is in this list. For example: Family, Neighbors, On-call.';
 
-export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on runs every action below it, then the switch turns itself off. '
-  + 'Add one action per channel you want.';
+export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on sends your message to everyone in the groups you pick, '
+  + 'on every channel they have, then the switch turns itself off.';
+
+/** Channel names as they read inside a sentence ("3 ways to send email") and at the start of a label ("Email (1 address)"). */
+export const CHANNEL_WORD: Record<Channel, string> = { sms: 'SMS', email: 'email', telegram: 'Telegram', ntfy: 'ntfy' };
+export const CHANNEL_TITLE: Record<Channel, string> = { sms: 'SMS', email: 'Email', telegram: 'Telegram', ntfy: 'ntfy' };
+
+/** What a channel's recipients are called, singular and plural: "3 numbers", "1 address". */
+export const RECIPIENT_NOUN: Record<Channel, [string, string]> = {
+  sms: ['number', 'numbers'], email: ['address', 'addresses'], telegram: ['chat', 'chats'], ntfy: ['topic', 'topics'],
+};
+
+/** "3 numbers", "1 address". */
+export function countRecipients(channel: Channel, count: number): string {
+  return `${count} ${RECIPIENT_NOUN[channel][count === 1 ? 0 : 1]}`;
+}
+
+/** The switch editor (SPEC section 11.2, item 8, and section 11.3). */
+export const SWITCH_EDITOR = {
+  recipientsLabel: 'Recipients',
+  recipientsHelp: 'Everyone in the groups you tick gets the message on every channel they have an address for.',
+  noGroups: 'No groups yet. Add one under Recipient Groups, or add extra recipients below.',
+  /** "Family: 3 SMS, 1 email, 2 ntfy", or "Family: no addresses yet". */
+  groupCounts: (name: string, counts: Array<[Channel, number]>): string => {
+    const parts = counts.filter(([, count]) => count > 0).map(([channel, count]) => `${count} ${CHANNEL_WORD[channel]}`);
+    return `${name}: ${parts.length > 0 ? parts.join(', ') : 'no addresses yet'}`;
+  },
+  missingGroup: (id: string): string => `${id} (missing group)`,
+  extraLabel: 'Extra recipients',
+  extraHelp: 'People outside the groups above, entered under their channel.',
+  extraChannelLabel: { sms: 'Phone numbers (SMS)', email: 'Email addresses', telegram: 'Telegram chat IDs', ntfy: 'ntfy topics' } as Record<Channel, string>,
+  extraEmpty: 'None yet.',
+  sendByLabel: 'Send by',
+  sendByHelp: 'Untick a channel to skip it for this switch.',
+  sendByEmpty: 'Pick a group or add an extra recipient to choose how to send.',
+  /** "SMS (3 numbers)". */
+  channelOption: (channel: Channel, count: number): string => `${CHANNEL_TITLE[channel]} (${countRecipients(channel, count)})`,
+  messageLabel: 'Message',
+  subjectLabel: 'Subject',
+  subjectHelp: 'Used as the email subject and the ntfy title. Defaults to the switch name.',
+  customizedNote: 'Each channel has its own message under Advanced.',
+  /** "Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics." */
+  preview: (parts: Array<{ channel: Channel; provider: string; count: number }>): string => `Will send ${parts
+    .map((part) => `${CHANNEL_WORD[part.channel]} via ${part.provider} to ${countRecipients(part.channel, part.count)}`).join(', ')}.`,
+  previewNone: 'Nothing will be sent yet.',
+  advanced: 'Advanced',
+  customize: 'Customize message per channel',
+  customizeHelp: 'Write a different message for each channel. Each starts as a copy of the shared message.',
+  channelBody: { sms: 'SMS message', email: 'Email message', telegram: 'Telegram message', ntfy: 'ntfy message' } as Record<Channel, string>,
+  channelSubject: { email: 'Email subject', ntfy: 'ntfy title' } as Partial<Record<Channel, string>>,
+  providerLabel: (channel: Channel): string => `${CHANNEL_TITLE[channel]} provider`,
+  platformDefault: (name: string): string => `Platform default (${name})`,
+  providerHelp: 'For this switch only. The default for every switch is under Settings.',
+  missingProvider: (id: string): string => `${id} (missing)`,
+  /** Under a ticked channel that no provider serves any more; the action stays as stored until the box is unticked. */
+  noProviderNote: (channel: Channel): string => `No provider configured for ${CHANNEL_WORD[channel]}; add one or untick to remove.`,
+};
+
+/**
+ * A configuration the editor cannot represent: a switch with more than one action on the same channel
+ * (SPEC section 11.2, item 26). The notice sits at the top of the page and every section is disabled except
+ * the two backups and Reset.
+ */
+export const LEGACY = {
+  notice: 'Warning: upgrading to 1.1 requires reconfiguring this plugin. Download a backup for reference, then use Reset plugin to fresh install '
+    + 'under Advanced and set up your switches again.',
+  /** In place of the switch cards. */
+  switches: (names: string[]): string => `Not shown: ${names.join(', ')}. ${names.length === 1 ? 'This switch has' : 'These switches have'} `
+    + 'more than one action on the same channel, which this version cannot edit.',
+};
+
+/** Platform defaults per channel (SPEC section 5.7 and section 11.2, item 25). */
+export const DEFAULTS = {
+  prompt: (n: number, channel: Channel): string => `You now have ${n} ways to send ${CHANNEL_WORD[channel]}. Which should switches use unless told otherwise?`,
+  confirm: 'Use the selected provider',
+  warning: (channel: Channel): string => `Choose a default ${CHANNEL_WORD[channel]} provider`,
+  settingsLabel: (channel: Channel): string => `Default ${CHANNEL_WORD[channel]} provider`,
+  settingsHelp: (channel: Channel): string => `Switches send ${CHANNEL_WORD[channel]} through this provider unless a switch says otherwise under Advanced.`,
+  settingsPlaceholder: 'Choose a provider…',
+};
 
 export const SWITCH_HELP = {
   name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes. For example: Water Leak Alert, Smoke Alarm.',
@@ -172,6 +250,8 @@ export const SWITCH_HELP = {
   subject: 'Optional. Defaults to the switch name.',
   bodySms: 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.',
   bodyOther: 'Plain text.',
+  bodySmsPlaceholder: 'e.g. Water detected under the kitchen sink at {{time}}.',
+  bodyOtherPlaceholder: 'e.g. Water detected at {{time}} on {{date}}.',
   sender: 'Automatic uses the only sender, or the Messaging Service when one is set.',
   bcc: 'Hide recipients from each other (BCC)',
   bccHelp: 'Recipients go in Bcc and your from address in To, so nobody sees the other addresses. A message to one recipient always uses To.',
@@ -216,11 +296,25 @@ export const VALIDATION = {
   ntfyTags: 'Use at most 8 tags.',
   /** Shown instead of the issue list while every remaining issue is on a card nobody has touched yet (SPEC section 11.2, item 15). */
   finishNew: (what: string): string => `Fill in the new ${what} to enable Save.`,
+  /** The switch editor (SPEC section 11.2, item 8). */
+  noRecipients: 'Pick at least one group, or add an extra recipient.',
+  noChannels: 'Turn on at least one channel.',
+  tooMany: (channel: Channel, count: number, limit: number): string =>
+    `This switch reaches ${countRecipients(channel, count)} on ${CHANNEL_WORD[channel]}; the limit is ${limit} per channel.`,
+  missingGroup: (id: string): string => `Group "${id}" does not exist.`,
+  missingProvider: (id: string): string => `Provider "${id}" does not exist.`,
+  noProvider: (channel: Channel): string => `No provider can send ${CHANNEL_WORD[channel]}. Add one under Providers.`,
+  /** On the Send by checkbox of a stored channel no provider serves; the same text as the note under it. */
+  noProviderForChannel: (channel: Channel): string => SWITCH_EDITOR.noProviderNote(channel),
+  wrongProvider: (name: string, type: string, channel: Channel): string => `Provider "${name}" is ${type}, which cannot send ${CHANNEL_WORD[channel]}.`,
+  twilioEmailFrom: (name: string): string => `Provider "${name}" needs an Email From address before it can send email.`,
 };
 
 /** The "Fix these before saving" box (SPEC section 11.2, item 15): a link per field, collapsed to a count past three entries. */
 export const ISSUES = {
   heading: 'Fix these before saving:',
+  /** The box heading while only warnings remain: Save is enabled (SPEC section 11.2, item 25). */
+  optional: 'Optional before saving:',
   count: (n: number): string => `${n} field${n === 1 ? '' : 's'} need${n === 1 ? 's' : ''} attention`,
   showAll: 'Show all',
   hide: 'Hide',
@@ -313,6 +407,9 @@ export const BACKUP = {
   restoreFailed: 'The backup could not be loaded:',
   restoreTooLarge: 'The file is larger than 1 MB, which a Notify Switch backup never is.',
   restoreForbiddenKey: (path: string): string => `The file contains a key named "${path}", which is not allowed.`,
+  /** A backup with more than one action on the same channel (SPEC section 11.2, item 26) cannot be shown, so it is not loaded. */
+  restoreLegacy: (names: string[]): string => `The file has more than one action on the same channel on ${names.map((name) => `"${name}"`).join(', ')}, `
+    + 'which this version cannot edit. Set the switch up again instead.',
   restored: 'Backup loaded. Review the form, then click Save.',
   restoredWithoutCredentials: 'Backup loaded. Enter the credentials it left out, then click Save.',
   reset: 'Reset plugin to fresh install',

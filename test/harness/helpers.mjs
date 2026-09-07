@@ -136,11 +136,12 @@ export const NTFY = {
 };
 
 /** A platform block with one switch whose actions are given by the caller. */
-export function platformConfig({ providers, groups, actions, debug = false }) {
+export function platformConfig({ providers, groups, actions, debug = false, defaultProviders }) {
   return {
     platform: 'NotifySwitch',
     name: 'Notify Switch',
     debug,
+    ...(defaultProviders ? { defaultProviders } : {}),
     providers,
     groups: groups ?? [{ id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'], telegram: ['123456789'], ntfy: ['home-alerts'] }],
     switches: [{

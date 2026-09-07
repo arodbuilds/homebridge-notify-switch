@@ -1,12 +1,13 @@
-import type { BotIdentity, ChatSummary, NtfyAuth, ProviderType, TwilioLookupResult } from '../../../src/types.js';
-import { PROVIDER_TYPES } from '../../../src/types.js';
+import type { BotIdentity, Channel, ChatSummary, NtfyAuth, ProviderType, TwilioLookupResult } from '../../../src/types.js';
+import { CHANNELS, PROVIDER_TYPES } from '../../../src/types.js';
+import { defaultNeeded, providersForChannel, pruneDefaults, resolveDefaultProvider, servesChannel } from '../../../src/defaults.js';
 import { BOT_TOKEN_PATTERN } from '../../../src/patterns.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
-import type { App } from '../app.js';
+import type { App, ValidationListener } from '../app.js';
 import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
 import {
-  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, DEFAULTS, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
   PROVIDER_TYPE_LABEL, PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
@@ -17,6 +18,8 @@ import { createProvider, exportProvider, slugify, uniqueSlug } from '../model.js
 import type { UiProvider } from '../model.js';
 import { qrElement } from '../qr.js';
 import { OTHER_PRESET_KEY, OTHER_PRESET_LABEL, SMTP_PRESETS, smtpPreset } from '../smtpPresets.js';
+import { validProviders } from '../validate.js';
+import type { UiIssue } from '../validate.js';
 import { groupTitle } from './groups.js';
 
 export function providerTitle(p: UiProvider): string {
@@ -29,9 +32,89 @@ interface FindChatsResult {
   chats: ChatSummary[];
 }
 
-/** True when a switch action sends through this provider, in which case the id must not follow the name any more. */
+/** True when a switch names this provider, in which case the id must not follow the name any more. */
 function providerReferenced(app: App, id: string): boolean {
-  return id.length > 0 && app.config.switches.some((s) => s.actions.some((a) => a.providerId === id));
+  return id.length > 0 && app.config.switches.some((s) => CHANNELS.some((channel) => s.providers[channel] === id));
+}
+
+/** A provider's id changed (Edit under Advanced): a platform default that named it follows (SPEC section 5.7). */
+function renameDefault(app: App, from: string, to: string): void {
+  for (const channel of CHANNELS) {
+    if (from && app.config.defaultProviders[channel] === from) {
+      app.config.defaultProviders[channel] = to;
+    }
+  }
+}
+
+function defaultPrompt(app: App, channel: Channel, candidates: UiProvider[]): HTMLElement {
+  const current = resolveDefaultProvider(channel, app.config.providers, app.config.defaultProviders).id;
+  const name = uniqueId('default');
+  let selected = current ?? candidates[0].id.trim();
+  const answer = (id: string): void => {
+    app.config.defaultProviders[channel] = id;
+    app.changed(true);
+    app.rerender('settings');
+  };
+  const radios = candidates.map((candidate) => {
+    const id = candidate.id.trim();
+    const input = el('input', { class: 'form-check-input', type: 'radio', name, id: `${name}-${id}`, value: id });
+    input.checked = id === selected;
+    input.addEventListener('change', () => {
+      if (input.checked) {
+        selected = id;
+        answer(id);
+      }
+    });
+    return el('div', { class: 'form-check' }, input,
+      el('label', { class: 'form-check-label', for: `${name}-${id}` }, providerTitle(candidate), ' ',
+        el('span', { class: 'badge text-bg-secondary' }, PROVIDER_TYPE_LABEL[candidate.type])));
+  });
+  return el('div', { class: 'alert alert-info ns-default-prompt', role: 'group', 'data-channel': channel, 'data-path': `defaultProviders.${channel}` },
+    el('div', { class: 'fw-semibold mb-2' }, DEFAULTS.prompt(candidates.length, channel)),
+    ...radios,
+    el('div', { class: 'mt-2' }, button(DEFAULTS.confirm, () => answer(selected), 'btn btn-primary btn-sm ns-default-confirm')),
+  );
+}
+
+/**
+ * The default provider prompt (SPEC section 11.2, item 25): once a second or later provider for a channel
+ * validates, its card asks which provider switches should use for that channel. Shown on the last card in
+ * configuration order among the channel's providers, only while that card has no errors and no valid default
+ * is stored; the radio list preselects the current default (the first in configuration order) and choosing
+ * one, or confirming the preselected one, writes `defaultProviders`.
+ */
+function defaultPrompts(app: App, p: UiProvider, index: number): ValidationListener {
+  const box: ValidationListener = el('div', { class: 'ns-default-prompts ns-on-validate' });
+  const prefix = `providers[${index}]`;
+  // What the box last showed; it is only rebuilt when that changes, so a click on it is never lost to a
+  // validation pass (leaving a field re-validates, which would otherwise replace the button under the pointer).
+  let shown = '';
+  box.nsOnValidate = (issues: UiIssue[]): void => {
+    const wanted: Array<{ channel: Channel; candidates: UiProvider[] }> = [];
+    if (!issues.some((issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`))) {
+      // Only providers whose cards validate count, so a card still being filled in neither asks nor is offered.
+      const valid = validProviders(app.config, issues);
+      for (const channel of CHANNELS) {
+        if (!servesChannel(p, channel) || !defaultNeeded(channel, valid, app.config.defaultProviders)) {
+          continue;
+        }
+        const candidates = providersForChannel(valid, channel);
+        if (candidates[candidates.length - 1] === p) {
+          wanted.push({ channel, candidates });
+        }
+      }
+    }
+    const key = wanted.map((entry) => `${entry.channel}:${entry.candidates.map((c) => `${c.id.trim()}=${providerTitle(c)}`).join(',')}`).join('|');
+    if (key === shown) {
+      return;
+    }
+    shown = key;
+    clear(box);
+    for (const entry of wanted) {
+      box.appendChild(defaultPrompt(app, entry.channel, entry.candidates));
+    }
+  };
+  return box;
 }
 
 /**
@@ -661,6 +744,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   let idFollowsName = !providerReferenced(app, p.id.trim()) && (slugify(p.name) === '' || p.id.trim() === uniqueSlug(p.name, others(), p.type));
   const id = idField({
     path: `${path}.id`, value: p.id, help: ID_FIELD.providerHelp, onChange: (value) => {
+      renameDefault(app, p.id.trim(), value.trim());
       p.id = value;
       idFollowsName = false;
       app.changed(true);
@@ -668,11 +752,14 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   });
   const idInput = id.querySelector('input') as HTMLInputElement;
 
+  body.appendChild(defaultPrompts(app, p, index));
   body.appendChild(textField('Name', p.name, (value) => {
     p.name = value;
     title.textContent = providerTitle(p);
     if (idFollowsName) {
-      p.id = uniqueSlug(value, others(), p.type);
+      const next = uniqueSlug(value, others(), p.type);
+      renameDefault(app, p.id.trim(), next);
+      p.id = next;
       idInput.value = p.id;
     }
     app.changed(true);
@@ -712,8 +799,11 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     cls: 'ns-remove-confirm',
     onConfirm: () => {
       app.config.providers.splice(index, 1);
+      // A removed default leaves the single remaining provider as the implicit default, or the channel without one (SPEC section 5.7).
+      app.config.defaultProviders = pruneDefaults(app.config.providers, app.config.defaultProviders);
       app.entryRemoved('providers', index);
       app.rerender('providers', true);
+      app.rerender('settings');
     },
   });
 

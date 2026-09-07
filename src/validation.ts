@@ -6,6 +6,8 @@ import {
 } from './patterns.js';
 import { CHANNEL_ACTION_LABEL, CHANNEL_ADDRESS_NOUN, uncoveredChannels } from './coverage.js';
 import { loadCredentialsFile } from './credentials.js';
+import { providersForChannel, servesChannel } from './defaults.js';
+import type { DefaultProviders } from './defaults.js';
 import { createProvider } from './providers/index.js';
 import { findForbiddenKey } from './safeKeys.js';
 import { MAX_ACTIONS_PER_SWITCH, MAX_ITEMS, MAX_LIST_ENTRIES, MAX_RECIPIENTS_PER_ACTION } from './settings.js';
@@ -663,6 +665,57 @@ async function resolveSwitch(
   return { ...sw, actions };
 }
 
+// ---- Platform defaults (SPEC section 5.7) ------------------------------------
+
+function readDefaultProviders(c: Collector, raw: Raw, root: string, providers: Map<string, ProviderConfig>): DefaultProviders {
+  const out: DefaultProviders = {};
+  const value = raw.defaultProviders;
+  if (value !== undefined && value !== null) {
+    if (!isRaw(value)) {
+      c.error(`${root}.defaultProviders`, 'must be an object mapping a channel (sms, email, telegram, ntfy) to a provider id');
+    } else {
+      for (const [key, entry] of Object.entries(value)) {
+        const path = `${root}.defaultProviders.${key}`;
+        if (!(CHANNELS as readonly string[]).includes(key)) {
+          c.error(path, `${quoteValue(key)} is not a channel; use one of ${CHANNELS.join(', ')}`);
+          continue;
+        }
+        const channel = key as Channel;
+        if (entry === undefined || entry === null || entry === '') {
+          continue;
+        }
+        if (typeof entry !== 'string' || entry.trim() === '') {
+          c.error(path, 'must be a provider id');
+          continue;
+        }
+        const id = entry.trim();
+        const provider = providers.get(id);
+        if (!provider) {
+          c.error(path, `no provider with id ${quoteValue(id)}${didYouMean(id, providers.keys())}`);
+          continue;
+        }
+        if (!servesChannel(provider, channel)) {
+          const reason = provider.type === 'twilio' && channel === 'email'
+            ? 'cannot send email until emailFrom.address is set on it'
+            : `is type ${provider.type}, which does not serve the ${channel} channel`;
+          c.error(path, `provider "${id}" ${reason}`);
+          continue;
+        }
+        out[channel] = id;
+      }
+    }
+  }
+  for (const channel of CHANNELS) {
+    const candidates = providersForChannel([...providers.values()], channel);
+    if (candidates.length > 1 && !out[channel]) {
+      c.warn(`${root}.defaultProviders.${channel}`,
+        `${candidates.length} providers can send ${channel} and none is the default; switches that do not name one use "${candidates[0].id}", `
+        + 'the first in config order. Choose a default under Settings');
+    }
+  }
+  return out;
+}
+
 // ---- Entry point ------------------------------------------------------------
 
 /** Reads one of the three top-level lists, cut to `MAX_ITEMS` with an error past that. */
@@ -734,6 +787,10 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
       }
     });
   }
+
+  // Platform defaults per channel (SPEC section 5.7): every entry must name a provider that serves its channel; a
+  // channel with several providers and no entry falls back to the first in configuration order with a warning.
+  const defaultProviders = readDefaultProviders(c, raw, root, providerConfigs);
 
   const providerInstances = new Map<string, Provider>();
   const providerPaths = new Map<string, string>();
@@ -823,6 +880,7 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
     defaultCountry,
     masterSwitch,
     debug,
+    defaultProviders,
     providers: [...providerConfigs.values()],
     groups: [...groups.values()],
     switches: switchConfigs.map((entry) => entry.config),

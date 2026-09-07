@@ -209,18 +209,19 @@ test('fresh cards: no errors until a field is touched, then errors appear; the i
     await page.getByRole('button', { name: 'Add switch' }).click();
     const sw = page.locator('.card[data-path="switches[1]"]');
     assert.equal(await sw.locator('.is-invalid').count(), 0);
-    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), '', 'the "add an action" message waits too');
+    assert.equal(await sw.locator('[data-path="switches[1].groups"] > .invalid-feedback').textContent(), '', 'the recipients message waits too');
     await sw.locator('[data-path="switches[1].name"] input').fill('Bad-Name!');
     await sw.locator('[data-path="switches[1].name"] input').blur();
     assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(),
       'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.');
-    assert.equal(await sw.locator('.actions .invalid-feedback').textContent(), 'Add at least one action.');
+    assert.equal(await sw.locator('[data-path="switches[1].groups"] > .invalid-feedback').textContent(),
+      'Pick at least one group, or add an extra recipient.');
   } finally {
     await browser.close();
   }
 });
 
-test('show help toggle, Variables toggle, and the channel dropdown limited to the provider', async (t) => {
+test('show help toggle and Variables toggle', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
@@ -247,25 +248,24 @@ test('show help toggle, Variables toggle, and the channel dropdown limited to th
     assert.equal(await page.locator('.card[data-path="groups[0]"] .ns-help-toggle').textContent(), 'Hide help', 'other cards keep their own state');
 
     // Variables toggle next to the message field lists the four variables; the help itself no longer lists them.
-    const action = page.locator('.action-card').first();
-    const bodyHelp = action.locator('[data-path="switches[0].actions[0].body"] .ns-help');
+    const message = page.locator('[data-path="switches[0].body"]');
+    const bodyHelp = message.locator('.ns-help');
     assert.equal(await bodyHelp.textContent(), 'Up to 160 plain characters. Emoji and special symbols are not allowed for SMS.');
-    const variables = action.locator('.ns-variables-toggle');
+    const variables = message.locator('.ns-variables-toggle');
     assert.equal(await variables.count(), 1);
-    assert.equal(await action.getByRole('button', { name: 'Show variables' }).count(), 1);
+    assert.equal(await message.getByRole('button', { name: 'Show variables' }).count(), 1);
     assert.match(await variables.getAttribute('class'), /\bbtn-link\b/, 'a link-styled toggle');
     assert.equal(await variables.locator('.ns-chevron').count(), 1, 'with a chevron');
-    assert.equal(await action.locator('.ns-variables').isVisible(), false);
+    assert.equal(await message.locator('.ns-variables').isVisible(), false);
     await variables.click();
-    assert.equal(await action.locator('.ns-variables').isVisible(), true);
+    assert.equal(await message.locator('.ns-variables').isVisible(), true);
     assert.equal(await variables.textContent(), 'Hide variables');
     assert.equal(await variables.getAttribute('aria-expanded'), 'true');
-    assert.deepEqual(await action.locator('.ns-variables code').allTextContents(), ['{{switchName}}', '{{time}}', '{{date}}', '{{datetime}}']);
-    assert.equal(await action.locator('.ns-variables a').getAttribute('href'), 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables');
-    // The channel dropdown offers only what the Twilio provider serves, with no help text.
-    const channel = action.locator('[data-path="switches[0].actions[0].channel"]');
-    assert.deepEqual(await channel.locator('option').allTextContents(), ['SMS', 'Email']);
-    assert.equal(await channel.locator('.ns-help').count(), 0);
+    assert.deepEqual(await message.locator('.ns-variables code').allTextContents(), ['{{switchName}}', '{{time}}', '{{date}}', '{{datetime}}']);
+    assert.equal(await message.locator('.ns-variables a').getAttribute('href'), 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables');
+    // The old per-action editor is gone: no Channel dropdown, no action cards, no Add action button.
+    assert.equal(await page.locator('.action-card').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Add action' }).count(), 0);
     await page.close();
 
     // Below 600px help starts collapsed.

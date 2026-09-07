@@ -1,11 +1,17 @@
+import { CHANNELS } from '../../../src/types.js';
+import { providersForChannel, resolveDefaultProvider } from '../../../src/defaults.js';
 import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
-import { BACKUP } from '../copy.js';
+import { BACKUP, DEFAULTS, PROVIDER_TYPE_LABEL } from '../copy.js';
 import { button, checkboxField, clear, dangerLinkButton, el, openModal, selectField, textField } from '../dom.js';
-import { backupBlock, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, MAX_BACKUP_BYTES, readConfig } from '../model.js';
+import {
+  backupBlock, blockWithoutCredentials, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, legacySwitches, MAX_BACKUP_BYTES,
+  readConfig,
+} from '../model.js';
 import type { UiConfig } from '../model.js';
 import { countryOptions } from '../phone.js';
-import { validate } from '../validate.js';
+import { errorsOnly, validate } from '../validate.js';
+import { providerTitle } from './providers.js';
 
 /** `notify-switch-backup-YYYY-MM-DD.json` for today, in local time; `-without-credentials` before the date for the shareable version. */
 export function backupFileName(now = new Date(), withoutCredentials = false): string {
@@ -15,11 +21,22 @@ export function backupFileName(now = new Date(), withoutCredentials = false): st
 }
 
 /**
+ * The platform block a backup holds: the editor's, or, while the loaded configuration cannot be represented
+ * (SPEC section 11.2, item 26), the block exactly as it was loaded, so nothing the editor cannot show is lost.
+ */
+function backupContents(app: App, withoutCredentials: boolean): Record<string, unknown> {
+  if (app.legacy) {
+    return withoutCredentials ? blockWithoutCredentials(app.legacy.block) : app.legacy.block;
+  }
+  return withoutCredentials ? exportConfigWithoutCredentials(app.config) : exportConfig(app.config);
+}
+
+/**
  * Downloads the current platform block as a JSON file: the full block, or the version with every secret
  * field emptied and `credentialsRemoved: true` (SPEC section 11.2, item 12).
  */
 function downloadBackup(app: App, withoutCredentials = false): void {
-  const block = withoutCredentials ? exportConfigWithoutCredentials(app.config) : exportConfig(app.config);
+  const block = backupContents(app, withoutCredentials);
   const text = JSON.stringify(block, null, 2);
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -55,12 +72,17 @@ export function checkBackup(text: string): { config?: UiConfig; errors: string[]
   if (!block) {
     return { errors: [error ?? 'The file is not a Notify Switch backup.'], emptied: [] };
   }
+  // A switch with more than one action on the same channel cannot be shown, so the file is not loaded (SPEC section 11.2, item 26).
+  const legacy = legacySwitches(block);
+  if (legacy.length > 0) {
+    return { errors: [BACKUP.restoreLegacy(legacy)], emptied: [] };
+  }
   // The marker is not a platform field; it must not reach config.json.
   const withoutCredentials = block.credentialsRemoved === true;
   delete block.credentialsRemoved;
   const config = readConfig(block);
   const emptied = withoutCredentials ? emptySecretPaths(config) : [];
-  const issues = validate(config).filter((issue) => !emptied.includes(issue.path));
+  const issues = errorsOnly(validate(config)).filter((issue) => !emptied.includes(issue.path));
   if (issues.length > 0) {
     return { errors: issues.map((issue) => `${issue.label}: ${issue.message}`), emptied: [] };
   }
@@ -138,13 +160,15 @@ function advancedPanel(app: App): HTMLElement {
     confirmInput.focus();
   });
 
-  return el('details', { class: 'ns-advanced mt-3', 'data-advanced': 'settings' },
+  // The three controls that stay usable while the loaded configuration cannot be represented (SPEC section 11.2, item 26).
+  reset.classList.add('ns-legacy-allowed');
+  return el('details', { class: 'ns-advanced mt-3', 'data-advanced': 'settings', open: app.legacy !== undefined },
     el('summary', { class: 'ns-secondary small' }, BACKUP.summary),
     el('div', { class: 'mt-2' },
       el('div', { class: 'mb-3' },
         el('div', { class: 'ns-backup-actions' },
-          button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm'),
-          button(BACKUP.downloadWithoutCredentials, () => downloadBackup(app, true), 'btn btn-outline-secondary btn-sm'),
+          button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm ns-legacy-allowed'),
+          button(BACKUP.downloadWithoutCredentials, () => downloadBackup(app, true), 'btn btn-outline-secondary btn-sm ns-legacy-allowed'),
         ),
         el('div', { class: 'form-text backup-note' }, BACKUP.backupNote),
       ),
@@ -194,6 +218,32 @@ export function renderSettings(app: App, container: HTMLElement): void {
     })),
     el('div', { class: 'ns-span-6' }, nameField),
   ));
+  // Default providers (SPEC section 5.7 and section 11.2, item 25): one dropdown per channel with more than one provider.
+  const defaults = el('div', { class: 'ns-default-providers' });
+  for (const channel of CHANNELS) {
+    const candidates = providersForChannel(c.providers, channel);
+    if (candidates.length < 2) {
+      continue;
+    }
+    const resolution = resolveDefaultProvider(channel, c.providers, c.defaultProviders);
+    const field = selectField(DEFAULTS.settingsLabel(channel), resolution.source === 'stored' ? resolution.id ?? '' : '', [
+      { value: '', label: DEFAULTS.settingsPlaceholder },
+      ...candidates.map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
+    ], (value) => {
+      if (value) {
+        c.defaultProviders[channel] = value;
+      } else {
+        delete c.defaultProviders[channel];
+      }
+      app.changed(true);
+    }, { path: `defaultProviders.${channel}`, help: DEFAULTS.settingsHelp(channel) });
+    field.setAttribute('data-channel', channel);
+    defaults.appendChild(el('div', { class: 'ns-span-6' }, field));
+  }
+  if (defaults.childElementCount > 0) {
+    defaults.classList.add('ns-grid');
+    container.appendChild(defaults);
+  }
   container.appendChild(checkboxField('Debug logging', c.debug, (value) => {
     c.debug = value;
     app.changed();

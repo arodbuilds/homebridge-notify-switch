@@ -1,0 +1,126 @@
+{
+  "platform": "NotifySwitch",
+  "name": "Notify Switch",
+  "configVersion": 1,
+  "defaultCountry": "US",
+  "masterSwitch": {
+    "enabled": true,
+    "name": "Notifications Enabled"
+  },
+  "debug": false,
+  "providers": [
+    {
+      "id": "twilio-main",
+      "type": "twilio",
+      "name": "Twilio",
+      "accountSid": "AC00000000000000000000000000000000",
+      "apiKeySid": "SK00000000000000000000000000000000",
+      "apiKeySecret": "secret-api-key-value",
+      "smsSenders": [
+        "+16785550100",
+        "+16785550199"
+      ],
+      "emailFrom": {
+        "address": "alerts@example.com",
+        "name": "Home"
+      }
+    },
+    {
+      "id": "fastmail",
+      "type": "smtp",
+      "name": "Fastmail",
+      "host": "smtp.fastmail.com",
+      "port": 465,
+      "security": "ssl",
+      "username": "alex@example.com",
+      "password": "app-password-value",
+      "from": {
+        "address": "alex@example.com",
+        "name": "Home"
+      }
+    },
+    {
+      "id": "ntfy-home",
+      "type": "ntfy",
+      "name": "ntfy",
+      "server": "https://ntfy.sh",
+      "auth": "token",
+      "token": "tk_secret_access_token_value"
+    }
+  ],
+  "defaultProviders": {
+    "email": "fastmail"
+  },
+  "groups": [
+    {
+      "id": "family",
+      "name": "Family",
+      "sms": [
+        "+16785550101",
+        "+16785550102"
+      ],
+      "email": [
+        "a@example.com"
+      ],
+      "telegram": [
+        "123456789"
+      ],
+      "ntfy": [
+        "home-alerts"
+      ]
+    }
+  ],
+  "switches": [
+    {
+      "id": "6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b",
+      "name": "Smoke Alarm",
+      "enabled": true,
+      "cooldownSeconds": 0,
+      "failureMode": "all",
+      "failureSensor": false,
+      "failureSensorResetSeconds": 300,
+      "actions": [
+        {
+          "providerId": "twilio-main",
+          "channel": "sms",
+          "sender": "+16785550199",
+          "groups": [
+            "family"
+          ],
+          "recipients": [
+            "+16785550103"
+          ],
+          "body": "Smoke!"
+        },
+        {
+          "providerId": "twilio-main",
+          "channel": "email",
+          "groups": [
+            "family"
+          ],
+          "recipients": [
+            "x@example.com"
+          ],
+          "subject": "Smoke detected",
+          "bcc": true,
+          "body": "Smoke detected at {{time}} on {{date}}."
+        },
+        {
+          "providerId": "ntfy-home",
+          "channel": "ntfy",
+          "groups": [
+            "family"
+          ],
+          "recipients": [],
+          "subject": "Smoke",
+          "priority": "urgent",
+          "tags": [
+            "fire",
+            "house"
+          ],
+          "body": "Smoke at {{time}}"
+        }
+      ]
+    }
+  ]
+}

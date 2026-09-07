@@ -10,9 +10,9 @@ export function groupTitle(g: UiGroup): string {
   return g.name.trim() || g.id.trim() || 'New group';
 }
 
-/** True when a switch action sends to this group, in which case the id must not follow the name any more. */
+/** True when a switch sends to this group, in which case the id must not follow the name any more. */
 function groupReferenced(app: App, id: string): boolean {
-  return id.length > 0 && app.config.switches.some((s) => s.actions.some((a) => a.groups.includes(id)));
+  return id.length > 0 && app.config.switches.some((s) => s.groups.includes(id));
 }
 
 function groupCard(app: App, g: UiGroup, index: number): HTMLElement {

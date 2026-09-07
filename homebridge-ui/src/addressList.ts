@@ -47,7 +47,7 @@ export function addressList(opts: AddressListOptions): AddressListHandle {
   const render = (): void => {
     clear(rows);
     if (opts.values.length === 0) {
-      rows.appendChild(el('div', { class: 'form-text mb-2' }, opts.emptyText ?? `No ${CHANNEL_LABEL[opts.channel]}s yet.`));
+      rows.appendChild(el('div', { class: 'form-text mb-2 ns-list-empty' }, opts.emptyText ?? `No ${CHANNEL_LABEL[opts.channel]}s yet.`));
     }
     opts.values.forEach((value, i) => {
       // List-entry Remove buttons stay single-click (SPEC section 11.2, item 11).

@@ -55,6 +55,20 @@
           }
         }
       },
+      "defaultProviders": {
+        "title": "Default providers",
+        "type": "object",
+        "description": "The provider switches use on each channel when more than one provider serves it. Set from the settings UI; only channels with several providers carry an entry.",
+        "properties": {
+          "sms": { "title": "Default SMS provider", "type": "string" },
+          "email": { "title": "Default email provider", "type": "string" },
+          "telegram": { "title": "Default Telegram provider", "type": "string" },
+          "ntfy": { "title": "Default ntfy provider", "type": "string" }
+        },
+        "condition": {
+          "functionBody": "return false;"
+        }
+      },
       "debug": {
         "title": "Debug logging",
         "type": "boolean",

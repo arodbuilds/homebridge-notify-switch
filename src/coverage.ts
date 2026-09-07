@@ -2,11 +2,11 @@ import type { Channel } from './types.js';
 import { CHANNELS } from './types.js';
 
 /**
- * Uncovered channel detection (SPEC section 10 warnings and section 11.2, item 8). A switch "covers"
- * a channel when at least one of its actions sends on it. A group the switch targets may hold
- * addresses on channels the switch never sends on; those people receive nothing, silently. The
- * same check runs at startup (one warning per switch and channel) and live in the settings UI.
- * Shared by both so they can never disagree.
+ * Uncovered channel detection (SPEC section 10 warnings). A switch "covers" a channel when at least
+ * one of its actions sends on it. A group the switch targets may hold addresses on channels the
+ * switch never sends on; those people receive nothing, silently. Startup logs one warning per switch
+ * and channel. From 1.1.0 the settings UI no longer shows this as a warning: its Send by checkboxes
+ * make the choice explicit, so the startup warning is for hand-edited configurations.
  */
 
 /** The parts of an action the check reads. Both the validated config and the UI model satisfy this. */
@@ -70,7 +70,7 @@ export function uncoveredChannels(actions: readonly CoverageAction[], groups: re
   return out;
 }
 
-/** Human wording for a channel's address kind, shared by the startup warning and the UI copy. */
+/** Human wording for a channel's address kind, used by the startup warning. */
 export const CHANNEL_ADDRESS_NOUN: Readonly<Record<Channel, string>> = {
   sms: 'phone numbers',
   email: 'email addresses',
@@ -78,24 +78,10 @@ export const CHANNEL_ADDRESS_NOUN: Readonly<Record<Channel, string>> = {
   ntfy: 'ntfy topics',
 };
 
-/** Human label for a channel in warnings and button text. */
+/** Human label for a channel in warnings. */
 export const CHANNEL_ACTION_LABEL: Readonly<Record<Channel, string>> = {
   sms: 'SMS',
   email: 'email',
   telegram: 'Telegram',
   ntfy: 'ntfy',
 };
-
-/**
- * The settings UI warning for one uncovered channel (SPEC section 11.3). Kept next to the detection
- * so the wording and the condition change together.
- */
-export function uncoveredChannelWarning(channel: Channel): string {
-  return `This switch sends to a group with ${CHANNEL_ADDRESS_NOUN[channel]}, but it has no ${CHANNEL_ACTION_LABEL[channel]} action. `
-    + 'Those recipients will not receive anything.';
-}
-
-/** Label of the button next to the warning that adds the missing action (SPEC section 11.3). */
-export function addActionLabel(channel: Channel): string {
-  return `Add ${CHANNEL_ACTION_LABEL[channel]} action`;
-}
