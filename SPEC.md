@@ -1,6 +1,6 @@
 # homebridge-notify-switch v1 Specification
 
-Status: Current as of 1.1.1
+Status: Current as of 1.1.2
 Repository: https://github.com/arodbuilds/homebridge-notify-switch
 Package: homebridge-notify-switch
 Author: arodbuilds
@@ -309,7 +309,7 @@ POST `https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json` wit
 
 POST `https://comms.twilio.com/v1/Emails` with the same Basic auth, JSON body with `from`, `to` (all recipients in one request, so they see each other), and `content.subject`, `content.text` and `content.html`. The API requires `html`, so the plain body is sent both ways: `text` is the rendered body and `html` is the same body HTML-escaped inside a `pre` element so line breaks survive; no HTML authoring is exposed. With the action's `bcc` option and more than one recipient, the recipients go in `bcc` (the same `{ address }` objects as `to`) and the from address in `to`; a single recipient is always in `to`. Success is HTTP 202; `operationId` is returned as `id` for every recipient. One request per action regardless of recipient count.
 
-From 1.1.1 `content.headers` carries `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies). The endpoint nests custom headers inside `content`, and `Auto-Submitted` is not on its list of headers that may not be overridden. It is the only custom header the plugin sends. The endpoint documents no per-message setting for open or click tracking (the SendGrid v3 `tracking_settings` field is not part of it), so the plugin sends none and makes no claim about tracking; the README says so and points a household that wants no tracking pixel at an SMTP provider (section 15, item 3).
+From 1.1.1 `content.headers` carries `Auto-Submitted: auto-generated` (RFC 3834, the value for automated messages that are not replies). The endpoint nests custom headers inside `content`, and `Auto-Submitted` is not on its list of headers that may not be overridden. It is the only custom header the plugin sends. Twilio Email adds an open-tracking pixel to every message, and as of September 2026 there is no setting to turn it off, per message or per account: the endpoint documents no tracking field (the SendGrid v3 `tracking_settings` field is not part of it) and the Email settings in the Twilio Console (https://www.twilio.com/docs/email/settings) cover only event forwarding, IP addresses, and the address allow list. So the plugin sends no tracking field and makes no claim about tracking. Twilio Email also sends from shared SendGrid IP addresses whose reputation the household does not control. The README states both and points a household that wants neither at an SMTP provider (section 15, item 3).
 
 ### 6.3 SMTP
 
@@ -577,7 +577,7 @@ Using it in HomeKit (bottom of page):
 
 1. Based on homebridge/homebridge-plugin-template. TypeScript, ESM, ESLint.
 2. `engines.node`: `^22.12.0 || ^24.0.0`. `engines.homebridge`: `^1.6.0 || ^2.0.0`.
-3. `keywords` include `homebridge-plugin`. `displayName` is "Notify Switch".
+3. `keywords` include `homebridge-plugin`, `supports-hap` and `ntfy` (from 1.1.2). `supports-hap` is required: the Homebridge verification checker requires a plugin to declare the transports it supports (homebridge/plugins README, "Declaring Supported Transports"), and this plugin publishes HAP accessories only, so `supports-matter` is not declared. `ntfy` names the fourth channel for npm search, as `sms`, `twilio`, `email`, `smtp` and `telegram` do for the others. `displayName` is "Notify Switch".
 4. CI workflow: lint, build and the harness (`npm test`) on Node 22 and 24 on every pull request and push to `latest`. The browser tests need Chromium: they fail on CI without one and are skipped locally.
 5. Release workflow: triggered by publishing a GitHub release. It checks out, installs, lints, builds and tests on Node 22, upgrades npm to 11.5.1 or newer (which trusted publishing requires) and fails early if it is still older, then runs `npm publish --provenance --access public` with `--tag beta` when the release is marked as a pre-release and `--tag latest` otherwise. Authentication is npm trusted publishing through GitHub's OIDC token (`id-token: write`); no token secret is referenced. `--access public` is needed for provenance on a package's first publish and is harmless afterwards.
 6. CHANGELOG.md maintained per version. GitHub release notes mirror it.
@@ -605,4 +605,4 @@ The questions raised for the review of this document are settled and folded into
 
 1. Telegram `markdown` maps to the legacy `Markdown` parse mode (section 5.2). Should a `markdownv2` value be added for people who write bodies in MarkdownV2, or should `markdown` switch to it and the escaping burden move to the user?
 2. Microsoft is retiring password sign-in for third-party apps on personal Outlook.com accounts (README, SMTP section). Should the Outlook.com preset stay, with its warning, or be removed once Microsoft completes the change?
-3. Twilio email tracking. 1.1.1 set out to disable Twilio's open and click tracking on every send (open tracking inserts a tracking pixel, which got a message scored 5.7 as spam at Fastmail), but the Emails API documents no per-message setting for it, so nothing is sent (section 6.2). Should the endpoint gain one, the plan stands: disabled on every send, with an Advanced toggle on the Twilio provider card to re-enable it. That adds a configuration field and a UI string, so it belongs in a minor release, not a patch.
+3. Twilio email tracking. 1.1.1 set out to disable Twilio's open and click tracking on every send (open tracking inserts a tracking pixel, which got a message scored 5.7 as spam at Fastmail), but as of September 2026 there is no setting to turn it off, per message or per account: the Emails API documents no tracking field and the Email settings in the Twilio Console cover only event forwarding, IP addresses, and the address allow list, so nothing is sent (section 6.2). Should the endpoint gain one, the plan stands: disabled on every send, with an Advanced toggle on the Twilio provider card to re-enable it. That adds a configuration field and a UI string, so it belongs in a minor release, not a patch.
