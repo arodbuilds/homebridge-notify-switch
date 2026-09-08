@@ -125,7 +125,9 @@ The `email` channel sends through Twilio's Emails API, which needs an authentica
 2. Add the DNS records Twilio shows to your domain and wait for the domain to show as verified.
 3. Set `emailFrom.address` to an address at that domain and `emailFrom.name` to the display name recipients see.
 
-Emails are sent as plain text. Twilio may add open and click tracking (a tracking pixel and rewritten links) to the email it sends; the Emails API has no per-message setting to turn that off, so the plugin cannot disable it. Every message carries the `Auto-Submitted: auto-generated` header so mail systems treat it as automated. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, or would rather not send through Twilio at all, use an [SMTP provider](#smtp-email-through-your-own-mailbox): your own mailbox sends exactly the plain text the plugin writes and nothing else.
+Emails are sent as plain text. Every message carries the `Auto-Submitted: auto-generated` header so mail systems treat it as automated. An email action on a Twilio provider without `emailFrom` is reported as a configuration error at startup. If you do not own a domain, use an [SMTP provider](#smtp-email-through-your-own-mailbox) instead.
+
+Twilio Email adds an open-tracking pixel to every message. As of September 2026 there is no setting to turn it off, per message or per account: the Emails API has no tracking field and the [Email settings in the Twilio Console](https://www.twilio.com/docs/email/settings) cover only event forwarding, IP addresses, and the address allow list. Twilio Email also sends from shared SendGrid IP addresses whose reputation is outside your control. A household that wants neither should send through its own [SMTP mailbox](#smtp-email-through-your-own-mailbox), which sends exactly the plain text the plugin writes.
 
 ### SMTP (email through your own mailbox)
 

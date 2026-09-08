@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing yet.
 
+## [1.1.2] - 2026-09-08
+
+Package metadata and one README paragraph. Nothing changes in the plugin, the configuration format or the settings UI.
+
+### Changed
+
+- `package.json` keywords gain `supports-hap` and `ntfy`. The Homebridge verification checker requires a plugin to declare the transports it supports (homebridge/plugins README, "Declaring Supported Transports"); the plugin publishes HAP accessories only, so `supports-matter` is not declared. `ntfy` names the fourth channel alongside the existing `sms`, `twilio`, `email`, `smtp` and `telegram` keywords (SPEC section 13).
+- README, Twilio Email guide: the tracking paragraph now states that Twilio Email adds an open-tracking pixel to every message, that as of September 2026 there is no setting to turn it off per message or per account (the Emails API has no tracking field and the [Email settings in the Twilio Console](https://www.twilio.com/docs/email/settings) cover only event forwarding, IP addresses, and the address allow list), that Twilio Email sends from shared SendGrid IP addresses whose reputation is outside the household's control, and that a household that wants neither should send through its own SMTP mailbox (SPEC sections 6.2 and 15).
+
 ## [1.1.1] - 2026-09-07
 
 Email deliverability and documentation. Nothing changes in the configuration format or the settings UI beyond one corrected line of copy.
@@ -293,7 +302,9 @@ Usability and copy. Runtime behavior does not change.
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v0.1.0-beta.7...v1.0.0
