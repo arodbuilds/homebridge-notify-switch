@@ -2,8 +2,9 @@ import { CHANNELS } from '../../../src/types.js';
 import { providersForChannel, resolveDefaultProvider } from '../../../src/defaults.js';
 import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
-import { BACKUP, DEFAULTS, PROVIDER_TYPE_LABEL } from '../copy.js';
-import { button, checkboxField, clear, dangerLinkButton, el, openModal, selectField, textField } from '../dom.js';
+import type { DateFormat, TimeFormat } from '../../../src/types.js';
+import { BACKUP, DEFAULTS, FORMAT_SETTINGS, PROVIDER_TYPE_LABEL } from '../copy.js';
+import { button, checkboxField, clear, dangerLinkButton, el, helpText, openModal, selectField, textField } from '../dom.js';
 import {
   backupBlock, blockWithoutCredentials, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, legacySwitches, MAX_BACKUP_BYTES,
   readConfig,
@@ -201,6 +202,20 @@ export function renderSettings(app: App, container: HTMLElement): void {
       app.rerender('switches');
       app.changed();
     }, { path: 'defaultCountry', help: 'Phone numbers entered without a country code are treated as numbers from this country.' })),
+  ));
+  // Time and date formats (SPEC section 5.1): two dropdowns directly below Default Country with one help line under the pair.
+  container.appendChild(el('div', { class: 'ns-format-settings mb-3' },
+    el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-6' }, selectField(FORMAT_SETTINGS.timeLabel, c.timeFormat, FORMAT_SETTINGS.timeOptions, (value) => {
+        c.timeFormat = value as TimeFormat;
+        app.changed();
+      }, { path: 'timeFormat' })),
+      el('div', { class: 'ns-span-6' }, selectField(FORMAT_SETTINGS.dateLabel, c.dateFormat, FORMAT_SETTINGS.dateOptions, (value) => {
+        c.dateFormat = value as DateFormat;
+        app.changed();
+      }, { path: 'dateFormat' })),
+    ),
+    helpText(FORMAT_SETTINGS.help, undefined, 'ns-format-help'),
   ));
   const nameField = textField('Master switch name', c.masterSwitch.name, (value) => {
     c.masterSwitch.name = value;

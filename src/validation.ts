@@ -14,12 +14,13 @@ import { MAX_ACTIONS_PER_SWITCH, MAX_ITEMS, MAX_LIST_ENTRIES, MAX_RECIPIENTS_PER
 import { stripLineBreaks } from './template.js';
 import { quoteValue } from './text.js';
 import type {
-  ActionConfig, Channel, EmailIdentity, FailureMode, GroupConfig, MasterSwitchConfig, NotifySwitchConfig, NtfyAuth, NtfyPriority, Provider,
-  ProviderConfig, ProviderType, ResolvedAction, ResolvedSwitch, SmtpSecurity, SwitchConfig, TelegramParseMode, TwilioProviderConfig, ValidationIssue,
+  ActionConfig, Channel, DateFormat, EmailIdentity, FailureMode, GroupConfig, MasterSwitchConfig, NotifySwitchConfig, NtfyAuth, NtfyPriority, Provider,
+  ProviderConfig, ProviderType, ResolvedAction, ResolvedSwitch, SmtpSecurity, SwitchConfig, TelegramParseMode, TimeFormat, TwilioProviderConfig,
+  ValidationIssue,
 } from './types.js';
 import {
-  CHANNELS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_CHANNELS, PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS,
-  TELEGRAM_PARSE_MODES,
+  CHANNELS, DATE_FORMATS, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_CHANNELS,
+  PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS, TELEGRAM_PARSE_MODES, TIME_FORMATS,
 } from './types.js';
 
 /**
@@ -758,6 +759,10 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
     c.error(`${root}.defaultCountry`, `${quoteValue(defaultCountry)} is not a known ISO 3166-1 alpha-2 country code`);
     defaultCountry = DEFAULT_COUNTRY;
   }
+  // Time and date formats (SPEC section 5.1): closed enums; a missing value means the default and an invalid one is
+  // an error that falls back to the default for the rest of the pass, exactly like defaultCountry above.
+  const timeFormat = readEnum<TimeFormat>(c, raw, 'timeFormat', root, TIME_FORMATS, DEFAULT_TIME_FORMAT) ?? DEFAULT_TIME_FORMAT;
+  const dateFormat = readEnum<DateFormat>(c, raw, 'dateFormat', root, DATE_FORMATS, DEFAULT_DATE_FORMAT) ?? DEFAULT_DATE_FORMAT;
   const debug = readBoolean(c, raw, 'debug', root, false);
   log.debugEnabled = debug;
 
@@ -878,6 +883,8 @@ async function validateInner(c: Collector, rawConfig: unknown, log: PluginLogger
     name,
     configVersion,
     defaultCountry,
+    timeFormat,
+    dateFormat,
     masterSwitch,
     debug,
     defaultProviders,

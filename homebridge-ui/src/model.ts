@@ -1,7 +1,7 @@
-import type { Channel, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
+import type { Channel, DateFormat, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode, TimeFormat } from '../../src/types.js';
 import {
-  CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS,
-  TELEGRAM_PARSE_MODES,
+  CHANNELS, CREDENTIAL_KEYS, DATE_FORMATS, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES,
+  PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS, TELEGRAM_PARSE_MODES, TIME_FORMATS,
 } from '../../src/types.js';
 import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
 import { providersForChannel, pruneDefaults, resolveDefaultProvider } from '../../src/defaults.js';
@@ -120,6 +120,9 @@ export interface UiConfig {
   name: string;
   configVersion: number;
   defaultCountry: string;
+  /** How `{{time}}`, `{{date}}` and `{{datetime}}` render (SPEC section 5.1 and 5.6). */
+  timeFormat: TimeFormat;
+  dateFormat: DateFormat;
   masterSwitch: { enabled: boolean; name: string };
   debug: boolean;
   /** Platform defaults per channel (SPEC section 5.7); only stored for channels with more than one provider. */
@@ -400,6 +403,8 @@ export function readConfig(raw: unknown): UiConfig {
     name: str(r.name, 'Notify Switch'),
     configVersion: int(r.configVersion, 1),
     defaultCountry: str(r.defaultCountry, 'US').toUpperCase() || 'US',
+    timeFormat: oneOf(r.timeFormat, TIME_FORMATS, DEFAULT_TIME_FORMAT),
+    dateFormat: oneOf(r.dateFormat, DATE_FORMATS, DEFAULT_DATE_FORMAT),
     masterSwitch: { enabled: bool(master.enabled, true), name: str(master.name, 'Notifications Enabled') },
     debug: bool(r.debug, false),
     defaultProviders,
@@ -586,6 +591,8 @@ export function exportConfig(config: UiConfig): Raw {
     name: config.name.trim() || 'Notify Switch',
     configVersion: config.configVersion,
     defaultCountry: config.defaultCountry,
+    timeFormat: config.timeFormat,
+    dateFormat: config.dateFormat,
     masterSwitch: { enabled: config.masterSwitch.enabled, name: config.masterSwitch.name.trim() },
     debug: config.debug,
     providers: config.providers.map(exportProvider),

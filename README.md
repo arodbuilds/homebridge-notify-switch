@@ -437,11 +437,20 @@ These placeholders can be used in `body` and `subject`:
 | Variable | Value |
 | --- | --- |
 | `{{switchName}}` | The switch's name. |
-| `{{time}}` | Local time as `HH:mm`, for example `14:05`. |
-| `{{date}}` | Local date as `YYYY-MM-DD`. |
-| `{{datetime}}` | Local date and time in ISO 8601 form without a zone, for example `2026-09-06T14:05:00`. |
+| `{{time}}` | The local time, for example `5:15 PM`. |
+| `{{date}}` | The local date, for example `9/8/2026`. |
+| `{{datetime}}` | Both together, for example `9/8/2026 5:15 PM`. |
 
-Times use the Homebridge host's time zone. Anything else inside double braces is left exactly as typed. Variables are expanded when the switch is flipped, so `{{time}}` is the moment the event happened.
+The examples are the defaults. Two settings under **Settings** in the plugin's settings page choose the form (`timeFormat` and `dateFormat` in `config.json`):
+
+| Setting | Options | `{{time}}` or `{{date}}` |
+| --- | --- | --- |
+| **Time format** | 12-hour (default) or 24-hour | `5:15 PM` or `17:15` |
+| **Date format** | Month/Day/Year (default), Day/Month/Year or Year-Month-Day | `9/8/2026`, `8/9/2026` or `2026-09-08` |
+
+`{{datetime}}` is the date, a space, then the time, in whichever forms you chose. Times use the Homebridge host's time zone. Anything else inside double braces is left exactly as typed. Variables are expanded when the switch is flipped, so `{{time}}` is the moment the event happened.
+
+Before 1.2.0 the variables always rendered as `14:05`, `2026-09-08` and `2026-09-08T14:05:00`. Choose 24-hour and Year-Month-Day to keep the old time and date; `{{datetime}}` no longer includes seconds.
 
 ## Cooldown and master switch
 

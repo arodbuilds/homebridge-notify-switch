@@ -1,4 +1,4 @@
-import type { Channel, NtfyAuth, NtfyPriority, ProviderType } from '../../src/types.js';
+import type { Channel, DateFormat, NtfyAuth, NtfyPriority, ProviderType, TimeFormat } from '../../src/types.js';
 
 /**
  * In-app copy, verbatim from SPEC section 11.3. Field help is one sentence; anything longer is a
@@ -239,6 +239,22 @@ export const DEFAULTS = {
   settingsLabel: (channel: Channel): string => `Default ${CHANNEL_WORD[channel]} provider`,
   settingsHelp: (channel: Channel): string => `Switches send ${CHANNEL_WORD[channel]} through this provider unless a switch says otherwise under Advanced.`,
   settingsPlaceholder: 'Choose a provider…',
+};
+
+/** Time and date format settings (SPEC section 5.1 and section 11.3), under Default Country in the Settings section. */
+export const FORMAT_SETTINGS = {
+  timeLabel: 'Time format',
+  timeOptions: [
+    { value: '12h', label: '12-hour (5:15 PM)' },
+    { value: '24h', label: '24-hour (17:15)' },
+  ] as Array<{ value: TimeFormat; label: string }>,
+  dateLabel: 'Date format',
+  dateOptions: [
+    { value: 'mdy', label: 'Month/Day/Year (9/8/2026)' },
+    { value: 'dmy', label: 'Day/Month/Year (8/9/2026)' },
+    { value: 'ymd', label: 'Year-Month-Day (2026-09-08)' },
+  ] as Array<{ value: DateFormat; label: string }>,
+  help: 'Used by {{time}}, {{date}} and {{datetime}} in messages.',
 };
 
 export const SWITCH_HELP = {

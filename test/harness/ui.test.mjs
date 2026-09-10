@@ -478,7 +478,7 @@ test('test-send: validates like startup, sends every action of the chosen switch
       index: 1, providerId: 'telegram-home', channel: 'telegram', results: [{ recipient: '123456789', ok: true, id: '42' }],
     });
     const smsBody = new URLSearchParams(fetch.calls.find((c) => c.url.includes('/Messages.json')).body).get('Body');
-    assert.match(smsBody, /^Leak at \d\d:\d\d$/, 'template variables are rendered');
+    assert.match(smsBody, /^Leak at \d{1,2}:\d\d [AP]M$/, 'template variables are rendered with the platform\'s default 12-hour time format');
     assertNoSecrets(result);
   } finally {
     fetch.restore();

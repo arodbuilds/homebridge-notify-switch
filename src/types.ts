@@ -9,6 +9,10 @@ export type SmtpSecurity = 'ssl' | 'starttls' | 'none';
 export type TelegramParseMode = 'none' | 'markdown' | 'html';
 export type NtfyAuth = 'none' | 'token' | 'basic';
 export type NtfyPriority = 'min' | 'low' | 'default' | 'high' | 'urgent';
+/** How `{{time}}` renders (SPEC section 5.1 and 5.6): "5:15 PM" or "17:15". */
+export type TimeFormat = '12h' | '24h';
+/** How `{{date}}` renders (SPEC section 5.1 and 5.6): "9/8/2026", "8/9/2026" or "2026-09-08". */
+export type DateFormat = 'mdy' | 'dmy' | 'ymd';
 
 export const PROVIDER_TYPES: readonly ProviderType[] = ['twilio', 'smtp', 'telegram', 'ntfy'];
 export const CHANNELS: readonly Channel[] = ['sms', 'email', 'telegram', 'ntfy'];
@@ -17,6 +21,10 @@ export const SMTP_SECURITIES: readonly SmtpSecurity[] = ['ssl', 'starttls', 'non
 export const TELEGRAM_PARSE_MODES: readonly TelegramParseMode[] = ['none', 'markdown', 'html'];
 export const NTFY_AUTHS: readonly NtfyAuth[] = ['none', 'token', 'basic'];
 export const NTFY_PRIORITIES: readonly NtfyPriority[] = ['min', 'low', 'default', 'high', 'urgent'];
+export const TIME_FORMATS: readonly TimeFormat[] = ['12h', '24h'];
+export const DATE_FORMATS: readonly DateFormat[] = ['mdy', 'dmy', 'ymd'];
+export const DEFAULT_TIME_FORMAT: TimeFormat = '12h';
+export const DEFAULT_DATE_FORMAT: DateFormat = 'mdy';
 
 /** The ntfy server used when a provider names none (SPEC section 5.2). */
 export const NTFY_DEFAULT_SERVER = 'https://ntfy.sh';
@@ -141,6 +149,9 @@ export interface NotifySwitchConfig {
   name: string;
   configVersion: number;
   defaultCountry: string;
+  /** How `{{time}}`, `{{date}}` and `{{datetime}}` render (SPEC section 5.6). Default `12h` and `mdy`. */
+  timeFormat: TimeFormat;
+  dateFormat: DateFormat;
   masterSwitch: MasterSwitchConfig;
   debug: boolean;
   /**

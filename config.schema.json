@@ -34,6 +34,27 @@
         "pattern": "^[A-Za-z]{2}$",
         "description": "Two-letter country code (ISO 3166-1 alpha-2), for example US or GB. Phone numbers entered without a country code are treated as numbers from this country."
       },
+      "timeFormat": {
+        "title": "Time format",
+        "type": "string",
+        "default": "12h",
+        "oneOf": [
+          { "title": "12-hour (5:15 PM)", "enum": ["12h"] },
+          { "title": "24-hour (17:15)", "enum": ["24h"] }
+        ],
+        "description": "How {{time}} and {{datetime}} show the time in messages."
+      },
+      "dateFormat": {
+        "title": "Date format",
+        "type": "string",
+        "default": "mdy",
+        "oneOf": [
+          { "title": "Month/Day/Year (9/8/2026)", "enum": ["mdy"] },
+          { "title": "Day/Month/Year (8/9/2026)", "enum": ["dmy"] },
+          { "title": "Year-Month-Day (2026-09-08)", "enum": ["ymd"] }
+        ],
+        "description": "How {{date}} and {{datetime}} show the date in messages."
+      },
       "masterSwitch": {
         "title": "Master Switch",
         "type": "object",

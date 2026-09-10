@@ -4,7 +4,7 @@ import {
   HAP_NAME_PATTERN, MESSAGING_SERVICE_SID_PATTERN, NTFY_MAX_TAGS, NTFY_TAG_PATTERN, NTFY_TOPIC_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN,
   UUID_PATTERN,
 } from '../../src/patterns.js';
-import { CHANNELS } from '../../src/types.js';
+import { CHANNELS, DATE_FORMATS, TIME_FORMATS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
 import { defaultNeeded, providersForChannel, servesChannel } from '../../src/defaults.js';
 import { DEFAULTS, VALIDATION } from './copy.js';
@@ -449,6 +449,13 @@ export function validate(config: UiConfig): UiIssue[] {
   checkDisplayName(issues, config.name, 'name', 'Settings', 'Platform name');
   if (!isCountry(config.defaultCountry)) {
     issues.add('defaultCountry', 'Settings', 'Default country is not a known country code.');
+  }
+  // Closed enums (SPEC section 5.1): the model already falls back to the defaults, so this only ever fires on a value set by hand.
+  if (!(TIME_FORMATS as readonly string[]).includes(config.timeFormat)) {
+    issues.add('timeFormat', 'Settings', 'Time format must be 12-hour or 24-hour.');
+  }
+  if (!(DATE_FORMATS as readonly string[]).includes(config.dateFormat)) {
+    issues.add('dateFormat', 'Settings', 'Date format must be Month/Day/Year, Day/Month/Year or Year-Month-Day.');
   }
   if (config.masterSwitch.enabled) {
     checkHapName(issues, config.masterSwitch.name, 'masterSwitch.name', 'Settings');

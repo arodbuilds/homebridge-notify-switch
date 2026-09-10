@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Time and date formats.** Two settings under **Settings**, directly below Default Country, choose how `{{time}}`, `{{date}}` and `{{datetime}}` render: **Time format** (12-hour such as `5:15 PM`, or 24-hour such as `17:15`) and **Date format** (Month/Day/Year such as `9/8/2026`, Day/Month/Year such as `8/9/2026`, or Year-Month-Day such as `2026-09-08`). `{{datetime}}` is the date, a space, then the time. Stored as `timeFormat` (`12h`, `24h`) and `dateFormat` (`mdy`, `dmy`, `ymd`) on the platform block; both are optional and default to 12-hour and Month/Day/Year, and the schema form carries them too. An invalid value is a startup error, like an invalid `defaultCountry` (SPEC sections 5.1, 5.6 and 11.2, item 27).
+
+### Changed
+
+- **`{{time}}`, `{{date}}` and `{{datetime}}` change format for everyone** unless the new settings are set to 24-hour and Year-Month-Day. Before, they always rendered as `14:05`, `2026-09-08` and `2026-09-08T14:05:00`; now the defaults give `2:05 PM`, `9/8/2026` and `9/8/2026 2:05 PM`. With 24-hour and Year-Month-Day chosen, `{{time}}` and `{{date}}` are as before and `{{datetime}}` reads `2026-09-08 14:05`, without seconds. Existing messages keep working; only the rendered text changes.
 
 ## [1.1.2] - 2026-09-08
 
