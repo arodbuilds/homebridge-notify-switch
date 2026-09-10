@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.2.0] - 2026-09-10
+
+Time and date formats for the message variables, a fix for channels that were left unticked, a rewritten default-provider prompt, click-to-insert variables, Duplicate switch and Duplicate group, readable locked fields in dark mode, and provider names that follow the mail provider preset. Two optional fields are added to the platform block (`timeFormat`, `dateFormat`); nothing else changes in the configuration format. A configuration written by 1.1.x starts and sends unchanged, but `{{time}}`, `{{date}}` and `{{datetime}}` render differently unless the new settings are set to 24-hour and Year-Month-Day (see Changed).
+
 ### Added
 
 - **Time and date formats.** Two settings under **Settings**, directly below Default Country, choose how `{{time}}`, `{{date}}` and `{{datetime}}` render: **Time format** (12-hour such as `5:15 PM`, or 24-hour such as `17:15`) and **Date format** (Month/Day/Year such as `9/8/2026`, Day/Month/Year such as `8/9/2026`, or Year-Month-Day such as `2026-09-08`). `{{datetime}}` is the date, a space, then the time. Stored as `timeFormat` (`12h`, `24h`) and `dateFormat` (`mdy`, `dmy`, `ymd`) on the platform block; both are optional and default to 12-hour and Month/Day/Year, and the schema form carries them too. An invalid value is a startup error, like an invalid `defaultCountry` (SPEC sections 5.1, 5.6 and 11.2, item 27).
@@ -25,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - **Dark mode: locked and read-only fields are readable.** The Host, Port and Security fields locked by a mail provider preset, and the ID field of that card, drew dark text on a dark background in dark mode (1.3:1); the other ID fields drew a white box with dark text. Every read-only, locked or disabled input, select and textarea now takes the theme's secondary background behind the surrounding text colour, in one stylesheet rule, so it reads in both themes (SPEC section 11.2, item 18).
+- Version 1.2.0. SPEC.md records everything above in sections 5.1, 5.6, 5.7, 11.2 (items 8, 11, 13, 17, 18, 22, 25 and 27) and 11.3; status is current as of 1.2.0.
 - **Send by now ticks a channel that becomes present whatever card you edited.** Giving a group its first ntfy topic (or email address, or chat ID) on the group card, or adding a provider for a channel your recipients already have, left the channel unticked on the switches that send to that group, so Save wrote no action for it and nothing was sent on it. Only ticking a group or adding an extra recipient on the switch card itself ticked it. The comparison now runs on every change in one place, so the channel is ticked and its action written wherever the change came from. A channel you unticked by hand stays unticked while it stays present and is ticked again only if it goes away and comes back (SPEC section 11.2, item 8).
 
 ## [1.1.2] - 2026-09-08
@@ -322,6 +329,7 @@ Usability and copy. Runtime behavior does not change.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
 [Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.2...HEAD
+[1.2.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.0.1...v1.1.0

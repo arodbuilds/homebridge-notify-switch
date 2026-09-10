@@ -1,6 +1,6 @@
 # homebridge-notify-switch v1 Specification
 
-Status: Current as of 1.1.2
+Status: Current as of 1.2.0
 Repository: https://github.com/arodbuilds/homebridge-notify-switch
 Package: homebridge-notify-switch
 Author: arodbuilds
