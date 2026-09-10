@@ -193,16 +193,9 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   if (groups.length === 0) {
     groupBox.appendChild(el('div', { class: 'form-text' }, SWITCH_EDITOR.noGroups));
   }
-  /** A channel that just became reachable is ticked by default (SPEC section 11.2, item 8). */
-  const enableNewChannels = (before: Channel[]): void => {
-    for (const channel of presentChannels(app.config, s)) {
-      if (!before.includes(channel)) {
-        s.channels[channel] = true;
-      }
-    }
-  };
+  // A channel that becomes present is ticked by the page, not here, so the rule holds whichever card was edited
+  // (SPEC section 11.2, item 8): `app.changed()` compares before and after, and `refresh()` then redraws Send by.
   const toggleGroup = (id: string, checked: boolean): void => {
-    const before = presentChannels(app.config, s);
     if (checked) {
       if (!s.groups.includes(id)) {
         s.groups.push(id);
@@ -210,7 +203,6 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     } else {
       s.groups = s.groups.filter((v) => v !== id);
     }
-    enableNewChannels(before);
     app.changed();
     refresh();
   };
@@ -241,8 +233,6 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     const list = addressList({
       channel, values: s.recipients[channel], defaultCountry: app.config.defaultCountry, path: `${path}.recipients.${channel}`,
       onChange: () => {
-        const before = presentChannels(app.config, s);
-        enableNewChannels(before);
         app.changed();
         refresh();
       },

@@ -5,8 +5,9 @@ import { button, clear, el, linkButton } from './dom.js';
 import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
 import { renderFooter } from './footer.js';
-import { exportConfig, legacySwitches, readConfig } from './model.js';
-import type { UiConfig } from './model.js';
+import { exportConfig, legacySwitches, presentChannels, readConfig } from './model.js';
+import type { UiConfig, UiSwitch } from './model.js';
+import type { Channel } from '../../src/types.js';
 import { isCountry, localeCountry } from './phone.js';
 import { renderGroups } from './sections/groups.js';
 import { renderProviders } from './sections/providers.js';
@@ -74,6 +75,12 @@ class Page implements App {
   private justReset = false;
   /** The upgrade notice at the top of the page while the loaded configuration cannot be represented (SPEC section 11.2, item 26). */
   private readonly legacyNotice: HTMLElement;
+  /**
+   * The channels each switch had present at the last pass (SPEC section 11.2, item 8). Every change, whichever card
+   * it came from, is compared against it so a channel that becomes present is ticked; one the user unticked stays
+   * unticked while it stays present and is ticked again only if it leaves and comes back.
+   */
+  private readonly presence = new WeakMap<UiSwitch, Set<Channel>>();
 
   constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
@@ -133,6 +140,8 @@ class Page implements App {
   }
 
   renderAll(): void {
+    // A loaded (or restored) configuration is the baseline: nothing is ticked on the way in.
+    this.syncPresence(false);
     this.providersEmpty = this.config.providers.length === 0;
     for (const section of SECTIONS) {
       this.rerender(section.key);
@@ -183,6 +192,8 @@ class Page implements App {
     if (!container) {
       return;
     }
+    // Before anything is drawn, so a switch card redrawn below already shows a channel this change made present.
+    this.syncPresence(true);
     clear(container);
     // A section redrawn after Reset is an ordinary one again; `lockSections` marks it while the notice shows.
     container.classList.remove('ns-locked');
@@ -211,6 +222,7 @@ class Page implements App {
 
   changed(refs = false): void {
     this.justReset = false;
+    this.syncPresence(true);
     if (refs) {
       // Provider or group identity changed: the Switches dropdowns must reflect it. Debounced because this runs per keystroke.
       this.scheduleSwitchRefresh();
@@ -221,6 +233,34 @@ class Page implements App {
 
   addFresh(item: object): void {
     this.fresh.add(item);
+  }
+
+  /**
+   * Compares every switch's present channels with the last pass (SPEC section 11.2, item 8): with `tick`, a channel
+   * that became present since then is ticked, wherever the change came from (this card, a group card, a provider
+   * card, a restore). A switch seen for the first time (just added, or a copy) keeps its ticks as they are and only
+   * sets its baseline. Returns true when something was ticked.
+   */
+  private syncPresence(tick: boolean): boolean {
+    let ticked = false;
+    for (const s of this.config.switches) {
+      const present = presentChannels(this.config, s);
+      const before = this.presence.get(s);
+      if (before && tick) {
+        for (const channel of present) {
+          if (!before.has(channel) && !s.channels[channel]) {
+            s.channels[channel] = true;
+            if (s.customize && !s.bodies[channel]) {
+              // Under Customize each channel has its own message; a new one starts as a copy of the shared message.
+              s.bodies[channel] = s.body;
+            }
+            ticked = true;
+          }
+        }
+      }
+      this.presence.set(s, new Set(present));
+    }
+    return ticked;
   }
 
   watchCard(card: HTMLElement, item: object): void {

@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **`{{time}}`, `{{date}}` and `{{datetime}}` change format for everyone** unless the new settings are set to 24-hour and Year-Month-Day. Before, they always rendered as `14:05`, `2026-09-08` and `2026-09-08T14:05:00`; now the defaults give `2:05 PM`, `9/8/2026` and `9/8/2026 2:05 PM`. With 24-hour and Year-Month-Day chosen, `{{time}}` and `{{date}}` are as before and `{{datetime}}` reads `2026-09-08 14:05`, without seconds. Existing messages keep working; only the rendered text changes.
 
+### Fixed
+
+- **Send by now ticks a channel that becomes present whatever card you edited.** Giving a group its first ntfy topic (or email address, or chat ID) on the group card, or adding a provider for a channel your recipients already have, left the channel unticked on the switches that send to that group, so Save wrote no action for it and nothing was sent on it. Only ticking a group or adding an extra recipient on the switch card itself ticked it. The comparison now runs on every change in one place, so the channel is ticked and its action written wherever the change came from. A channel you unticked by hand stays unticked while it stays present and is ticked again only if it goes away and comes back (SPEC section 11.2, item 8).
+
 ## [1.1.2] - 2026-09-08
 
 Package metadata and one README paragraph. Nothing changes in the plugin, the configuration format or the settings UI.
