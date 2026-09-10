@@ -325,14 +325,15 @@ export function dangerLinkButton(label: string, onClick: () => void): HTMLButton
 }
 
 /**
- * Card footer row (SPEC section 11.2, item 11): the red text button on the left, at most one outlined
- * primary button on the right. `right` may be empty. The primary side comes first in the markup and the
- * stylesheet reverses the row, so when the footer wraps on a phone the primary action stays on top.
+ * Card footer row (SPEC section 11.2, item 11): the red text button on the left (with the Duplicate text button
+ * beside it on switch and group cards), at most one outlined primary button on the right. `right` may be empty.
+ * The primary side comes first in the markup and the stylesheet reverses the row, so when the footer wraps on a
+ * phone the primary action stays on top.
  */
-export function cardFooter(left: HTMLElement | null, right: HTMLElement | null): HTMLElement {
+export function cardFooter(left: HTMLElement | HTMLElement[] | null, right: HTMLElement | null): HTMLElement {
   return el('div', { class: 'card-footer ns-card-footer' },
     el('div', { class: 'ns-footer-right' }, right),
-    el('div', { class: 'ns-footer-left' }, left),
+    el('div', { class: 'ns-footer-left' }, ...(Array.isArray(left) ? left : [left])),
   );
 }
 

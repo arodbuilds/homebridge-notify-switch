@@ -340,6 +340,12 @@ export const ISSUES = {
   collapseAfter: 3,
 };
 
+/** The Duplicate text buttons beside Remove on switch and group card footers (SPEC section 11.2, item 11). */
+export const DUPLICATE = {
+  switch: 'Duplicate switch',
+  group: 'Duplicate group',
+};
+
 /** In-place Remove confirmation on card footers (SPEC section 11.2, item 11). */
 export const REMOVE = {
   question: (what: 'provider' | 'group' | 'switch'): string => `Remove this ${what}?`,

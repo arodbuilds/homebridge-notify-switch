@@ -3,6 +3,7 @@ import {
   CHANNELS, CREDENTIAL_KEYS, DATE_FORMATS, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES,
   PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS, TELEGRAM_PARSE_MODES, TIME_FORMATS,
 } from '../../src/types.js';
+import { HAP_NAME_MAX_LENGTH } from '../../src/patterns.js';
 import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
 import { providersForChannel, pruneDefaults, resolveDefaultProvider } from '../../src/defaults.js';
 import type { DefaultProviders } from '../../src/defaults.js';
@@ -729,6 +730,46 @@ export function createGroup(existing: UiGroup[]): UiGroup {
   const g = newGroup();
   g.id = uniqueSlug('', existing.map((other) => other.id), 'group');
   return g;
+}
+
+/**
+ * The name of a copy (SPEC section 11.2, item 11): "{name} copy", then "{name} copy 2", "{name} copy 3", within `max`
+ * characters (the source name is cut to make room for the suffix); "Copy" (then "Copy 2") when the source name is empty.
+ */
+export function copyName(name: string, taken: Iterable<string>, max: number): string {
+  const used = new Set(Array.from(taken, (other) => other.trim()));
+  const base = name.trim();
+  for (let n = 1; ; n += 1) {
+    const suffix = base ? (n === 1 ? ' copy' : ` copy ${n}`) : (n === 1 ? 'Copy' : `Copy ${n}`);
+    const candidate = base ? `${base.slice(0, max - suffix.length).trimEnd()}${suffix}` : suffix;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
+ * A copy of a switch (SPEC section 11.2, item 11): a new UUID, the copy name, and everything else identical: actions
+ * (recipients, channels, messages, subject and the Advanced settings the editor derives them from), cooldown, failure
+ * mode, failure sensor and enabled state. Nothing is shared with the source.
+ */
+export function duplicateSwitch(source: UiSwitch, existing: UiSwitch[]): UiSwitch {
+  const copyPerChannel = <T>(value: Record<Channel, T>, clone: (item: T) => T): Record<Channel, T> => ({
+    sms: clone(value.sms), email: clone(value.email), telegram: clone(value.telegram), ntfy: clone(value.ntfy),
+  });
+  return {
+    ...source,
+    id: generateUuid(),
+    name: copyName(source.name, existing.map((s) => s.name), HAP_NAME_MAX_LENGTH),
+    groups: [...source.groups],
+    recipients: copyPerChannel(source.recipients, (list) => [...list]),
+    channels: copyPerChannel(source.channels, (flag) => flag),
+    order: [...source.order],
+    bodies: copyPerChannel(source.bodies, (text) => text),
+    subjects: copyPerChannel(source.subjects, (text) => text),
+    providers: copyPerChannel(source.providers, (id) => id),
+    tags: [...source.tags],
+  };
 }
 
 /** The empty default configuration written by Reset plugin to fresh install (SPEC section 11.2, item 12). */

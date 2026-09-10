@@ -6,12 +6,14 @@ import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { helpToggle, variablesToggle, variableValues } from '../card.js';
 import type { VariablesToggle, VariableValue } from '../card.js';
-import { CHANNEL_TITLE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { CHANNEL_TITLE, DUPLICATE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
   statusBox, textField, textareaField,
 } from '../dom.js';
-import { channelRecipients, channelUnserved, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels } from '../model.js';
+import {
+  channelRecipients, channelUnserved, duplicateSwitch, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels,
+} from '../model.js';
 import type { UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
 import type { UiIssue } from '../validate.js';
@@ -541,9 +543,22 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     },
   });
 
+  // Duplicate switch (SPEC section 11.2, item 11): a copy directly below this card, treated like a switch added with Add
+  // switch (fresh, so it shows no errors until touched); its Name field takes focus and the card scrolls into view.
+  const duplicate = linkButton(DUPLICATE.switch, () => {
+    const copy = duplicateSwitch(s, app.config.switches);
+    app.config.switches.splice(index + 1, 0, copy);
+    app.addFresh(copy);
+    app.rerender('switches');
+    // The section was redrawn, so the copy's card is looked up in the document, not in this card's (replaced) host.
+    const nameInput = document.querySelector<HTMLInputElement>(`[data-path="switches[${index + 1}].name"] input`);
+    nameInput?.closest('.card')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    nameInput?.focus({ preventScroll: true });
+  }, 'ns-duplicate');
+
   card.appendChild(header);
   card.appendChild(body);
-  card.appendChild(cardFooter(remove, testSend.control));
+  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   card.appendChild(testSend.results);
   app.watchCard(card, s);
   return card;

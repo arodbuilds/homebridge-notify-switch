@@ -543,6 +543,7 @@ mark.sms-bad {
 
 .ns-footer-left {
   margin-right: auto;
+  column-gap: 1rem;
 }
 
 .ns-footer-right:empty {

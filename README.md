@@ -285,6 +285,8 @@ Open **Advanced** on the card when you need more:
 
 When more than one provider can send on a channel, the first one in the list is the default as soon as the second one is filled in, and the settings UI writes that choice to `config.json` so nothing is left undecided. The new provider's card then asks, at the bottom, "You now have 2 ways to send email. Switches use Fastmail unless told otherwise. Which should they use?" with the new provider preselected: **Use the selected provider** switches the default to your pick, **Keep Fastmail** leaves it. Each provider card's header shows **Default for email** on the default and a **Make default for email** button on the others, and the choice is also under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
 
+**Duplicate switch** in the card's footer makes a copy directly below it, named `Water Leak Alert copy` (then `copy 2`, `copy 3`), with the same recipients, channels, messages and settings and a new id, ready to rename.
+
 The other switch fields:
 
 | Field | Meaning |
