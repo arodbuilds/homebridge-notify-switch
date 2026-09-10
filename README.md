@@ -42,7 +42,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 
 ## Which channel should I use?
 
-1. **Email** is the easiest and cheapest place to start. You send through a mailbox you already have, and there is nothing to register and nothing to pay for.
+1. **Email** is the easiest and cheapest place to start. You send through a mailbox you already have, and there is nothing to register and nothing to pay for. Ask each recipient to add your sending address to their contacts. Mail from a sender in the address book is far less likely to be filtered as spam.
 2. **Telegram or ntfy** are the best options for push notifications on a phone. Both are free. Telegram needs each recipient to have a Telegram account; ntfy needs each recipient to install the ntfy app.
 3. **SMS** is worth it only when the recipient will not install anything. In the United States, sending SMS through Twilio requires registration either way, which costs money and takes time to approve.
 
