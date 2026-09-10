@@ -4,7 +4,8 @@ import { providersForChannel, resolveDefaultProvider } from '../../../src/defaul
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
-import { helpToggle, variablesToggle } from '../card.js';
+import { helpToggle, variablesToggle, variableValues } from '../card.js';
+import type { VariablesToggle, VariableValue } from '../card.js';
 import { CHANNEL_TITLE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
@@ -36,18 +37,22 @@ function providerName(app: App, id: string): string {
   return provider ? providerTitle(provider) : id;
 }
 
-/** A subject or message field with the Variables toggle on its label row and the variable list under the control. */
-function withVariables(field: HTMLElement, box: HTMLElement): HTMLElement {
-  field.querySelector('.form-control')?.insertAdjacentElement('afterend', box);
+/** A subject or message field with the Variables toggle on its label row and the variable list under the control, bound to it. */
+function withVariables(field: HTMLElement, variables: VariablesToggle): HTMLElement {
+  const control = field.querySelector<HTMLInputElement | HTMLTextAreaElement>('.form-control');
+  if (control) {
+    control.insertAdjacentElement('afterend', variables.box);
+    variables.bind(control);
+  }
   return field;
 }
 
 /** A message textarea for one channel, or the shared one, with the SMS counter under it when it carries SMS. */
 function bodyField(
-  label: string, value: string, sms: boolean, path: string, onChange: (value: string) => void,
+  label: string, value: string, sms: boolean, path: string, values: () => VariableValue[], onChange: (value: string) => void,
 ): { el: HTMLElement; setSms(sms: boolean): void } {
   const counter = smsCounter();
-  const variables = variablesToggle();
+  const variables = variablesToggle(values);
   const field = textareaField(label, value, (next) => {
     counter.update(next);
     onChange(next);
@@ -55,7 +60,7 @@ function bodyField(
     path, required: true, rows: 3, help: sms ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther, labelExtra: variables.extra,
     placeholder: sms ? SWITCH_HELP.bodySmsPlaceholder : SWITCH_HELP.bodyOtherPlaceholder,
   });
-  withVariables(field, variables.box);
+  withVariables(field, variables);
   counter.update(value);
   field.querySelector('textarea')?.insertAdjacentElement('afterend', counter.el);
   const help = field.querySelector<HTMLElement>(':scope > .ns-help');
@@ -299,7 +304,9 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
 
   // ---- Message ---------------------------------------------------------------------------------------------
   const name = s.name.trim();
-  const subjectVariables = variablesToggle();
+  // The Variables lists show what each variable renders right now (SPEC section 11.2, item 17), read when a list opens.
+  const values = (): VariableValue[] => variableValues(app.config, s);
+  const subjectVariables = variablesToggle(values);
   const subjectField = withVariables(textField(SWITCH_EDITOR.subjectLabel, s.subject, (value) => {
     s.subject = value;
     if (!s.customize) {
@@ -311,8 +318,8 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   }, {
     path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
     help: SWITCH_EDITOR.subjectHelp, labelExtra: subjectVariables.extra,
-  }), subjectVariables.box);
-  const sharedBody = bodyField(SWITCH_EDITOR.messageLabel, s.body, s.channels.sms, `${path}.body`, (value) => {
+  }), subjectVariables);
+  const sharedBody = bodyField(SWITCH_EDITOR.messageLabel, s.body, s.channels.sms, `${path}.body`, values, (value) => {
     s.body = value;
     if (!s.customize) {
       for (const channel of CHANNELS) {
@@ -332,16 +339,16 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     const block = el('div', { class: 'ns-channel-message', 'data-channel': channel });
     const subjectLabel = SWITCH_EDITOR.channelSubject[channel];
     if (subjectLabel) {
-      const variables = variablesToggle();
+      const variables = variablesToggle(values);
       block.appendChild(withVariables(textField(subjectLabel, s.subjects[channel], (value) => {
         s.subjects[channel] = value;
         app.changed();
       }, {
         path: `${path}.subjects.${channel}`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
         help: channel === 'ntfy' ? NTFY_HELP.title : SWITCH_HELP.subject, labelExtra: variables.extra,
-      }), variables.box));
+      }), variables));
     }
-    block.appendChild(bodyField(SWITCH_EDITOR.channelBody[channel], s.bodies[channel], channel === 'sms', `${path}.bodies.${channel}`, (value) => {
+    block.appendChild(bodyField(SWITCH_EDITOR.channelBody[channel], s.bodies[channel], channel === 'sms', `${path}.bodies.${channel}`, values, (value) => {
       s.bodies[channel] = value;
       app.changed();
     }).el);

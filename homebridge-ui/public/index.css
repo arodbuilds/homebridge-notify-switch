@@ -377,6 +377,21 @@ mark.sms-bad {
   margin-top: 0.25rem;
 }
 
+/* Each variable is a real button showing the token, with the value it would render now beside it. */
+.notify-switch-ui .ns-variable {
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+.notify-switch-ui .ns-variable code {
+  color: inherit;
+}
+
+.ns-variables-help {
+  margin-bottom: 0.25rem;
+}
+
 .status-box:empty {
   display: none;
 }

@@ -284,12 +284,11 @@ export const VARIABLES = {
   show: 'Show variables',
   hide: 'Hide variables',
   intro: 'Type these anywhere in the message or subject:',
-  items: [
-    ['{{switchName}}', 'the switch name'],
-    ['{{time}}', 'the time, such as 14:05'],
-    ['{{date}}', 'the date, such as 2026-09-07'],
-    ['{{datetime}}', 'date and time together'],
-  ],
+  /** Shown as the {{switchName}} value while the switch has no name yet. */
+  switchNamePlaceholder: 'Switch name',
+  insertHelp: 'Click a variable to insert it at the cursor.',
+  /** Accessible name of each insert button; the visible text is the token itself. */
+  insertLabel: (token: string): string => `Insert ${token}`,
   link: { text: 'More about variables', href: 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables' } as HelpLink,
 };
 
