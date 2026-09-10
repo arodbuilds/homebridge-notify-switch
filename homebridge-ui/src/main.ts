@@ -149,6 +149,12 @@ class Page implements App {
   renderAll(): void {
     // A loaded (or restored) configuration is the baseline: nothing is ticked on the way in.
     this.syncPresence(false);
+    // The on-appearance defaults (SPEC section 5.7) are written before any section is drawn, so the sections render with
+    // the entry in place and nothing on the page redraws itself after load without a user action. The entry goes out
+    // with the load's own push (each section's rerender pushes).
+    if (!this.legacy) {
+      this.writeDefaults(validate(this.config));
+    }
     this.providersEmpty = this.config.providers.length === 0;
     for (const section of SECTIONS) {
       this.rerender(section.key);
@@ -266,6 +272,15 @@ class Page implements App {
    * answered. Startup's fallback warning is left to hand-edited configurations.
    */
   private syncDefaults(issues: UiIssue[]): void {
+    if (this.writeDefaults(issues)) {
+      // The Settings dropdown and the switch editors' "Platform default" options follow; the entry goes out with the next push.
+      this.scheduleSwitchRefresh();
+      this.push();
+    }
+  }
+
+  /** The write behind `syncDefaults`, without the redraw or the push: what the initial load runs before drawing. Returns true when an entry was written. */
+  private writeDefaults(issues: UiIssue[]): boolean {
     const valid = validProviders(this.config, issues);
     let written = false;
     for (const channel of CHANNELS) {
@@ -285,11 +300,7 @@ class Page implements App {
       this.pendingPrompts.set(channel, candidates[candidates.length - 1]);
       written = true;
     }
-    if (written) {
-      // The Settings dropdown and the switch editors' "Platform default" options follow; the entry goes out with the next push.
-      this.scheduleSwitchRefresh();
-      this.push();
-    }
+    return written;
   }
 
   /**
@@ -437,12 +448,17 @@ class Page implements App {
         clear(container);
         renderSwitches(this, container);
       }
-      // The Default provider dropdowns under Settings name providers too. Typing happens in a provider or group
-      // card while this runs, so redrawing Settings never takes focus from the user.
+      // The Default provider dropdowns under Settings name providers too. The redraw keeps every disclosure in the
+      // section (Advanced included) as open or closed as the user left it, and is skipped while a control inside
+      // Settings has focus, so it never pulls the section out from under the user.
       const settings = this.containers.get('settings');
-      if (settings) {
+      if (settings && !settings.contains(document.activeElement)) {
+        const open = [...settings.querySelectorAll('details')].map((details) => details.open);
         clear(settings);
         renderSettings(this, settings);
+        [...settings.querySelectorAll('details')].forEach((details, i) => {
+          details.open = open[i] ?? details.open;
+        });
       }
       this.revalidate();
     }, 400);

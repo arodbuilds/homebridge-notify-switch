@@ -270,3 +270,46 @@ test('defaults: a Twilio provider with a from address asks for SMS and email sep
     await browser.close();
   }
 });
+
+test('defaults: the on-appearance write happens before the page is drawn, so nothing redraws itself after load', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    // Two email providers and no entry: the entry is written on load, and the page must then stay as drawn.
+    const page = await openSettings(browser, { ...CONFIG, providers: [TWILIO, SMTP] });
+    const advanced = page.locator('#section-settings details.ns-advanced[data-advanced="settings"]');
+    await advanced.locator('summary').click();
+    assert.equal(await advanced.evaluate((node) => node.open), true);
+    await page.waitForTimeout(700);
+    assert.equal(await advanced.evaluate((node) => node.open), true, 'Advanced is still open 700 ms after load');
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      advanced.getByRole('button', { name: 'Download backup', exact: true }).click(),
+    ]);
+    assert.match(download.suggestedFilename(), /^notify-switch-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    const config = await pushed(page, () => window.__hb.updates.length > 0);
+    assert.deepEqual(config.defaultProviders, { email: 'twilio-main' }, 'the fallback was written');
+    assert.equal(await page.locator('.ns-default-prompt').count(), 1);
+    assert.equal(await page.locator('.card[data-path="providers[1]"] .ns-default-prompt[data-channel="email"]').count(), 1, 'the prompt is on the last card');
+    assert.equal(await page.locator('#section-settings [data-path="defaultProviders.email"] select').inputValue(), 'twilio-main',
+      'Settings was drawn with the entry already in place');
+    await page.close();
+
+    // A write during a later change (typing a from address makes Twilio the second email provider) still refreshes the
+    // Settings dropdowns, but keeps the disclosure as the user left it.
+    const later = await openSettings(browser, { ...CONFIG, providers: [{ ...TWILIO, emailFrom: undefined }, SMTP] });
+    const laterAdvanced = later.locator('#section-settings details.ns-advanced[data-advanced="settings"]');
+    await laterAdvanced.locator('summary').click();
+    assert.equal(await later.locator('#section-settings [data-path^="defaultProviders"]').count(), 0, 'one email provider so far');
+    await later.locator('[data-path="providers[0].emailFrom.address"] input').fill('alerts@example.com');
+    await later.waitForFunction(() => document.querySelector('#section-settings [data-path="defaultProviders.email"] select')?.value === 'twilio-main');
+    assert.equal(await laterAdvanced.evaluate((node) => node.open), true, 'the redraw kept Advanced open');
+    const written = await pushed(later, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.email === 'twilio-main');
+    assert.deepEqual(written.defaultProviders, { email: 'twilio-main' });
+    assert.equal(await later.locator('.card[data-path="providers[1]"] .ns-default-prompt[data-channel="email"]').count(), 1);
+  } finally {
+    await browser.close();
+  }
+});
