@@ -121,3 +121,69 @@ test('duplicate switch: a copy directly below with a new UUID, the copy name and
     await browser.close();
   }
 });
+
+test('duplicate group: a copy directly below with the copy name, an id from the new name and every address list; no switch changes', async (t) => {
+  const browser = await launchOrSkip(t);
+  if (!browser) {
+    return;
+  }
+  try {
+    const page = await openSettings(browser, CONFIG);
+    const source = page.locator('.card[data-path="groups[0]"]');
+    const duplicate = source.locator('.card-footer').getByRole('button', { name: 'Duplicate group' });
+    assert.match(await duplicate.getAttribute('class'), /\bbtn-link\b/, 'a text button');
+    assert.doesNotMatch(await duplicate.getAttribute('class'), /text-danger/);
+    assert.deepEqual(await source.locator('.card-footer .ns-footer-left button').allTextContents(), ['Remove group', 'Duplicate group']);
+    await duplicate.click();
+    assert.equal(await page.locator('.card[data-path^="groups"]').count(), 3);
+    const copy = page.locator('.card[data-path="groups[1]"]');
+    assert.equal(await copy.locator('[data-path="groups[1].name"] input').inputValue(), 'Family copy');
+    assert.equal(await copy.locator('[data-path="groups[1].id"] input').inputValue(), 'family-copy', 'the id is generated from the new name');
+    assert.equal(await page.locator('.card[data-path="groups[2]"] [data-path="groups[2].name"] input').inputValue(), 'Neighbours',
+      'directly below the source');
+    assert.equal(await copy.locator('[data-path="groups[1].name"] input').evaluate((node) => node === document.activeElement), true);
+    assert.match(await copy.getAttribute('class'), /\bns-fresh\b/, 'treated as a new group');
+    await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].groups.length === 3);
+    let config = await page.evaluate(() => window.__hb.updates.at(-1)[0]);
+    const [original, copied] = config.groups;
+    assert.notEqual(copied.id, original.id);
+    assert.deepEqual({ ...copied, id: undefined, name: undefined }, { ...original, id: undefined, name: undefined }, 'every address list is copied');
+    assert.deepEqual(copied.sms, ['+16785550101']);
+    assert.deepEqual(copied.ntfy, ['home-alerts']);
+    assert.deepEqual(config.switches.map((s) => s.actions.map((a) => a.groups)), [[['family'], ['family']], [['neighbours']]], 'no switch is changed');
+    // The switch editor lists the copy unticked, and the copy's id follows its name until edited (SPEC section 11.2, item 14).
+    await page.waitForFunction(() => document.querySelectorAll('.card[data-path="switches[0]"] .ns-recipient-groups .form-check').length === 3);
+    assert.deepEqual(await page.locator('.card[data-path="switches[0]"] .ns-recipient-groups .form-check-label').allTextContents(),
+      ['Family: 1 SMS, 1 email, 1 ntfy', 'Family copy: 1 SMS, 1 email, 1 ntfy', 'Neighbours: 1 email']);
+    assert.deepEqual(await page.locator('.card[data-path="switches[0]"] .ns-recipient-groups input').evaluateAll((nodes) => nodes.map((n) => n.checked)),
+      [true, false, false]);
+    await copy.locator('[data-path="groups[1].name"] input').fill('Friends');
+    assert.equal(await copy.locator('[data-path="groups[1].id"] input').inputValue(), 'friends');
+    // A second copy of the source: "Family copy 2", id "family-copy-2"; an unnamed source gives "Copy" with the id "copy".
+    await source.locator('.card-footer').getByRole('button', { name: 'Duplicate group' }).click();
+    assert.equal(await page.locator('.card[data-path="groups[1]"] [data-path="groups[1].name"] input').inputValue(), 'Family copy');
+    await page.locator('.card[data-path="groups[0]"] .card-footer').getByRole('button', { name: 'Duplicate group' }).click();
+    assert.equal(await page.locator('.card[data-path="groups[1]"] [data-path="groups[1].name"] input').inputValue(), 'Family copy 2');
+    assert.equal(await page.locator('.card[data-path="groups[1]"] [data-path="groups[1].id"] input').inputValue(), 'family-copy-2');
+    await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].groups.length === 5);
+    config = await page.evaluate(() => window.__hb.updates.at(-1)[0]);
+    assert.equal(new Set(config.groups.map((g) => g.id)).size, 5, 'every id differs');
+    assert.equal(new Set(config.groups.map((g) => g.name)).size, 5, 'every name differs');
+    await page.waitForFunction(() => window.__hb.save.at(-1) === true);
+    // The 64-character cap for a display name.
+    const long = 'A'.repeat(64);
+    await page.locator('.card[data-path="groups[4]"] [data-path="groups[4].name"] input').fill(long);
+    await page.locator('.card[data-path="groups[4]"] .card-footer').getByRole('button', { name: 'Duplicate group' }).click();
+    const capped = await page.locator('.card[data-path="groups[5]"] [data-path="groups[5].name"] input').inputValue();
+    assert.equal(capped, `${'A'.repeat(59)} copy`);
+    assert.equal(capped.length, 64);
+    await page.close();
+
+    const unnamed = await openSettings(browser, { ...CONFIG, groups: [{ ...CONFIG.groups[0], name: '' }] });
+    await unnamed.locator('.card[data-path="groups[0]"] .card-footer').getByRole('button', { name: 'Duplicate group' }).click();
+    assert.equal(await unnamed.locator('.card[data-path="groups[1]"] [data-path="groups[1].name"] input').inputValue(), 'Copy');
+    assert.equal(await unnamed.locator('.card[data-path="groups[1]"] [data-path="groups[1].id"] input').inputValue(), 'copy');
+  } finally {
+    await browser.close();
+  }
+});

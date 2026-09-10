@@ -3,7 +3,7 @@ import {
   CHANNELS, CREDENTIAL_KEYS, DATE_FORMATS, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES,
   PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS, TELEGRAM_PARSE_MODES, TIME_FORMATS,
 } from '../../src/types.js';
-import { HAP_NAME_MAX_LENGTH } from '../../src/patterns.js';
+import { DISPLAY_NAME_MAX_LENGTH, HAP_NAME_MAX_LENGTH } from '../../src/patterns.js';
 import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
 import { providersForChannel, pruneDefaults, resolveDefaultProvider } from '../../src/defaults.js';
 import type { DefaultProviders } from '../../src/defaults.js';
@@ -769,6 +769,19 @@ export function duplicateSwitch(source: UiSwitch, existing: UiSwitch[]): UiSwitc
     subjects: copyPerChannel(source.subjects, (text) => text),
     providers: copyPerChannel(source.providers, (id) => id),
     tags: [...source.tags],
+  };
+}
+
+/**
+ * A copy of a group (SPEC section 11.2, item 11): the copy name, an id generated from it with `uniqueSlug` (which keeps
+ * following the name until edited, item 14), and every address list copied. No switch is changed.
+ */
+export function duplicateGroup(source: UiGroup, existing: UiGroup[]): UiGroup {
+  const name = copyName(source.name, existing.map((g) => g.name), DISPLAY_NAME_MAX_LENGTH);
+  return {
+    id: uniqueSlug(name, existing.map((g) => g.id), 'group'),
+    name,
+    sms: [...source.sms], email: [...source.email], telegram: [...source.telegram], ntfy: [...source.ntfy],
   };
 }
 

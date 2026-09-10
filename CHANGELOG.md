@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Click-to-insert variables.** In every **Show variables** list, each variable is now a button showing the token with the value it would render right now beside it (`{{time}}` as `5:15 PM` in your Time format and Date format settings, `{{switchName}}` as the switch's current name). Clicking one inserts the token at the cursor of the field the list belongs to, replacing any selection, and leaves the cursor after it. Keyboard accessible. A help line under the list says so; the **More about variables** link stays (SPEC section 11.2, item 17).
 
 - **Duplicate switch.** A text button beside **Remove switch** copies the switch directly below it: a new id, the name `{name} copy` (then `{name} copy 2`, within the 64-character limit; `Copy` for an unnamed switch) and everything else identical, from recipients and messages to the cooldown, failure mode, failure sensor and enabled state. The copy is treated like a new switch, its Name field takes focus and the card scrolls into view (SPEC section 11.2, item 11).
+- **Duplicate group.** The same beside **Remove group**: a copy directly below the group with every address list, named `{name} copy` with the same suffix rule, and an id generated from the new name that keeps following it until you edit it. No switch is changed (SPEC section 11.2, item 11).
 
 ### Changed
 
