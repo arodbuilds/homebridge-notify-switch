@@ -3,7 +3,8 @@ import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge
 import type { NotifySwitchPlatform } from './platform.js';
 import { PLUGIN_VERSION, SWITCH_RESET_DELAY_MS } from './settings.js';
 import { renderAction, sendAction } from './send.js';
-import { buildTemplateVariables } from './template.js';
+import { buildTemplateVariables, DEFAULT_TEMPLATE_FORMATS } from './template.js';
+import type { TemplateFormats } from './template.js';
 import type { Provider, RecipientResult, ResolvedAction, ResolvedSwitch } from './types.js';
 import { HAP_NAME_MAX_LENGTH } from './patterns.js';
 
@@ -33,6 +34,8 @@ export class NotifySwitchAccessory {
     private readonly accessory: PlatformAccessory,
     private readonly config: ResolvedSwitch,
     private readonly providers: ReadonlyMap<string, Provider>,
+    /** The platform's time and date format settings for `{{time}}`, `{{date}}` and `{{datetime}}` (SPEC section 5.6). */
+    private readonly formats: TemplateFormats = DEFAULT_TEMPLATE_FORMATS,
   ) {
     const { Service, Characteristic } = platform;
     this.label = `[${config.name}]`;
@@ -127,7 +130,7 @@ export class NotifySwitchAccessory {
     }
     this.lastSendAt = now;
 
-    const vars = buildTemplateVariables(this.config.name, new Date(now));
+    const vars = buildTemplateVariables(this.config.name, this.formats, new Date(now));
     // Step 5: every action fires in parallel. One action's failure must never stop the others, so the
     // outcomes are collected with allSettled; a rejected action (which `sendAction` should make impossible)
     // is reported as a failure for each of its recipients rather than abandoning the rest of the switch.

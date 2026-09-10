@@ -4,6 +4,7 @@ import { PluginLogger } from './logging.js';
 import { MasterSwitchAccessory } from './masterSwitchAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { NotifySwitchAccessory } from './switchAccessory.js';
+import type { TemplateFormats } from './template.js';
 import type { Provider, ResolvedSwitch } from './types.js';
 import { DEFAULT_MASTER_SWITCH_NAME, validateConfig } from './validation.js';
 
@@ -101,8 +102,9 @@ export class NotifySwitchPlatform implements DynamicPlatformPlugin {
 
     const keep = new Set<string>();
     this.registerMasterSwitch(result.config.masterSwitch, keep);
+    const formats = { timeFormat: result.config.timeFormat, dateFormat: result.config.dateFormat };
     for (const sw of result.switches) {
-      this.registerSwitch(sw, result.providers, keep);
+      this.registerSwitch(sw, result.providers, formats, keep);
     }
     this.removeStale(keep);
 
@@ -121,12 +123,12 @@ export class NotifySwitchPlatform implements DynamicPlatformPlugin {
     this.master = new MasterSwitchAccessory(this, accessory, masterConfig.name);
   }
 
-  private registerSwitch(sw: ResolvedSwitch, providers: Map<string, Provider>, keep: Set<string>): void {
+  private registerSwitch(sw: ResolvedSwitch, providers: Map<string, Provider>, formats: TemplateFormats, keep: Set<string>): void {
     // The accessory UUID is derived from the switch id, never the name (SPEC section 4, item 3).
     const uuid = this.api.hap.uuid.generate(sw.id);
     keep.add(uuid);
     const accessory = this.obtainAccessory(uuid, sw.name, { switchId: sw.id });
-    this.switches.set(sw.id, new NotifySwitchAccessory(this, accessory, sw, providers));
+    this.switches.set(sw.id, new NotifySwitchAccessory(this, accessory, sw, providers, formats));
     this.log.debug(`configured switch "${sw.name}" (${sw.id}) with ${sw.actions.length} action(s)`);
   }
 

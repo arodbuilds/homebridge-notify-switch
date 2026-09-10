@@ -81,14 +81,14 @@ test('provider chooser: four tiles create a card with the type fixed, the name p
       'Your mail provider\'s outgoing server settings. For example: smtp.fastmail.com, 465, SSL.');
     assert.equal(await card.locator('[data-path="providers[1].host"] input').evaluate((node) => node.readOnly), false, 'Other leaves the server editable');
 
-    // A second Twilio provider gets a numeric suffix; the existing one is twilio-main, so the first is plain twilio.
+    // A prefilled name another provider already uses gets a numeric suffix, and the id is generated from it (SPEC section 11.2, item 13).
     await page.getByRole('button', { name: 'Add provider' }).click();
     await page.locator('.ns-chooser-tile[data-type="twilio"]').click();
     await page.getByRole('button', { name: 'Add provider' }).click();
     await page.locator('.ns-chooser-tile[data-type="twilio"]').click();
     config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers.length === 4);
-    assert.deepEqual(config.providers.map((p) => p.id), ['twilio-main', 'email', 'twilio', 'twilio-2']);
-    assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio', 'Twilio']);
+    assert.deepEqual(config.providers.map((p) => p.id), ['twilio-main', 'email', 'twilio-2', 'twilio-3']);
+    assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio 2', 'Twilio 3']);
     assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'Twilio');
 
     // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in four equal columns (SPEC section 11.2, item 13).

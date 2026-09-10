@@ -42,7 +42,7 @@ A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which
 
 ## Which channel should I use?
 
-1. **Email** is the easiest and cheapest place to start. You send through a mailbox you already have, and there is nothing to register and nothing to pay for.
+1. **Email** is the easiest and cheapest place to start. You send through a mailbox you already have, and there is nothing to register and nothing to pay for. Ask each recipient to add your sending address to their contacts. Mail from a sender in the address book is far less likely to be filtered as spam.
 2. **Telegram or ntfy** are the best options for push notifications on a phone. Both are free. Telegram needs each recipient to have a Telegram account; ntfy needs each recipient to install the ntfy app.
 3. **SMS** is worth it only when the recipient will not install anything. In the United States, sending SMS through Twilio requires registration either way, which costs money and takes time to approve.
 
@@ -257,10 +257,11 @@ A group is a named list of people. Each group has four lists: `sms` (phone numbe
 - Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
 - Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them. ntfy topics are the names subscribed in the ntfy app (letters, numbers, dashes and underscores); see the [topic-name warning](#ntfy).
 - A group with no addresses is valid but produces a startup warning if a switch uses it.
+- **Duplicate group** in a group card's footer makes a copy directly below it, named `Family copy` (then `copy 2`), with every address list copied and its own id; no switch is changed.
 
 Provider and group names may hold letters, numbers, spaces, and punctuation, up to 64 characters; control characters and angle brackets are not allowed. The settings UI enforces this, and a name in `config.json` that breaks the rule is reported as a startup warning naming the field.
 
-Group and provider IDs are short slugs generated from the name (`family`, `twilio`, with a numeric suffix such as `twilio-2` when the name is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
+A provider the settings UI names for you (`Twilio`, `Email`, or the mail provider's name once you pick a preset: `Gmail`, `Fastmail`) gets a numeric suffix when the name is taken (`Twilio 2`); a name you typed yourself is never changed. Group and provider IDs are short slugs generated from the name (`family`, `twilio`, `twilio-2` for `Twilio 2`, with a numeric suffix of their own when the id alone is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
 
 ## Switches
 
@@ -269,8 +270,8 @@ Each switch appears in the Home app under its `name`. Turning it on sends your m
 In the settings UI a switch card has four parts:
 
 1. **Recipients.** Tick the groups to send to. Each group shows what it holds per channel, for example `Family: 3 SMS, 1 email, 2 ntfy`. Under **Extra recipients** you can add individual phone numbers, email addresses, Telegram chat IDs or ntfy topics for people outside the groups.
-2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default, each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
-3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)).
+2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default as soon as it appears (whether you ticked a group here, gave a group its first address on that channel, or added a provider for it), each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
+3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)): **Show variables** next to either field lists them with what each would render right now, and clicking one inserts it at the cursor.
 4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
 
 <img src="assets/switch-config.png" alt="Notify Switch settings, choosing recipients and writing one message" width="100%">
@@ -283,7 +284,9 @@ Open **Advanced** on the card when you need more:
 - A **provider** dropdown appears for a channel that more than one provider can send on. It defaults to `Platform default (…)`, the provider chosen under **Settings**; pick another to send this switch's messages through it instead.
 - **Hide recipients from each other (BCC)** for email, the **Sender** number for SMS when the Twilio provider has several, and the ntfy **Priority** and **Tags**.
 
-When more than one provider can send on a channel, the settings UI asks which one switches should use unless told otherwise, the first time the second provider is set up, and keeps the answer under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
+When more than one provider can send on a channel, the first one in the list is the default as soon as the second one is filled in, and the settings UI writes that choice to `config.json` so nothing is left undecided. The new provider's card then asks, at the bottom, "You now have 2 ways to send email. Switches use Fastmail unless told otherwise. Which should they use?" with the new provider preselected: **Use the selected provider** switches the default to your pick, **Keep Fastmail** leaves it. Each provider card's header shows **Default for email** on the default and a **Make default for email** button on the others, and the choice is also under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
+
+**Duplicate switch** in the card's footer makes a copy directly below it, named `Water Leak Alert copy` (then `copy 2`, `copy 3`), with the same recipients, channels, messages and settings and a new id, ready to rename.
 
 The other switch fields:
 
@@ -318,7 +321,7 @@ A configuration with several actions on the same channel on one switch (two SMS 
 
 ### Platform defaults
 
-`defaultProviders` on the platform block maps a channel to the id of the provider switches use on it when more than one provider can send on that channel, for example `"defaultProviders": { "email": "fastmail" }`. Only channels with several providers carry an entry; with one provider it is the default on its own. A channel with several providers and no entry falls back to the first in `config.json` order with a startup warning; an entry naming a provider that does not exist, or one that cannot send on that channel, is a startup error.
+`defaultProviders` on the platform block maps a channel to the id of the provider switches use on it when more than one provider can send on that channel, for example `"defaultProviders": { "email": "fastmail" }`. Only channels with several providers carry an entry; with one provider it is the default on its own. The settings UI writes the entry as soon as a channel has two providers, so a configuration it saved always has one. A hand-edited configuration with several providers and no entry falls back to the first in `config.json` order with a startup warning; an entry naming a provider that does not exist, or one that cannot send on that channel, is a startup error.
 
 The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends to the real recipients on every ticked channel and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
 
@@ -437,11 +440,20 @@ These placeholders can be used in `body` and `subject`:
 | Variable | Value |
 | --- | --- |
 | `{{switchName}}` | The switch's name. |
-| `{{time}}` | Local time as `HH:mm`, for example `14:05`. |
-| `{{date}}` | Local date as `YYYY-MM-DD`. |
-| `{{datetime}}` | Local date and time in ISO 8601 form without a zone, for example `2026-09-06T14:05:00`. |
+| `{{time}}` | The local time, for example `5:15 PM`. |
+| `{{date}}` | The local date, for example `9/8/2026`. |
+| `{{datetime}}` | Both together, for example `9/8/2026 5:15 PM`. |
 
-Times use the Homebridge host's time zone. Anything else inside double braces is left exactly as typed. Variables are expanded when the switch is flipped, so `{{time}}` is the moment the event happened.
+The examples are the defaults. Two settings under **Settings** in the plugin's settings page choose the form (`timeFormat` and `dateFormat` in `config.json`):
+
+| Setting | Options | `{{time}}` or `{{date}}` |
+| --- | --- | --- |
+| **Time format** | 12-hour (default) or 24-hour | `5:15 PM` or `17:15` |
+| **Date format** | Month/Day/Year (default), Day/Month/Year or Year-Month-Day | `9/8/2026`, `8/9/2026` or `2026-09-08` |
+
+`{{datetime}}` is the date, a space, then the time, in whichever forms you chose. Times use the Homebridge host's time zone. Anything else inside double braces is left exactly as typed. Variables are expanded when the switch is flipped, so `{{time}}` is the moment the event happened.
+
+Before 1.2.0 the variables always rendered as `14:05`, `2026-09-08` and `2026-09-08T14:05:00`. Choose 24-hour and Year-Month-Day to keep the old time and date; `{{datetime}}` no longer includes seconds.
 
 ## Cooldown and master switch
 

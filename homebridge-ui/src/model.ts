@@ -1,8 +1,9 @@
-import type { Channel, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode } from '../../src/types.js';
+import type { Channel, DateFormat, FailureMode, NtfyAuth, NtfyPriority, ProviderType, SmtpSecurity, TelegramParseMode, TimeFormat } from '../../src/types.js';
 import {
-  CHANNELS, CREDENTIAL_KEYS, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES, PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS,
-  TELEGRAM_PARSE_MODES,
+  CHANNELS, CREDENTIAL_KEYS, DATE_FORMATS, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, FAILURE_MODES, NTFY_AUTHS, NTFY_DEFAULT_SERVER, NTFY_PRIORITIES,
+  PROVIDER_TYPES, SMTP_SECURITIES, SUBJECT_CHANNELS, TELEGRAM_PARSE_MODES, TIME_FORMATS,
 } from '../../src/types.js';
+import { DISPLAY_NAME_MAX_LENGTH, HAP_NAME_MAX_LENGTH } from '../../src/patterns.js';
 import { findForbiddenKey, FORBIDDEN_KEYS } from '../../src/safeKeys.js';
 import { providersForChannel, pruneDefaults, resolveDefaultProvider } from '../../src/defaults.js';
 import type { DefaultProviders } from '../../src/defaults.js';
@@ -120,6 +121,9 @@ export interface UiConfig {
   name: string;
   configVersion: number;
   defaultCountry: string;
+  /** How `{{time}}`, `{{date}}` and `{{datetime}}` render (SPEC section 5.1 and 5.6). */
+  timeFormat: TimeFormat;
+  dateFormat: DateFormat;
   masterSwitch: { enabled: boolean; name: string };
   debug: boolean;
   /** Platform defaults per channel (SPEC section 5.7); only stored for channels with more than one provider. */
@@ -400,6 +404,8 @@ export function readConfig(raw: unknown): UiConfig {
     name: str(r.name, 'Notify Switch'),
     configVersion: int(r.configVersion, 1),
     defaultCountry: str(r.defaultCountry, 'US').toUpperCase() || 'US',
+    timeFormat: oneOf(r.timeFormat, TIME_FORMATS, DEFAULT_TIME_FORMAT),
+    dateFormat: oneOf(r.dateFormat, DATE_FORMATS, DEFAULT_DATE_FORMAT),
     masterSwitch: { enabled: bool(master.enabled, true), name: str(master.name, 'Notifications Enabled') },
     debug: bool(r.debug, false),
     defaultProviders,
@@ -586,6 +592,8 @@ export function exportConfig(config: UiConfig): Raw {
     name: config.name.trim() || 'Notify Switch',
     configVersion: config.configVersion,
     defaultCountry: config.defaultCountry,
+    timeFormat: config.timeFormat,
+    dateFormat: config.dateFormat,
     masterSwitch: { enabled: config.masterSwitch.enabled, name: config.masterSwitch.name.trim() },
     debug: config.debug,
     providers: config.providers.map(exportProvider),
@@ -709,11 +717,33 @@ export function uniqueSlug(name: string, taken: Iterable<string>, fallback: stri
   }
 }
 
-/** A provider created from the chooser: type fixed, name prefilled, id generated from the name (SPEC section 11.2, item 13). */
+/**
+ * `name`, or `name 2`, `name 3` when another item already uses it (SPEC section 11.2, items 13 and 22), within the display
+ * name cap. Used for the names the UI fills in itself: the chooser's provider names and the SMTP preset labels.
+ */
+export function uniqueName(name: string, taken: Iterable<string>): string {
+  const used = new Set(Array.from(taken, (other) => other.trim()));
+  const base = name.trim();
+  if (!used.has(base)) {
+    return base;
+  }
+  for (let n = 2; ; n += 1) {
+    const suffix = ` ${n}`;
+    const candidate = `${base.slice(0, DISPLAY_NAME_MAX_LENGTH - suffix.length).trimEnd()}${suffix}`;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
+ * A provider created from the chooser: type fixed, the name prefilled (with a numeric suffix when another provider
+ * already uses it: "Twilio 2"), the id generated from that name (SPEC section 11.2, item 13).
+ */
 export function createProvider(type: ProviderType, name: string, existing: UiProvider[]): UiProvider {
   const p = newProvider(type);
-  p.name = name;
-  p.id = uniqueSlug(name, existing.map((other) => other.id), type);
+  p.name = uniqueName(name, existing.map((other) => other.name));
+  p.id = uniqueSlug(p.name, existing.map((other) => other.id), type);
   return p;
 }
 
@@ -722,6 +752,59 @@ export function createGroup(existing: UiGroup[]): UiGroup {
   const g = newGroup();
   g.id = uniqueSlug('', existing.map((other) => other.id), 'group');
   return g;
+}
+
+/**
+ * The name of a copy (SPEC section 11.2, item 11): "{name} copy", then "{name} copy 2", "{name} copy 3", within `max`
+ * characters (the source name is cut to make room for the suffix); "Copy" (then "Copy 2") when the source name is empty.
+ */
+export function copyName(name: string, taken: Iterable<string>, max: number): string {
+  const used = new Set(Array.from(taken, (other) => other.trim()));
+  const base = name.trim();
+  for (let n = 1; ; n += 1) {
+    const suffix = base ? (n === 1 ? ' copy' : ` copy ${n}`) : (n === 1 ? 'Copy' : `Copy ${n}`);
+    const candidate = base ? `${base.slice(0, max - suffix.length).trimEnd()}${suffix}` : suffix;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
+ * A copy of a switch (SPEC section 11.2, item 11): a new UUID, the copy name, and everything else identical: actions
+ * (recipients, channels, messages, subject and the Advanced settings the editor derives them from), cooldown, failure
+ * mode, failure sensor and enabled state. Nothing is shared with the source.
+ */
+export function duplicateSwitch(source: UiSwitch, existing: UiSwitch[]): UiSwitch {
+  const copyPerChannel = <T>(value: Record<Channel, T>, clone: (item: T) => T): Record<Channel, T> => ({
+    sms: clone(value.sms), email: clone(value.email), telegram: clone(value.telegram), ntfy: clone(value.ntfy),
+  });
+  return {
+    ...source,
+    id: generateUuid(),
+    name: copyName(source.name, existing.map((s) => s.name), HAP_NAME_MAX_LENGTH),
+    groups: [...source.groups],
+    recipients: copyPerChannel(source.recipients, (list) => [...list]),
+    channels: copyPerChannel(source.channels, (flag) => flag),
+    order: [...source.order],
+    bodies: copyPerChannel(source.bodies, (text) => text),
+    subjects: copyPerChannel(source.subjects, (text) => text),
+    providers: copyPerChannel(source.providers, (id) => id),
+    tags: [...source.tags],
+  };
+}
+
+/**
+ * A copy of a group (SPEC section 11.2, item 11): the copy name, an id generated from it with `uniqueSlug` (which keeps
+ * following the name until edited, item 14), and every address list copied. No switch is changed.
+ */
+export function duplicateGroup(source: UiGroup, existing: UiGroup[]): UiGroup {
+  const name = copyName(source.name, existing.map((g) => g.name), DISPLAY_NAME_MAX_LENGTH);
+  return {
+    id: uniqueSlug(name, existing.map((g) => g.id), 'group'),
+    name,
+    sms: [...source.sms], email: [...source.email], telegram: [...source.telegram], ntfy: [...source.ntfy],
+  };
 }
 
 /** The empty default configuration written by Reset plugin to fresh install (SPEC section 11.2, item 12). */

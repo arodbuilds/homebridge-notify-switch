@@ -209,6 +209,29 @@ test('credentialsFile: a file that fails to load does not hide the other validat
   assert.match(lines[1], /did you mean "twilio-main"/);
 });
 
+test('timeFormat and dateFormat: missing means the defaults, a stored value is carried, an invalid value is an error like defaultCountry', async () => {
+  const missing = platformConfig({ providers: [TWILIO], actions: [SMS_ACTION] });
+  const defaults = await validateConfig(missing, fakeLogger().log);
+  assert.deepEqual(errors(defaults), []);
+  assert.equal(defaults.config.timeFormat, '12h');
+  assert.equal(defaults.config.dateFormat, 'mdy');
+
+  const stored = { ...platformConfig({ providers: [TWILIO], actions: [SMS_ACTION] }), timeFormat: '24h', dateFormat: 'ymd' };
+  const carried = await validateConfig(stored, fakeLogger().log);
+  assert.deepEqual(errors(carried), []);
+  assert.equal(carried.config.timeFormat, '24h');
+  assert.equal(carried.config.dateFormat, 'ymd');
+
+  // An invalid value is a blocking error naming the field, and the rest of the pass runs with the default (SPEC section 5.1).
+  const invalid = { ...platformConfig({ providers: [TWILIO], actions: [SMS_ACTION] }), timeFormat: '12', dateFormat: 'DMY' };
+  const result = await validateConfig(invalid, fakeLogger().log);
+  assert.deepEqual(errors(result), ['platform.timeFormat: must be one of 12h, 24h', 'platform.dateFormat: must be one of mdy, dmy, ymd']);
+  assert.equal(result.config, undefined, 'the platform registers nothing, as for an invalid defaultCountry');
+  const notStrings = { ...platformConfig({ providers: [TWILIO], actions: [SMS_ACTION] }), timeFormat: 24, dateFormat: null };
+  const mixed = await validateConfig(notStrings, fakeLogger().log);
+  assert.deepEqual(errors(mixed), ['platform.timeFormat: must be one of 12h, 24h'], 'null reads as missing, a number is an error');
+});
+
 test('defaultProviders: a channel with several providers and no default warns and falls back to the first in config order', async () => {
   const family = { id: 'family', name: 'Family', sms: ['+16785550101'], email: ['a@example.com'] };
   const config = platformConfig({ providers: [TWILIO, SMTP], groups: [family], actions: [SMS_ACTION, SMTP_ACTION] });

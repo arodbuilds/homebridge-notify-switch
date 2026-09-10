@@ -5,15 +5,18 @@ import { button, clear, el, linkButton } from './dom.js';
 import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
 import { renderFooter } from './footer.js';
-import { exportConfig, legacySwitches, readConfig } from './model.js';
-import type { UiConfig } from './model.js';
+import { exportConfig, legacySwitches, presentChannels, readConfig } from './model.js';
+import type { UiConfig, UiProvider, UiSwitch } from './model.js';
+import { CHANNELS } from '../../src/types.js';
+import type { Channel } from '../../src/types.js';
+import { providersForChannel, resolveDefaultProvider } from '../../src/defaults.js';
 import { isCountry, localeCountry } from './phone.js';
 import { renderGroups } from './sections/groups.js';
 import { renderProviders } from './sections/providers.js';
 import { renderSettings } from './sections/settings.js';
 import { renderSwitches } from './sections/switches.js';
 import { timeZoneCountry } from '../../src/timeZones.js';
-import { errorsOnly, validate } from './validate.js';
+import { validate, validProviders } from './validate.js';
 import type { UiIssue } from './validate.js';
 
 /**
@@ -74,6 +77,17 @@ class Page implements App {
   private justReset = false;
   /** The upgrade notice at the top of the page while the loaded configuration cannot be represented (SPEC section 11.2, item 26). */
   private readonly legacyNotice: HTMLElement;
+  /**
+   * The channels each switch had present at the last pass (SPEC section 11.2, item 8). Every change, whichever card
+   * it came from, is compared against it so a channel that becomes present is ticked; one the user unticked stays
+   * unticked while it stays present and is ticked again only if it leaves and comes back.
+   */
+  private readonly presence = new WeakMap<UiSwitch, Set<Channel>>();
+  /**
+   * The channels whose default this page wrote on appearance (SPEC section 5.7 and section 11.2, item 25) and has not
+   * asked about yet, with the card that asks. An entry loaded from config.json never prompts.
+   */
+  private readonly pendingPrompts = new Map<Channel, UiProvider>();
 
   constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
@@ -133,6 +147,14 @@ class Page implements App {
   }
 
   renderAll(): void {
+    // A loaded (or restored) configuration is the baseline: nothing is ticked on the way in.
+    this.syncPresence(false);
+    // The on-appearance defaults (SPEC section 5.7) are written before any section is drawn, so the sections render with
+    // the entry in place and nothing on the page redraws itself after load without a user action. The entry goes out
+    // with the load's own push (each section's rerender pushes).
+    if (!this.legacy) {
+      this.writeDefaults(validate(this.config));
+    }
     this.providersEmpty = this.config.providers.length === 0;
     for (const section of SECTIONS) {
       this.rerender(section.key);
@@ -183,6 +205,8 @@ class Page implements App {
     if (!container) {
       return;
     }
+    // Before anything is drawn, so a switch card redrawn below already shows a channel this change made present.
+    this.syncPresence(true);
     clear(container);
     // A section redrawn after Reset is an ordinary one again; `lockSections` marks it while the notice shows.
     container.classList.remove('ns-locked');
@@ -211,6 +235,7 @@ class Page implements App {
 
   changed(refs = false): void {
     this.justReset = false;
+    this.syncPresence(true);
     if (refs) {
       // Provider or group identity changed: the Switches dropdowns must reflect it. Debounced because this runs per keystroke.
       this.scheduleSwitchRefresh();
@@ -221,6 +246,89 @@ class Page implements App {
 
   addFresh(item: object): void {
     this.fresh.add(item);
+  }
+
+  pendingDefaultPrompt(channel: Channel): UiProvider | undefined {
+    return this.pendingPrompts.get(channel);
+  }
+
+  chooseDefault(channel: Channel, id?: string): void {
+    this.pendingPrompts.delete(channel);
+    if (id === undefined) {
+      // Keep: the entry written on appearance stands; only the prompt goes.
+      this.revalidate();
+      return;
+    }
+    this.config.defaultProviders[channel] = id;
+    this.changed(true);
+    this.rerender('settings');
+  }
+
+  /**
+   * Platform defaults written on appearance (SPEC section 5.7): the moment a channel has two or more validated providers
+   * and `defaultProviders[channel]` names none of the providers, the current fallback (the first validated provider in
+   * configuration order) is written, so the configuration is fully determined whether or not the prompt is answered.
+   * The prompt is then shown on the last validated provider's card (the one just added, in the usual case) until it is
+   * answered. Startup's fallback warning is left to hand-edited configurations.
+   */
+  private syncDefaults(issues: UiIssue[]): void {
+    if (this.writeDefaults(issues)) {
+      // The Settings dropdown and the switch editors' "Platform default" options follow; the entry goes out with the next push.
+      this.scheduleSwitchRefresh();
+      this.push();
+    }
+  }
+
+  /** The write behind `syncDefaults`, without the redraw or the push: what the initial load runs before drawing. Returns true when an entry was written. */
+  private writeDefaults(issues: UiIssue[]): boolean {
+    const valid = validProviders(this.config, issues);
+    let written = false;
+    for (const channel of CHANNELS) {
+      const pending = this.pendingPrompts.get(channel);
+      if (pending && !this.config.providers.includes(pending)) {
+        this.pendingPrompts.delete(channel);
+      }
+      const candidates = providersForChannel(valid, channel);
+      if (candidates.length < 2) {
+        continue;
+      }
+      // Resolved against every provider, so an entry naming a provider whose card is momentarily invalid is left alone.
+      if (resolveDefaultProvider(channel, this.config.providers, this.config.defaultProviders).source === 'stored') {
+        continue;
+      }
+      this.config.defaultProviders[channel] = candidates[0].id.trim();
+      this.pendingPrompts.set(channel, candidates[candidates.length - 1]);
+      written = true;
+    }
+    return written;
+  }
+
+  /**
+   * Compares every switch's present channels with the last pass (SPEC section 11.2, item 8): with `tick`, a channel
+   * that became present since then is ticked, wherever the change came from (this card, a group card, a provider
+   * card, a restore). A switch seen for the first time (just added, or a copy) keeps its ticks as they are and only
+   * sets its baseline. Returns true when something was ticked.
+   */
+  private syncPresence(tick: boolean): boolean {
+    let ticked = false;
+    for (const s of this.config.switches) {
+      const present = presentChannels(this.config, s);
+      const before = this.presence.get(s);
+      if (before && tick) {
+        for (const channel of present) {
+          if (!before.has(channel) && !s.channels[channel]) {
+            s.channels[channel] = true;
+            if (s.customize && !s.bodies[channel]) {
+              // Under Customize each channel has its own message; a new one starts as a copy of the shared message.
+              s.bodies[channel] = s.body;
+            }
+            ticked = true;
+          }
+        }
+      }
+      this.presence.set(s, new Set(present));
+    }
+    return ticked;
   }
 
   watchCard(card: HTMLElement, item: object): void {
@@ -340,12 +448,17 @@ class Page implements App {
         clear(container);
         renderSwitches(this, container);
       }
-      // The Default provider dropdowns under Settings name providers too. Typing happens in a provider or group
-      // card while this runs, so redrawing Settings never takes focus from the user.
+      // The Default provider dropdowns under Settings name providers too. The redraw keeps every disclosure in the
+      // section (Advanced included) as open or closed as the user left it, and is skipped while a control inside
+      // Settings has focus, so it never pulls the section out from under the user.
       const settings = this.containers.get('settings');
-      if (settings) {
+      if (settings && !settings.contains(document.activeElement)) {
+        const open = [...settings.querySelectorAll('details')].map((details) => details.open);
         clear(settings);
         renderSettings(this, settings);
+        [...settings.querySelectorAll('details')].forEach((details, i) => {
+          details.open = open[i] ?? details.open;
+        });
       }
       this.revalidate();
     }, 400);
@@ -427,10 +540,8 @@ class Page implements App {
       setSaveEnabled(false);
       return;
     }
-    const everything = validate(this.config);
-    // Warnings (a channel without a default provider, SPEC section 11.2, item 25) are listed but never block Save or mark a field.
-    const all = errorsOnly(everything);
-    const warnings = everything.filter((issue) => issue.level === 'warning');
+    const all = validate(this.config);
+    this.syncDefaults(all);
     const { listed, held, fresh } = this.splitIssues(all);
     this.markIssues(all);
     for (const node of this.root.querySelectorAll<ValidationListener>('.ns-on-validate')) {
@@ -449,12 +560,9 @@ class Page implements App {
       link.appendChild(el('strong', {}, `${issue.label}: `));
       link.appendChild(document.createTextNode(issue.message));
       link.setAttribute('data-issue-path', issue.path);
-      return el('li', { class: issue.level === 'warning' ? 'ns-issue-warning' : undefined }, link);
+      return el('li', {}, link);
     };
     for (const issue of byPath.values()) {
-      this.issuesList.appendChild(entry(issue));
-    }
-    for (const issue of warnings) {
       this.issuesList.appendChild(entry(issue));
     }
     const nothingToSave = all.length === 0 && this.config.providers.length === 0 && this.config.groups.length === 0 && this.config.switches.length === 0;
@@ -471,11 +579,6 @@ class Page implements App {
       this.issuesToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       this.issuesBox.className = 'issues alert alert-warning';
       this.issuesBox.setAttribute('role', 'alert');
-    } else if (held.length === 0 && warnings.length > 0) {
-      // Nothing blocks Save; the warnings are worth a look (SPEC section 11.2, item 25).
-      this.issuesHeading.textContent = ISSUES.optional;
-      this.issuesBox.className = 'issues alert alert-warning';
-      this.issuesBox.setAttribute('role', 'status');
     } else if (held.length > 0) {
       // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
       const kinds = [...new Set(held.map((issue) => fresh.find((card) => underPath(issue.path, card.path))?.kind ?? 'card'))];
@@ -488,7 +591,7 @@ class Page implements App {
       this.issuesBox.className = 'issues alert alert-secondary';
       this.issuesBox.setAttribute('role', 'status');
     }
-    this.issuesBox.hidden = all.length === 0 && warnings.length === 0 && !nothingToSave;
+    this.issuesBox.hidden = all.length === 0 && !nothingToSave;
     setSaveEnabled(all.length === 0);
   }
 

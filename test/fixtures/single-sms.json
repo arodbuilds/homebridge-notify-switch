@@ -3,6 +3,8 @@
   "name": "Notify Switch",
   "configVersion": 1,
   "defaultCountry": "US",
+  "timeFormat": "12h",
+  "dateFormat": "mdy",
   "masterSwitch": {
     "enabled": true,
     "name": "Notifications Enabled"

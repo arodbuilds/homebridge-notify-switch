@@ -56,6 +56,17 @@ export const SMTP_PRESETS: readonly SmtpPreset[] = [
   },
 ];
 
+/**
+ * True when `name` is one the UI filled in itself rather than one the user typed (SPEC section 11.2, item 22): the
+ * chooser's "Email", or a preset label, either with or without the numeric suffix a taken name gets ("Gmail 2").
+ * Such a name follows the chosen preset; a hand-typed name is left alone.
+ */
+export function isPrefilledSmtpName(name: string, chooserName: string): boolean {
+  const labels = [chooserName, ...SMTP_PRESETS.map((preset) => preset.label)];
+  const match = /^(.*?)(?: \d+)?$/.exec(name.trim());
+  return match !== null && labels.includes(match[1]);
+}
+
 /** The preset for a stored `smtpPreset` key; undefined for Other, an empty value or an unknown key. */
 export function smtpPreset(key: string): SmtpPreset | undefined {
   return SMTP_PRESETS.find((preset) => preset.key === key);

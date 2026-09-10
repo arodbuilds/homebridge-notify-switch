@@ -4,10 +4,10 @@ import {
   HAP_NAME_PATTERN, MESSAGING_SERVICE_SID_PATTERN, NTFY_MAX_TAGS, NTFY_TAG_PATTERN, NTFY_TOPIC_PATTERN, SLUG_PATTERN, TELEGRAM_CHAT_ID_PATTERN,
   UUID_PATTERN,
 } from '../../src/patterns.js';
-import { CHANNELS } from '../../src/types.js';
+import { CHANNELS, DATE_FORMATS, TIME_FORMATS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
-import { defaultNeeded, providersForChannel, servesChannel } from '../../src/defaults.js';
-import { DEFAULTS, VALIDATION } from './copy.js';
+import { servesChannel } from '../../src/defaults.js';
+import { VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
 import { channelRecipients, channelUnserved, enabledChannels, presentChannels, switchProviderId } from './model.js';
 import type { UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
@@ -22,8 +22,6 @@ export interface UiIssue {
   path: string;
   label: string;
   message: string;
-  /** A warning is listed in the summary box but never disables Save or marks a field (SPEC section 11.2, item 25). */
-  level?: 'warning';
   /**
    * Other fields this check reads (SPEC section 11.2, item 15): a cross-field issue such as "nobody would
    * receive this action" or a duplicate name belongs to every field it references, and it is shown inline
@@ -50,15 +48,6 @@ class Issues {
   add(path: string, label: string, message: string, related?: string[]): void {
     this.list.push(related && related.length > 0 ? { path, label, message, related } : { path, label, message });
   }
-
-  warn(path: string, label: string, message: string): void {
-    this.list.push({ path, label, message, level: 'warning' });
-  }
-}
-
-/** The issues that block Save: everything but warnings. */
-export function errorsOnly(issues: UiIssue[]): UiIssue[] {
-  return issues.filter((issue) => issue.level !== 'warning');
 }
 
 function providerLabel(p: UiProvider, i: number): string {
@@ -425,22 +414,12 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   }
 }
 
-/** The providers whose cards have no error, in configuration order: the ones the default provider rules count. */
+/**
+ * The providers whose cards have no error, in configuration order: the ones the platform default rules count
+ * (SPEC section 5.7). A provider still being filled in is neither written as a default nor offered as one.
+ */
 export function validProviders(config: UiConfig, issues: UiIssue[]): UiProvider[] {
   return config.providers.filter((_, i) => !issues.some((issue) => issue.path === `providers[${i}]` || issue.path.startsWith(`providers[${i}].`)));
-}
-
-/**
- * Platform defaults (SPEC section 5.7): a channel with several validated providers and no default is a warning,
- * never an error. A provider still being filled in does not count, so the warning appears when its prompt does.
- */
-function checkDefaults(issues: Issues, config: UiConfig): void {
-  const providers = validProviders(config, issues.list);
-  for (const channel of CHANNELS) {
-    if (providersForChannel(providers, channel).length > 1 && defaultNeeded(channel, providers, config.defaultProviders)) {
-      issues.warn(`defaultProviders.${channel}`, 'Settings', DEFAULTS.warning(channel));
-    }
-  }
 }
 
 export function validate(config: UiConfig): UiIssue[] {
@@ -449,6 +428,13 @@ export function validate(config: UiConfig): UiIssue[] {
   checkDisplayName(issues, config.name, 'name', 'Settings', 'Platform name');
   if (!isCountry(config.defaultCountry)) {
     issues.add('defaultCountry', 'Settings', 'Default country is not a known country code.');
+  }
+  // Closed enums (SPEC section 5.1): the model already falls back to the defaults, so this only ever fires on a value set by hand.
+  if (!(TIME_FORMATS as readonly string[]).includes(config.timeFormat)) {
+    issues.add('timeFormat', 'Settings', 'Time format must be 12-hour or 24-hour.');
+  }
+  if (!(DATE_FORMATS as readonly string[]).includes(config.dateFormat)) {
+    issues.add('dateFormat', 'Settings', 'Date format must be Month/Day/Year, Day/Month/Year or Year-Month-Day.');
   }
   if (config.masterSwitch.enabled) {
     checkHapName(issues, config.masterSwitch.name, 'masterSwitch.name', 'Settings');
@@ -469,7 +455,6 @@ export function validate(config: UiConfig): UiIssue[] {
   const switchIds = new Set<string>();
   const switchNames = new Map<string, string>();
   config.switches.forEach((s, i) => checkSwitch(issues, config, s, i, switchIds, switchNames));
-
-  checkDefaults(issues, config);
+  // A channel with several providers and no default is not an issue: the page writes the fallback on appearance (SPEC section 5.7).
   return issues.list;
 }

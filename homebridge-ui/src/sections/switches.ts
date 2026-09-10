@@ -4,13 +4,16 @@ import { providersForChannel, resolveDefaultProvider } from '../../../src/defaul
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
-import { helpToggle, variablesToggle } from '../card.js';
-import { CHANNEL_TITLE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import { helpToggle, variablesToggle, variableValues } from '../card.js';
+import type { VariablesToggle, VariableValue } from '../card.js';
+import { CHANNEL_TITLE, DUPLICATE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
   addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
   statusBox, textField, textareaField,
 } from '../dom.js';
-import { channelRecipients, channelUnserved, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels } from '../model.js';
+import {
+  channelRecipients, channelUnserved, duplicateSwitch, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels,
+} from '../model.js';
 import type { UiProvider, UiSwitch } from '../model.js';
 import { smsCounter } from '../sms.js';
 import type { UiIssue } from '../validate.js';
@@ -36,18 +39,22 @@ function providerName(app: App, id: string): string {
   return provider ? providerTitle(provider) : id;
 }
 
-/** A subject or message field with the Variables toggle on its label row and the variable list under the control. */
-function withVariables(field: HTMLElement, box: HTMLElement): HTMLElement {
-  field.querySelector('.form-control')?.insertAdjacentElement('afterend', box);
+/** A subject or message field with the Variables toggle on its label row and the variable list under the control, bound to it. */
+function withVariables(field: HTMLElement, variables: VariablesToggle): HTMLElement {
+  const control = field.querySelector<HTMLInputElement | HTMLTextAreaElement>('.form-control');
+  if (control) {
+    control.insertAdjacentElement('afterend', variables.box);
+    variables.bind(control);
+  }
   return field;
 }
 
 /** A message textarea for one channel, or the shared one, with the SMS counter under it when it carries SMS. */
 function bodyField(
-  label: string, value: string, sms: boolean, path: string, onChange: (value: string) => void,
+  label: string, value: string, sms: boolean, path: string, values: () => VariableValue[], onChange: (value: string) => void,
 ): { el: HTMLElement; setSms(sms: boolean): void } {
   const counter = smsCounter();
-  const variables = variablesToggle();
+  const variables = variablesToggle(values);
   const field = textareaField(label, value, (next) => {
     counter.update(next);
     onChange(next);
@@ -55,7 +62,7 @@ function bodyField(
     path, required: true, rows: 3, help: sms ? SWITCH_HELP.bodySms : SWITCH_HELP.bodyOther, labelExtra: variables.extra,
     placeholder: sms ? SWITCH_HELP.bodySmsPlaceholder : SWITCH_HELP.bodyOtherPlaceholder,
   });
-  withVariables(field, variables.box);
+  withVariables(field, variables);
   counter.update(value);
   field.querySelector('textarea')?.insertAdjacentElement('afterend', counter.el);
   const help = field.querySelector<HTMLElement>(':scope > .ns-help');
@@ -193,16 +200,9 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   if (groups.length === 0) {
     groupBox.appendChild(el('div', { class: 'form-text' }, SWITCH_EDITOR.noGroups));
   }
-  /** A channel that just became reachable is ticked by default (SPEC section 11.2, item 8). */
-  const enableNewChannels = (before: Channel[]): void => {
-    for (const channel of presentChannels(app.config, s)) {
-      if (!before.includes(channel)) {
-        s.channels[channel] = true;
-      }
-    }
-  };
+  // A channel that becomes present is ticked by the page, not here, so the rule holds whichever card was edited
+  // (SPEC section 11.2, item 8): `app.changed()` compares before and after, and `refresh()` then redraws Send by.
   const toggleGroup = (id: string, checked: boolean): void => {
-    const before = presentChannels(app.config, s);
     if (checked) {
       if (!s.groups.includes(id)) {
         s.groups.push(id);
@@ -210,7 +210,6 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     } else {
       s.groups = s.groups.filter((v) => v !== id);
     }
-    enableNewChannels(before);
     app.changed();
     refresh();
   };
@@ -241,8 +240,6 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     const list = addressList({
       channel, values: s.recipients[channel], defaultCountry: app.config.defaultCountry, path: `${path}.recipients.${channel}`,
       onChange: () => {
-        const before = presentChannels(app.config, s);
-        enableNewChannels(before);
         app.changed();
         refresh();
       },
@@ -309,7 +306,9 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
 
   // ---- Message ---------------------------------------------------------------------------------------------
   const name = s.name.trim();
-  const subjectVariables = variablesToggle();
+  // The Variables lists show what each variable renders right now (SPEC section 11.2, item 17), read when a list opens.
+  const values = (): VariableValue[] => variableValues(app.config, s);
+  const subjectVariables = variablesToggle(values);
   const subjectField = withVariables(textField(SWITCH_EDITOR.subjectLabel, s.subject, (value) => {
     s.subject = value;
     if (!s.customize) {
@@ -321,8 +320,8 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   }, {
     path: `${path}.subject`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
     help: SWITCH_EDITOR.subjectHelp, labelExtra: subjectVariables.extra,
-  }), subjectVariables.box);
-  const sharedBody = bodyField(SWITCH_EDITOR.messageLabel, s.body, s.channels.sms, `${path}.body`, (value) => {
+  }), subjectVariables);
+  const sharedBody = bodyField(SWITCH_EDITOR.messageLabel, s.body, s.channels.sms, `${path}.body`, values, (value) => {
     s.body = value;
     if (!s.customize) {
       for (const channel of CHANNELS) {
@@ -342,16 +341,16 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     const block = el('div', { class: 'ns-channel-message', 'data-channel': channel });
     const subjectLabel = SWITCH_EDITOR.channelSubject[channel];
     if (subjectLabel) {
-      const variables = variablesToggle();
+      const variables = variablesToggle(values);
       block.appendChild(withVariables(textField(subjectLabel, s.subjects[channel], (value) => {
         s.subjects[channel] = value;
         app.changed();
       }, {
         path: `${path}.subjects.${channel}`, placeholder: name ? `Defaults to the switch name: ${name}` : 'Defaults to the switch name',
         help: channel === 'ntfy' ? NTFY_HELP.title : SWITCH_HELP.subject, labelExtra: variables.extra,
-      }), variables.box));
+      }), variables));
     }
-    block.appendChild(bodyField(SWITCH_EDITOR.channelBody[channel], s.bodies[channel], channel === 'sms', `${path}.bodies.${channel}`, (value) => {
+    block.appendChild(bodyField(SWITCH_EDITOR.channelBody[channel], s.bodies[channel], channel === 'sms', `${path}.bodies.${channel}`, values, (value) => {
       s.bodies[channel] = value;
       app.changed();
     }).el);
@@ -544,9 +543,22 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     },
   });
 
+  // Duplicate switch (SPEC section 11.2, item 11): a copy directly below this card, treated like a switch added with Add
+  // switch (fresh, so it shows no errors until touched); its Name field takes focus and the card scrolls into view.
+  const duplicate = linkButton(DUPLICATE.switch, () => {
+    const copy = duplicateSwitch(s, app.config.switches);
+    app.config.switches.splice(index + 1, 0, copy);
+    app.addFresh(copy);
+    app.rerender('switches');
+    // The section was redrawn, so the copy's card is looked up in the document, not in this card's (replaced) host.
+    const nameInput = document.querySelector<HTMLInputElement>(`[data-path="switches[${index + 1}].name"] input`);
+    nameInput?.closest('.card')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    nameInput?.focus({ preventScroll: true });
+  }, 'ns-duplicate');
+
   card.appendChild(header);
   card.appendChild(body);
-  card.appendChild(cardFooter(remove, testSend.control));
+  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   card.appendChild(testSend.results);
   app.watchCard(card, s);
   return card;

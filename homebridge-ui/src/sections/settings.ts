@@ -2,15 +2,16 @@ import { CHANNELS } from '../../../src/types.js';
 import { providersForChannel, resolveDefaultProvider } from '../../../src/defaults.js';
 import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
-import { BACKUP, DEFAULTS, PROVIDER_TYPE_LABEL } from '../copy.js';
-import { button, checkboxField, clear, dangerLinkButton, el, openModal, selectField, textField } from '../dom.js';
+import type { DateFormat, TimeFormat } from '../../../src/types.js';
+import { BACKUP, DEFAULTS, FORMAT_SETTINGS, PROVIDER_TYPE_LABEL } from '../copy.js';
+import { button, checkboxField, clear, dangerLinkButton, el, helpText, openModal, selectField, textField } from '../dom.js';
 import {
   backupBlock, blockWithoutCredentials, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, legacySwitches, MAX_BACKUP_BYTES,
   readConfig,
 } from '../model.js';
 import type { UiConfig } from '../model.js';
 import { countryOptions } from '../phone.js';
-import { errorsOnly, validate } from '../validate.js';
+import { validate } from '../validate.js';
 import { providerTitle } from './providers.js';
 
 /** `notify-switch-backup-YYYY-MM-DD.json` for today, in local time; `-without-credentials` before the date for the shareable version. */
@@ -82,7 +83,7 @@ export function checkBackup(text: string): { config?: UiConfig; errors: string[]
   delete block.credentialsRemoved;
   const config = readConfig(block);
   const emptied = withoutCredentials ? emptySecretPaths(config) : [];
-  const issues = errorsOnly(validate(config)).filter((issue) => !emptied.includes(issue.path));
+  const issues = validate(config).filter((issue) => !emptied.includes(issue.path));
   if (issues.length > 0) {
     return { errors: issues.map((issue) => `${issue.label}: ${issue.message}`), emptied: [] };
   }
@@ -202,6 +203,20 @@ export function renderSettings(app: App, container: HTMLElement): void {
       app.changed();
     }, { path: 'defaultCountry', help: 'Phone numbers entered without a country code are treated as numbers from this country.' })),
   ));
+  // Time and date formats (SPEC section 5.1): two dropdowns directly below Default Country with one help line under the pair.
+  container.appendChild(el('div', { class: 'ns-format-settings mb-3' },
+    el('div', { class: 'ns-grid' },
+      el('div', { class: 'ns-span-6' }, selectField(FORMAT_SETTINGS.timeLabel, c.timeFormat, FORMAT_SETTINGS.timeOptions, (value) => {
+        c.timeFormat = value as TimeFormat;
+        app.changed();
+      }, { path: 'timeFormat' })),
+      el('div', { class: 'ns-span-6' }, selectField(FORMAT_SETTINGS.dateLabel, c.dateFormat, FORMAT_SETTINGS.dateOptions, (value) => {
+        c.dateFormat = value as DateFormat;
+        app.changed();
+      }, { path: 'dateFormat' })),
+    ),
+    helpText(FORMAT_SETTINGS.help, undefined, 'ns-format-help'),
+  ));
   const nameField = textField('Master switch name', c.masterSwitch.name, (value) => {
     c.masterSwitch.name = value;
     app.changed();
@@ -226,16 +241,16 @@ export function renderSettings(app: App, container: HTMLElement): void {
       continue;
     }
     const resolution = resolveDefaultProvider(channel, c.providers, c.defaultProviders);
-    const field = selectField(DEFAULTS.settingsLabel(channel), resolution.source === 'stored' ? resolution.id ?? '' : '', [
-      { value: '', label: DEFAULTS.settingsPlaceholder },
+    // The written value (SPEC section 11.2, item 25). The placeholder shows only while nothing is written yet (the
+    // second provider is still being filled in) and cannot be chosen: the page writes the fallback once it validates.
+    const stored = resolution.source === 'stored' ? resolution.id ?? '' : '';
+    const field = selectField(DEFAULTS.settingsLabel(channel), stored, [
+      ...(stored ? [] : [{ value: '', label: DEFAULTS.settingsPlaceholder, disabled: true }]),
       ...candidates.map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
     ], (value) => {
       if (value) {
-        c.defaultProviders[channel] = value;
-      } else {
-        delete c.defaultProviders[channel];
+        app.chooseDefault(channel, value);
       }
-      app.changed(true);
     }, { path: `defaultProviders.${channel}`, help: DEFAULTS.settingsHelp(channel) });
     field.setAttribute('data-channel', channel);
     defaults.appendChild(el('div', { class: 'ns-span-6' }, field));

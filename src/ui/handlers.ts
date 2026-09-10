@@ -147,14 +147,14 @@ export async function testSend(rawConfig: unknown, switchId: unknown, options: H
     }
     const result = await validateConfig(rawConfig, silentLogger(), { storagePath: options.storagePath });
     const errors = result.issues.filter((issue) => issue.level === 'error').map(formatIssue);
-    if (!result.switches || !result.providers) {
+    if (!result.config || !result.switches || !result.providers) {
       return { ok: false, message: 'The configuration has errors. Fix them before testing.', errors };
     }
     const sw = result.switches.find((entry) => entry.id === switchId.toLowerCase());
     if (!sw) {
       return { ok: false, message: 'That switch is not in the current configuration.', errors };
     }
-    const vars = buildTemplateVariables(sw.name);
+    const vars = buildTemplateVariables(sw.name, { timeFormat: result.config.timeFormat, dateFormat: result.config.dateFormat });
     const actions: TestSendActionResult[] = [];
     for (const action of sw.actions) {
       const results = await sendAction(action, result.providers.get(action.providerId), renderAction(action, vars));

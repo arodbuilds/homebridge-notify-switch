@@ -1,4 +1,4 @@
-import type { Channel, NtfyAuth, NtfyPriority, ProviderType } from '../../src/types.js';
+import type { Channel, DateFormat, NtfyAuth, NtfyPriority, ProviderType, TimeFormat } from '../../src/types.js';
 
 /**
  * In-app copy, verbatim from SPEC section 11.3. Field help is one sentence; anything longer is a
@@ -233,12 +233,34 @@ export const LEGACY = {
 
 /** Platform defaults per channel (SPEC section 5.7 and section 11.2, item 25). */
 export const DEFAULTS = {
-  prompt: (n: number, channel: Channel): string => `You now have ${n} ways to send ${CHANNEL_WORD[channel]}. Which should switches use unless told otherwise?`,
+  /** {defaultName} is the display name (else id) of the provider currently written as the default. */
+  prompt: (n: number, channel: Channel, defaultName: string): string =>
+    `You now have ${n} ways to send ${CHANNEL_WORD[channel]}. Switches use ${defaultName} unless told otherwise. Which should they use?`,
   confirm: 'Use the selected provider',
-  warning: (channel: Channel): string => `Choose a default ${CHANNEL_WORD[channel]} provider`,
+  keep: (defaultName: string): string => `Keep ${defaultName}`,
+  /** Card header, on the channel's default while more than one provider serves it. */
+  badge: (channel: Channel): string => `Default for ${CHANNEL_WORD[channel]}`,
+  /** Card header, on a provider that serves such a channel but is not its default. */
+  makeDefault: (channel: Channel): string => `Make default for ${CHANNEL_WORD[channel]}`,
   settingsLabel: (channel: Channel): string => `Default ${CHANNEL_WORD[channel]} provider`,
   settingsHelp: (channel: Channel): string => `Switches send ${CHANNEL_WORD[channel]} through this provider unless a switch says otherwise under Advanced.`,
   settingsPlaceholder: 'Choose a provider…',
+};
+
+/** Time and date format settings (SPEC section 5.1 and section 11.3), under Default Country in the Settings section. */
+export const FORMAT_SETTINGS = {
+  timeLabel: 'Time format',
+  timeOptions: [
+    { value: '12h', label: '12-hour (5:15 PM)' },
+    { value: '24h', label: '24-hour (17:15)' },
+  ] as Array<{ value: TimeFormat; label: string }>,
+  dateLabel: 'Date format',
+  dateOptions: [
+    { value: 'mdy', label: 'Month/Day/Year (9/8/2026)' },
+    { value: 'dmy', label: 'Day/Month/Year (8/9/2026)' },
+    { value: 'ymd', label: 'Year-Month-Day (2026-09-08)' },
+  ] as Array<{ value: DateFormat; label: string }>,
+  help: 'Used by {{time}}, {{date}} and {{datetime}} in messages.',
 };
 
 export const SWITCH_HELP = {
@@ -262,12 +284,11 @@ export const VARIABLES = {
   show: 'Show variables',
   hide: 'Hide variables',
   intro: 'Type these anywhere in the message or subject:',
-  items: [
-    ['{{switchName}}', 'the switch name'],
-    ['{{time}}', 'the time, such as 14:05'],
-    ['{{date}}', 'the date, such as 2026-09-07'],
-    ['{{datetime}}', 'date and time together'],
-  ],
+  /** Shown as the {{switchName}} value while the switch has no name yet. */
+  switchNamePlaceholder: 'Switch name',
+  insertHelp: 'Click a variable to insert it at the cursor.',
+  /** Accessible name of each insert button; the visible text is the token itself. */
+  insertLabel: (token: string): string => `Insert ${token}`,
   link: { text: 'More about variables', href: 'https://github.com/arodbuilds/homebridge-notify-switch#template-variables' } as HelpLink,
 };
 
@@ -313,12 +334,16 @@ export const VALIDATION = {
 /** The "Fix these before saving" box (SPEC section 11.2, item 15): a link per field, collapsed to a count past three entries. */
 export const ISSUES = {
   heading: 'Fix these before saving:',
-  /** The box heading while only warnings remain: Save is enabled (SPEC section 11.2, item 25). */
-  optional: 'Optional before saving:',
   count: (n: number): string => `${n} field${n === 1 ? '' : 's'} need${n === 1 ? 's' : ''} attention`,
   showAll: 'Show all',
   hide: 'Hide',
   collapseAfter: 3,
+};
+
+/** The Duplicate text buttons beside Remove on switch and group card footers (SPEC section 11.2, item 11). */
+export const DUPLICATE = {
+  switch: 'Duplicate switch',
+  group: 'Duplicate group',
 };
 
 /** In-place Remove confirmation on card footers (SPEC section 11.2, item 11). */

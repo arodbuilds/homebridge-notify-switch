@@ -1,5 +1,7 @@
+import { formatDate, formatDateTime, formatTime } from '../../src/template.js';
 import { HELP_TOGGLE, ID_FIELD, TELEGRAM_ONBOARDING, VARIABLES } from './copy.js';
-import { copyButton, el, helpLink, helpText, linkButton, linkOut, uniqueId } from './dom.js';
+import { clear, copyButton, el, helpLink, helpText, linkButton, linkOut, uniqueId } from './dom.js';
+import type { UiConfig, UiSwitch } from './model.js';
 import { qrElement } from './qr.js';
 
 /**
@@ -73,15 +75,85 @@ export function idField(opts: IdFieldOptions): HTMLElement {
   );
 }
 
+/** A template variable as the list shows it: the token and the value it would render right now. */
+export type VariableValue = [token: string, value: string];
+
+/**
+ * What each variable would render at this moment (SPEC section 11.2, item 17): the switch's current name (or
+ * "Switch name" while it is empty) and the time, date and both together in the platform's current Time format and
+ * Date format settings, so the list doubles as a preview of those settings.
+ */
+export function variableValues(config: UiConfig, s: UiSwitch): VariableValue[] {
+  const now = new Date();
+  const formats = { timeFormat: config.timeFormat, dateFormat: config.dateFormat };
+  return [
+    ['{{switchName}}', s.name.trim() || VARIABLES.switchNamePlaceholder],
+    ['{{time}}', formatTime(now, config.timeFormat)],
+    ['{{date}}', formatDate(now, config.dateFormat)],
+    ['{{datetime}}', formatDateTime(now, formats)],
+  ];
+}
+
+/** A control the variable list can insert into: a text input or a textarea. */
+type TextControl = HTMLInputElement | HTMLTextAreaElement;
+
+/**
+ * Inserts `token` at the caret of `control` (replacing any selection), puts the caret after it, returns focus to the
+ * control and fires `input`, so the field's own handler runs exactly as it does for typing.
+ */
+function insertAtCaret(control: TextControl, token: string): void {
+  const value = control.value;
+  const start = control.selectionStart ?? value.length;
+  const end = control.selectionEnd ?? start;
+  control.value = `${value.slice(0, start)}${token}${value.slice(end)}`;
+  control.focus();
+  const caret = start + token.length;
+  try {
+    control.setSelectionRange(caret, caret);
+  } catch {
+    // An input type without a selection API; the value is set all the same.
+  }
+  control.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+export interface VariablesToggle {
+  /** The link-styled toggle for the field's label row. */
+  extra: HTMLElement;
+  /** The variable list, inserted after the field's control. */
+  box: HTMLElement;
+  /** Ties the list to the control it inserts into; called once the field exists. */
+  bind(control: TextControl): void;
+}
+
 /**
  * The "Show variables" / "Hide variables" toggle placed on a message or subject field's label row (SPEC
  * section 11.2, item 17): a link-styled button with a chevron that turns when the list is open. `extra`
- * goes into the field's `labelExtra`; `box` is inserted after the control and lists the template variables.
+ * goes into the field's `labelExtra`; `box` is inserted after the control and lists the template variables,
+ * each a real button showing the token with the value it would render right now beside it. Clicking one
+ * inserts the token at the field's caret. `values` is read every time the list opens, so the values are current.
  */
-export function variablesToggle(): { extra: HTMLElement; box: HTMLElement } {
+export function variablesToggle(values: () => VariableValue[]): VariablesToggle {
+  let control: TextControl | undefined;
+  const list = el('ul', { class: 'mb-1 ps-3 ns-variable-list' });
+  const render = (): void => {
+    clear(list);
+    for (const [token, value] of values()) {
+      const insert = linkButton('', () => {
+        if (control) {
+          insertAtCaret(control, token);
+        }
+      }, 'ns-variable');
+      insert.appendChild(el('code', {}, token));
+      insert.setAttribute('data-token', token);
+      insert.setAttribute('aria-label', VARIABLES.insertLabel(token));
+      // The value is inserted as text; a switch name can never become markup.
+      list.appendChild(el('li', {}, insert, ' ', el('span', { class: 'ns-secondary ns-variable-value' }, value)));
+    }
+  };
   const box = el('div', { class: 'ns-variables form-text', hidden: true },
     el('div', {}, VARIABLES.intro),
-    el('ul', { class: 'mb-1 ps-3' }, ...VARIABLES.items.map(([token, meaning]) => el('li', {}, el('code', {}, token), ` ${meaning}`))),
+    list,
+    el('div', { class: 'ns-variables-help' }, VARIABLES.insertHelp),
     helpLink(VARIABLES.link),
   );
   const chevron = el('span', { class: 'ns-chevron', 'aria-hidden': 'true' });
@@ -89,6 +161,9 @@ export function variablesToggle(): { extra: HTMLElement; box: HTMLElement } {
   const extra = linkButton('', () => {
     box.hidden = !box.hidden;
     const open = !box.hidden;
+    if (open) {
+      render();
+    }
     extra.setAttribute('aria-expanded', open ? 'true' : 'false');
     extra.classList.toggle('ns-open', open);
     label.textContent = open ? VARIABLES.hide : VARIABLES.show;
@@ -96,7 +171,11 @@ export function variablesToggle(): { extra: HTMLElement; box: HTMLElement } {
   extra.appendChild(chevron);
   extra.appendChild(label);
   extra.setAttribute('aria-expanded', 'false');
-  return { extra, box };
+  return {
+    extra, box, bind: (target) => {
+      control = target;
+    },
+  };
 }
 
 /**
