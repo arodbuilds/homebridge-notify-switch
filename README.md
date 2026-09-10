@@ -261,7 +261,7 @@ A group is a named list of people. Each group has four lists: `sms` (phone numbe
 
 Provider and group names may hold letters, numbers, spaces, and punctuation, up to 64 characters; control characters and angle brackets are not allowed. The settings UI enforces this, and a name in `config.json` that breaks the rule is reported as a startup warning naming the field.
 
-Group and provider IDs are short slugs generated from the name (`family`, `twilio`, with a numeric suffix such as `twilio-2` when the name is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
+A provider the settings UI names for you (`Twilio`, `Email`, or the mail provider's name once you pick a preset: `Gmail`, `Fastmail`) gets a numeric suffix when the name is taken (`Twilio 2`); a name you typed yourself is never changed. Group and provider IDs are short slugs generated from the name (`family`, `twilio`, `twilio-2` for `Twilio 2`, with a numeric suffix of their own when the id alone is taken). They are how switches refer to groups and providers in `config.json`, so renaming a group in the UI does not break the switches that use it. The settings UI keeps them out of the main form; open a card's **Advanced** disclosure and click **Edit** next to the ID if you hand-edit `config.json` and need a particular value.
 
 ## Switches
 

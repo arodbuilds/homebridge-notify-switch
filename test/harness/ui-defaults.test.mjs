@@ -76,8 +76,8 @@ test('defaults: the entry is written when the second provider validates; the pro
     assert.deepEqual(config.defaultProviders, { email: 'twilio-main' });
     assert.equal(config.switches[0].actions[1].providerId, 'twilio-main');
     await page.waitForFunction(() => document.querySelector('#section-settings [data-path="defaultProviders.email"] select')?.value === 'twilio-main');
-    assert.deepEqual(await page.locator('#section-settings [data-path="defaultProviders.email"] option').allTextContents(), ['Twilio (Twilio)', 'Email (SMTP)'],
-      'the placeholder goes once the entry is written');
+    assert.deepEqual(await page.locator('#section-settings [data-path="defaultProviders.email"] option').allTextContents(),
+      ['Twilio (Twilio)', 'Fastmail (SMTP)'], 'the placeholder goes once the entry is written; the preset renamed the provider (SPEC section 11.2, item 22)');
     // No warning, no "Optional before saving:" box: nothing is left to fix or choose.
     await page.waitForFunction(() => window.__hb.save.at(-1) === true);
     assert.equal(await page.locator('.issues').isVisible(), false);
@@ -93,7 +93,7 @@ test('defaults: the entry is written when the second provider validates; the pro
     }), true, 'the prompt box is the last thing in the body and the footer follows');
     assert.equal(await prompt.locator('.ns-default-question').textContent(),
       'You now have 2 ways to send email. Switches use Twilio unless told otherwise. Which should they use?');
-    assert.deepEqual(await prompt.locator('.form-check-label').allTextContents(), ['Twilio Twilio', 'Email SMTP']);
+    assert.deepEqual(await prompt.locator('.form-check-label').allTextContents(), ['Twilio Twilio', 'Fastmail SMTP']);
     assert.deepEqual(await prompt.locator('input[type="radio"]').evaluateAll((nodes) => nodes.map((node) => node.checked)), [false, true],
       'the card\'s own provider is preselected');
     const buttons = prompt.locator('button');
@@ -115,11 +115,11 @@ test('defaults: the entry is written when the second provider validates; the pro
     // Use the selected provider writes the selection and closes the prompt; the switch follows the default.
     await buttons.nth(0).click();
     assert.equal(await page.locator('.ns-default-prompt').count(), 0);
-    config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.email === 'email');
-    assert.deepEqual(config.defaultProviders, { email: 'email' });
-    assert.equal(config.switches[0].actions[1].providerId, 'email', 'a switch that never named a provider follows the default');
-    assert.equal(await page.locator('#section-settings [data-path="defaultProviders.email"] select').inputValue(), 'email');
-    await page.waitForFunction(() => document.querySelector('[data-path="switches[0].providers.email"] option')?.textContent === 'Platform default (Email)');
+    config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.email === 'fastmail');
+    assert.deepEqual(config.defaultProviders, { email: 'fastmail' });
+    assert.equal(config.switches[0].actions[1].providerId, 'fastmail', 'a switch that never named a provider follows the default');
+    assert.equal(await page.locator('#section-settings [data-path="defaultProviders.email"] select').inputValue(), 'fastmail');
+    await page.waitForFunction(() => document.querySelector('[data-path="switches[0].providers.email"] option')?.textContent === 'Platform default (Fastmail)');
     assert.deepEqual(await headerDefaults(page, 0), [['button', 'email', 'Make default for email']]);
     assert.deepEqual(await headerDefaults(page, 1), [['badge', 'email', 'Default for email']]);
 
@@ -132,9 +132,9 @@ test('defaults: the entry is written when the second provider validates; the pro
     assert.equal(await page.locator('.ns-default-prompt').count(), 0, 'no prompt comes back for a written entry');
 
     // The dropdown under Settings changes it too.
-    await page.locator('#section-settings [data-path="defaultProviders.email"] select').selectOption('email');
-    config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.email === 'email');
-    assert.equal(config.switches[0].actions[1].providerId, 'email');
+    await page.locator('#section-settings [data-path="defaultProviders.email"] select').selectOption('fastmail');
+    config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.email === 'fastmail');
+    assert.equal(config.switches[0].actions[1].providerId, 'fastmail');
 
     // Removing the default provider with one left: the remaining one is the default and nothing is stored.
     await page.locator('.card[data-path="providers[1]"]').getByRole('button', { name: 'Remove provider' }).click();

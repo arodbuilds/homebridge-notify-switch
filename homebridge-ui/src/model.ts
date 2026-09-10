@@ -717,11 +717,33 @@ export function uniqueSlug(name: string, taken: Iterable<string>, fallback: stri
   }
 }
 
-/** A provider created from the chooser: type fixed, name prefilled, id generated from the name (SPEC section 11.2, item 13). */
+/**
+ * `name`, or `name 2`, `name 3` when another item already uses it (SPEC section 11.2, items 13 and 22), within the display
+ * name cap. Used for the names the UI fills in itself: the chooser's provider names and the SMTP preset labels.
+ */
+export function uniqueName(name: string, taken: Iterable<string>): string {
+  const used = new Set(Array.from(taken, (other) => other.trim()));
+  const base = name.trim();
+  if (!used.has(base)) {
+    return base;
+  }
+  for (let n = 2; ; n += 1) {
+    const suffix = ` ${n}`;
+    const candidate = `${base.slice(0, DISPLAY_NAME_MAX_LENGTH - suffix.length).trimEnd()}${suffix}`;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
+ * A provider created from the chooser: type fixed, the name prefilled (with a numeric suffix when another provider
+ * already uses it: "Twilio 2"), the id generated from that name (SPEC section 11.2, item 13).
+ */
 export function createProvider(type: ProviderType, name: string, existing: UiProvider[]): UiProvider {
   const p = newProvider(type);
-  p.name = name;
-  p.id = uniqueSlug(name, existing.map((other) => other.id), type);
+  p.name = uniqueName(name, existing.map((other) => other.name));
+  p.id = uniqueSlug(p.name, existing.map((other) => other.id), type);
   return p;
 }
 

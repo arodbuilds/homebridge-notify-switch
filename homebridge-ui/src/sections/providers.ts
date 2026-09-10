@@ -14,10 +14,10 @@ import {
   button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpLink, helpText, inlineConfirm, linkButton, linkOut, numberField,
   openModal, outlineButton, paragraph, passwordField, selectField, setHelp, statusBox, textField, uniqueId,
 } from '../dom.js';
-import { createProvider, exportProvider, slugify, uniqueSlug } from '../model.js';
+import { createProvider, exportProvider, slugify, uniqueName, uniqueSlug } from '../model.js';
 import type { UiProvider } from '../model.js';
 import { qrElement } from '../qr.js';
-import { OTHER_PRESET_KEY, OTHER_PRESET_LABEL, SMTP_PRESETS, smtpPreset } from '../smtpPresets.js';
+import { isPrefilledSmtpName, OTHER_PRESET_KEY, OTHER_PRESET_LABEL, SMTP_PRESETS, smtpPreset } from '../smtpPresets.js';
 import { validProviders } from '../validate.js';
 import type { UiIssue } from '../validate.js';
 import { groupTitle } from './groups.js';
@@ -353,7 +353,7 @@ function presetPicker(p: UiProvider, path: string, onChoose: (key: string) => vo
   );
 }
 
-function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
+function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement, setName: (name: string) => void): void {
   // Server settings, locked while a preset is chosen; Edit on the Host label row unlocks them.
   let unlock: () => void = () => undefined;
   const edit = linkButton(SMTP_HELP.edit, () => unlock(), 'ns-server-edit');
@@ -414,6 +414,12 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
       server.host.value = preset.host;
       server.port.value = String(preset.port);
       server.security.value = preset.security;
+    }
+    // A name the UI filled in (the chooser's "Email", or an earlier preset's label) follows the preset: Fastmail, Gmail,
+    // ...; Other goes back to "Email". A hand-typed name is left alone (SPEC section 11.2, item 22).
+    if (isPrefilledSmtpName(p.name, PROVIDER_CHOOSER.smtp.name)) {
+      const others = app.config.providers.filter((other) => other !== p).map((other) => other.name);
+      setName(uniqueName(preset ? preset.label : PROVIDER_CHOOSER.smtp.name, others));
     }
     applyPreset(key);
     app.changed();
@@ -779,7 +785,8 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   });
   const idInput = id.querySelector('input') as HTMLInputElement;
 
-  body.appendChild(textField('Name', p.name, (value) => {
+  // The name as typed, or as an SMTP preset sets it (SPEC section 11.2, item 22); the id follows it while it may (item 14).
+  const applyName = (value: string): void => {
     p.name = value;
     title.textContent = providerTitle(p);
     if (idFollowsName) {
@@ -789,14 +796,22 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
       idInput.value = p.id;
     }
     app.changed(true);
-  }, { path: `${path}.name`, required: true, placeholder: `e.g. ${PROVIDER_CHOOSER[p.type].name}`, help: PROVIDER_NAME_HELP }));
+  };
+  const nameField = textField('Name', p.name, applyName, {
+    path: `${path}.name`, required: true, placeholder: `e.g. ${PROVIDER_CHOOSER[p.type].name}`, help: PROVIDER_NAME_HELP,
+  });
+  const nameInput = nameField.querySelector('input') as HTMLInputElement;
+  body.appendChild(nameField);
 
   switch (p.type) {
   case 'twilio':
     twilioFields(app, p, path, body, id);
     break;
   case 'smtp':
-    smtpFields(app, p, path, body, id);
+    smtpFields(app, p, path, body, id, (value) => {
+      nameInput.value = value;
+      applyName(value);
+    });
     break;
   case 'telegram':
     telegramFields(app, p, path, body, id);
