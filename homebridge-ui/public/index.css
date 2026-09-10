@@ -505,9 +505,16 @@ mark.sms-bad {
   }
 }
 
-.ns-server-locked .form-control[readonly],
-.ns-server-locked .form-select:disabled {
+/* Read-only, locked and disabled controls (SPEC section 11.2, item 18): the ID field under Advanced, the Host, Port
+   and Security fields locked by a mail provider preset, and every other read-only or disabled input, select and
+   textarea (the whole page while the upgrade notice shows). One rule for all of them: the theme's secondary
+   background (re-declared for dark mode above) behind the surrounding text colour, which the host sets for its
+   theme, so a locked field is never a light box with dark text on a dark page, nor dark text on a dark box. */
+.notify-switch-ui .form-control[readonly],
+.notify-switch-ui .form-control:disabled,
+.notify-switch-ui .form-select:disabled {
   background-color: var(--bs-secondary-bg, rgba(128, 128, 128, 0.12));
+  color: inherit;
   opacity: 1;
 }
 

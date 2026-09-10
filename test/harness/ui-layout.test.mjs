@@ -29,7 +29,7 @@ const CONFIG = {
   defaultCountry: 'US',
   masterSwitch: { enabled: true, name: 'Notifications Enabled' },
   defaultProviders: { email: 'fastmail' },
-  providers: [TWILIO, { ...SMTP, credentialsFile: 'smtp.json' }, TELEGRAM],
+  providers: [TWILIO, { ...SMTP, credentialsFile: 'smtp.json', smtpPreset: 'fastmail' }, TELEGRAM],
   groups: [{ id: 'family', name: 'Family', sms: ['+16785550101', '+16785550102'], email: ['a@example.com'], telegram: ['123456789'] }],
   switches: [{
     id: '6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b',
@@ -184,6 +184,25 @@ function effectiveContrast(entry) {
     background = composite(parseColor(layer), background);
   }
   return contrastRatio(composite(parseColor(entry.color), background), background);
+}
+
+/**
+ * Every read-only, locked or disabled input, select and textarea on the page (SPEC section 11.2, item 18), with every
+ * disclosure open so the ID fields render: its text colour, its own background, and the page background.
+ */
+async function lockedControls(page) {
+  return page.evaluate(() => {
+    for (const details of document.querySelectorAll('details')) {
+      details.open = true;
+    }
+    return [...document.querySelectorAll('input, select, textarea')]
+      .filter((node) => (node.readOnly || node.disabled) && node.checkVisibility() && node.type !== 'checkbox' && node.type !== 'radio')
+      .map((node) => ({
+        selector: `${node.closest('[data-path]')?.dataset.path ?? node.className} (${node.readOnly ? 'read-only' : 'disabled'})`,
+        color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor,
+        pageBackground: getComputedStyle(document.body).backgroundColor,
+      }));
+  });
 }
 
 /** One help element per card type, plus the disclosure label, the QR caption, a help link, the section intro and the footer. */
@@ -510,6 +529,25 @@ test('settings UI theme: secondary text meets WCAG AA contrast in dark mode and 
         // Dark mode is really dark: the page background is darker than the text.
         const body = parseColor(entries[0].pageBackground).rgb;
         assert.equal(luminance(body) < 0.5, dark, `page background ${entries[0].pageBackground} matches the theme`);
+        // Read-only, locked and disabled controls (SPEC section 11.2, item 18): the ID fields, the locked SMTP server fields.
+        const locked = await lockedControls(page);
+        if (config === CONFIG) {
+          const names = locked.map((entry) => entry.selector);
+          const expectedLocked = [
+            'providers[1].host (read-only)', 'providers[1].port (read-only)', 'providers[1].security (disabled)', 'providers[0].id (read-only)',
+            'groups[0].id (read-only)',
+          ];
+          for (const expected of expectedLocked) {
+            assert.ok(names.includes(expected), `${expected} is among the locked controls: ${names.join(', ')}`);
+          }
+        }
+        for (const entry of locked) {
+          const background = composite(parseColor(entry.background), body);
+          const ratio = contrastRatio(composite(parseColor(entry.color), background), background);
+          assert.ok(ratio >= 4.5,
+            `${dark ? 'dark' : 'light'} mode: ${entry.selector} has contrast ${ratio.toFixed(2)}:1 (${entry.color} on ${entry.background})`);
+          assert.equal(luminance(background) < 0.5, dark, `${dark ? 'dark' : 'light'} mode: ${entry.selector} draws on a ${entry.background} box`);
+        }
         if (config === EMPTY_CONFIG) {
           // Nothing on the empty page is clipped or overflows on a phone either.
           await page.setViewportSize({ width: 360, height: 800 });

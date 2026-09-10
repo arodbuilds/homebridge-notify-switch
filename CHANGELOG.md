@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Dark mode: locked and read-only fields are readable.** The Host, Port and Security fields locked by a mail provider preset, and the ID field of that card, drew dark text on a dark background in dark mode (1.3:1); the other ID fields drew a white box with dark text. Every read-only, locked or disabled input, select and textarea now takes the theme's secondary background behind the surrounding text colour, in one stylesheet rule, so it reads in both themes (SPEC section 11.2, item 18).
 - **Send by now ticks a channel that becomes present whatever card you edited.** Giving a group its first ntfy topic (or email address, or chat ID) on the group card, or adding a provider for a channel your recipients already have, left the channel unticked on the switches that send to that group, so Save wrote no action for it and nothing was sent on it. Only ticking a group or adding an extra recipient on the switch card itself ticked it. The comparison now runs on every change in one place, so the channel is ticked and its action written wherever the change came from. A channel you unticked by hand stays unticked while it stays present and is ticked again only if it goes away and comes back (SPEC section 11.2, item 8).
 
 ## [1.1.2] - 2026-09-08
