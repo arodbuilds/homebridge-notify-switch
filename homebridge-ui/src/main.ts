@@ -6,15 +6,17 @@ import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
 import { renderFooter } from './footer.js';
 import { exportConfig, legacySwitches, presentChannels, readConfig } from './model.js';
-import type { UiConfig, UiSwitch } from './model.js';
+import type { UiConfig, UiProvider, UiSwitch } from './model.js';
+import { CHANNELS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
+import { providersForChannel, resolveDefaultProvider } from '../../src/defaults.js';
 import { isCountry, localeCountry } from './phone.js';
 import { renderGroups } from './sections/groups.js';
 import { renderProviders } from './sections/providers.js';
 import { renderSettings } from './sections/settings.js';
 import { renderSwitches } from './sections/switches.js';
 import { timeZoneCountry } from '../../src/timeZones.js';
-import { errorsOnly, validate } from './validate.js';
+import { validate, validProviders } from './validate.js';
 import type { UiIssue } from './validate.js';
 
 /**
@@ -81,6 +83,11 @@ class Page implements App {
    * unticked while it stays present and is ticked again only if it leaves and comes back.
    */
   private readonly presence = new WeakMap<UiSwitch, Set<Channel>>();
+  /**
+   * The channels whose default this page wrote on appearance (SPEC section 5.7 and section 11.2, item 25) and has not
+   * asked about yet, with the card that asks. An entry loaded from config.json never prompts.
+   */
+  private readonly pendingPrompts = new Map<Channel, UiProvider>();
 
   constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
@@ -233,6 +240,56 @@ class Page implements App {
 
   addFresh(item: object): void {
     this.fresh.add(item);
+  }
+
+  pendingDefaultPrompt(channel: Channel): UiProvider | undefined {
+    return this.pendingPrompts.get(channel);
+  }
+
+  chooseDefault(channel: Channel, id?: string): void {
+    this.pendingPrompts.delete(channel);
+    if (id === undefined) {
+      // Keep: the entry written on appearance stands; only the prompt goes.
+      this.revalidate();
+      return;
+    }
+    this.config.defaultProviders[channel] = id;
+    this.changed(true);
+    this.rerender('settings');
+  }
+
+  /**
+   * Platform defaults written on appearance (SPEC section 5.7): the moment a channel has two or more validated providers
+   * and `defaultProviders[channel]` names none of the providers, the current fallback (the first validated provider in
+   * configuration order) is written, so the configuration is fully determined whether or not the prompt is answered.
+   * The prompt is then shown on the last validated provider's card (the one just added, in the usual case) until it is
+   * answered. Startup's fallback warning is left to hand-edited configurations.
+   */
+  private syncDefaults(issues: UiIssue[]): void {
+    const valid = validProviders(this.config, issues);
+    let written = false;
+    for (const channel of CHANNELS) {
+      const pending = this.pendingPrompts.get(channel);
+      if (pending && !this.config.providers.includes(pending)) {
+        this.pendingPrompts.delete(channel);
+      }
+      const candidates = providersForChannel(valid, channel);
+      if (candidates.length < 2) {
+        continue;
+      }
+      // Resolved against every provider, so an entry naming a provider whose card is momentarily invalid is left alone.
+      if (resolveDefaultProvider(channel, this.config.providers, this.config.defaultProviders).source === 'stored') {
+        continue;
+      }
+      this.config.defaultProviders[channel] = candidates[0].id.trim();
+      this.pendingPrompts.set(channel, candidates[candidates.length - 1]);
+      written = true;
+    }
+    if (written) {
+      // The Settings dropdown and the switch editors' "Platform default" options follow; the entry goes out with the next push.
+      this.scheduleSwitchRefresh();
+      this.push();
+    }
   }
 
   /**
@@ -467,10 +524,8 @@ class Page implements App {
       setSaveEnabled(false);
       return;
     }
-    const everything = validate(this.config);
-    // Warnings (a channel without a default provider, SPEC section 11.2, item 25) are listed but never block Save or mark a field.
-    const all = errorsOnly(everything);
-    const warnings = everything.filter((issue) => issue.level === 'warning');
+    const all = validate(this.config);
+    this.syncDefaults(all);
     const { listed, held, fresh } = this.splitIssues(all);
     this.markIssues(all);
     for (const node of this.root.querySelectorAll<ValidationListener>('.ns-on-validate')) {
@@ -489,12 +544,9 @@ class Page implements App {
       link.appendChild(el('strong', {}, `${issue.label}: `));
       link.appendChild(document.createTextNode(issue.message));
       link.setAttribute('data-issue-path', issue.path);
-      return el('li', { class: issue.level === 'warning' ? 'ns-issue-warning' : undefined }, link);
+      return el('li', {}, link);
     };
     for (const issue of byPath.values()) {
-      this.issuesList.appendChild(entry(issue));
-    }
-    for (const issue of warnings) {
       this.issuesList.appendChild(entry(issue));
     }
     const nothingToSave = all.length === 0 && this.config.providers.length === 0 && this.config.groups.length === 0 && this.config.switches.length === 0;
@@ -511,11 +563,6 @@ class Page implements App {
       this.issuesToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       this.issuesBox.className = 'issues alert alert-warning';
       this.issuesBox.setAttribute('role', 'alert');
-    } else if (held.length === 0 && warnings.length > 0) {
-      // Nothing blocks Save; the warnings are worth a look (SPEC section 11.2, item 25).
-      this.issuesHeading.textContent = ISSUES.optional;
-      this.issuesBox.className = 'issues alert alert-warning';
-      this.issuesBox.setAttribute('role', 'status');
     } else if (held.length > 0) {
       // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
       const kinds = [...new Set(held.map((issue) => fresh.find((card) => underPath(issue.path, card.path))?.kind ?? 'card'))];
@@ -528,7 +575,7 @@ class Page implements App {
       this.issuesBox.className = 'issues alert alert-secondary';
       this.issuesBox.setAttribute('role', 'status');
     }
-    this.issuesBox.hidden = all.length === 0 && warnings.length === 0 && !nothingToSave;
+    this.issuesBox.hidden = all.length === 0 && !nothingToSave;
     setSaveEnabled(all.length === 0);
   }
 

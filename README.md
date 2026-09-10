@@ -283,7 +283,7 @@ Open **Advanced** on the card when you need more:
 - A **provider** dropdown appears for a channel that more than one provider can send on. It defaults to `Platform default (…)`, the provider chosen under **Settings**; pick another to send this switch's messages through it instead.
 - **Hide recipients from each other (BCC)** for email, the **Sender** number for SMS when the Twilio provider has several, and the ntfy **Priority** and **Tags**.
 
-When more than one provider can send on a channel, the settings UI asks which one switches should use unless told otherwise, the first time the second provider is set up, and keeps the answer under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
+When more than one provider can send on a channel, the first one in the list is the default as soon as the second one is filled in, and the settings UI writes that choice to `config.json` so nothing is left undecided. The new provider's card then asks, at the bottom, "You now have 2 ways to send email. Switches use Fastmail unless told otherwise. Which should they use?" with the new provider preselected: **Use the selected provider** switches the default to your pick, **Keep Fastmail** leaves it. Each provider card's header shows **Default for email** on the default and a **Make default for email** button on the others, and the choice is also under **Settings > Default … provider**. Switches that do not name a provider under Advanced follow that default. See [Platform defaults](#platform-defaults) for the stored form.
 
 The other switch fields:
 
@@ -318,7 +318,7 @@ A configuration with several actions on the same channel on one switch (two SMS 
 
 ### Platform defaults
 
-`defaultProviders` on the platform block maps a channel to the id of the provider switches use on it when more than one provider can send on that channel, for example `"defaultProviders": { "email": "fastmail" }`. Only channels with several providers carry an entry; with one provider it is the default on its own. A channel with several providers and no entry falls back to the first in `config.json` order with a startup warning; an entry naming a provider that does not exist, or one that cannot send on that channel, is a startup error.
+`defaultProviders` on the platform block maps a channel to the id of the provider switches use on it when more than one provider can send on that channel, for example `"defaultProviders": { "email": "fastmail" }`. Only channels with several providers carry an entry; with one provider it is the default on its own. The settings UI writes the entry as soon as a channel has two providers, so a configuration it saved always has one. A hand-edited configuration with several providers and no entry falls back to the first in `config.json` order with a startup warning; an entry naming a provider that does not exist, or one that cannot send on that channel, is a startup error.
 
 The **Test send** button in a switch card's footer asks "Send to {n} recipients now?" and, after you click **Send**, sends to the real recipients on every ticked channel and lists the result for each recipient. It ignores the master switch and the cooldown, and it works before you save. While the switch, or a provider or group it uses, has a validation error the button is disabled with "Fix the errors above first" beside it; while nobody would receive anything it reads "No recipients yet".
 

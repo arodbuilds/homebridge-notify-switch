@@ -11,7 +11,7 @@ import {
 } from '../model.js';
 import type { UiConfig } from '../model.js';
 import { countryOptions } from '../phone.js';
-import { errorsOnly, validate } from '../validate.js';
+import { validate } from '../validate.js';
 import { providerTitle } from './providers.js';
 
 /** `notify-switch-backup-YYYY-MM-DD.json` for today, in local time; `-without-credentials` before the date for the shareable version. */
@@ -83,7 +83,7 @@ export function checkBackup(text: string): { config?: UiConfig; errors: string[]
   delete block.credentialsRemoved;
   const config = readConfig(block);
   const emptied = withoutCredentials ? emptySecretPaths(config) : [];
-  const issues = errorsOnly(validate(config)).filter((issue) => !emptied.includes(issue.path));
+  const issues = validate(config).filter((issue) => !emptied.includes(issue.path));
   if (issues.length > 0) {
     return { errors: issues.map((issue) => `${issue.label}: ${issue.message}`), emptied: [] };
   }
@@ -241,16 +241,16 @@ export function renderSettings(app: App, container: HTMLElement): void {
       continue;
     }
     const resolution = resolveDefaultProvider(channel, c.providers, c.defaultProviders);
-    const field = selectField(DEFAULTS.settingsLabel(channel), resolution.source === 'stored' ? resolution.id ?? '' : '', [
-      { value: '', label: DEFAULTS.settingsPlaceholder },
+    // The written value (SPEC section 11.2, item 25). The placeholder shows only while nothing is written yet (the
+    // second provider is still being filled in) and cannot be chosen: the page writes the fallback once it validates.
+    const stored = resolution.source === 'stored' ? resolution.id ?? '' : '';
+    const field = selectField(DEFAULTS.settingsLabel(channel), stored, [
+      ...(stored ? [] : [{ value: '', label: DEFAULTS.settingsPlaceholder, disabled: true }]),
       ...candidates.map((p) => ({ value: p.id.trim(), label: `${providerTitle(p)} (${PROVIDER_TYPE_LABEL[p.type]})` })),
     ], (value) => {
       if (value) {
-        c.defaultProviders[channel] = value;
-      } else {
-        delete c.defaultProviders[channel];
+        app.chooseDefault(channel, value);
       }
-      app.changed(true);
     }, { path: `defaultProviders.${channel}`, help: DEFAULTS.settingsHelp(channel) });
     field.setAttribute('data-channel', channel);
     defaults.appendChild(el('div', { class: 'ns-span-6' }, field));

@@ -1,6 +1,6 @@
 import type { BotIdentity, Channel, ChatSummary, NtfyAuth, ProviderType, TwilioLookupResult } from '../../../src/types.js';
 import { CHANNELS, PROVIDER_TYPES } from '../../../src/types.js';
-import { defaultNeeded, providersForChannel, pruneDefaults, resolveDefaultProvider, servesChannel } from '../../../src/defaults.js';
+import { providersForChannel, pruneDefaults, resolveDefaultProvider, servesChannel } from '../../../src/defaults.js';
 import { BOT_TOKEN_PATTERN } from '../../../src/patterns.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
@@ -46,15 +46,23 @@ function renameDefault(app: App, from: string, to: string): void {
   }
 }
 
-function defaultPrompt(app: App, channel: Channel, candidates: UiProvider[]): HTMLElement {
+/** The provider's display name, else its id (the prompt, the badge and the switch editor all name providers this way). */
+function providerName(app: App, id: string): string {
+  const provider = app.config.providers.find((candidate) => candidate.id.trim() === id && id);
+  return provider ? providerTitle(provider) : id;
+}
+
+/**
+ * The prompt for one channel (SPEC section 11.2, item 25): the sentence naming the provider currently written as the
+ * default, a radio per validated provider (the card's own provider preselected), and two buttons on one row. The radio
+ * only selects; nothing is written and the prompt stays until a button is pressed. "Use the selected provider" writes
+ * the selection, "Keep {defaultName}" leaves the entry as written; both close the prompt. Names are inserted as text.
+ */
+function defaultPrompt(app: App, p: UiProvider, channel: Channel, candidates: UiProvider[]): HTMLElement {
   const current = resolveDefaultProvider(channel, app.config.providers, app.config.defaultProviders).id;
+  const defaultName = providerName(app, current ?? '');
   const name = uniqueId('default');
-  let selected = current ?? candidates[0].id.trim();
-  const answer = (id: string): void => {
-    app.config.defaultProviders[channel] = id;
-    app.changed(true);
-    app.rerender('settings');
-  };
+  let selected = p.id.trim();
   const radios = candidates.map((candidate) => {
     const id = candidate.id.trim();
     const input = el('input', { class: 'form-check-input', type: 'radio', name, id: `${name}-${id}`, value: id });
@@ -62,7 +70,6 @@ function defaultPrompt(app: App, channel: Channel, candidates: UiProvider[]): HT
     input.addEventListener('change', () => {
       if (input.checked) {
         selected = id;
-        answer(id);
       }
     });
     return el('div', { class: 'form-check' }, input,
@@ -70,48 +77,66 @@ function defaultPrompt(app: App, channel: Channel, candidates: UiProvider[]): HT
         el('span', { class: 'badge text-bg-secondary' }, PROVIDER_TYPE_LABEL[candidate.type])));
   });
   return el('div', { class: 'alert alert-info ns-default-prompt', role: 'group', 'data-channel': channel, 'data-path': `defaultProviders.${channel}` },
-    el('div', { class: 'fw-semibold mb-2' }, DEFAULTS.prompt(candidates.length, channel)),
+    el('div', { class: 'fw-semibold mb-2 ns-default-question' }, DEFAULTS.prompt(candidates.length, channel, defaultName)),
     ...radios,
-    el('div', { class: 'mt-2' }, button(DEFAULTS.confirm, () => answer(selected), 'btn btn-primary btn-sm ns-default-confirm')),
+    el('div', { class: 'mt-2 d-flex flex-wrap align-items-center gap-2' },
+      button(DEFAULTS.confirm, () => app.chooseDefault(channel, selected), 'btn btn-primary btn-sm ns-default-confirm'),
+      linkButton(DEFAULTS.keep(defaultName), () => app.chooseDefault(channel), 'ns-default-keep'),
+    ),
   );
 }
 
 /**
- * The default provider prompt (SPEC section 11.2, item 25): once a second or later provider for a channel
- * validates, its card asks which provider switches should use for that channel. Shown on the last card in
- * configuration order among the channel's providers, only while that card has no errors and no valid default
- * is stored; the radio list preselects the current default (the first in configuration order) and choosing
- * one, or confirming the preselected one, writes `defaultProviders`.
+ * The platform defaults on a provider card (SPEC section 5.7 and section 11.2, item 25). The header slot shows, for
+ * every channel the provider serves while more than one provider serves it, either the badge "Default for {channel}"
+ * (this provider is the written, or resolved, default) or the text button "Make default for {channel}", which writes
+ * the entry. The prompt box, at the bottom of the card body, asks on the card the page marked when it wrote the
+ * default on appearance, only while that card validates and the channel still has several validated providers.
+ * Both are redrawn only when what they show changes, so a click is never lost to a validation pass.
  */
-function defaultPrompts(app: App, p: UiProvider, index: number): ValidationListener {
+function defaultsOnCard(app: App, p: UiProvider, index: number, slot: HTMLElement): ValidationListener {
   const box: ValidationListener = el('div', { class: 'ns-default-prompts ns-on-validate' });
   const prefix = `providers[${index}]`;
-  // What the box last showed; it is only rebuilt when that changes, so a click on it is never lost to a
-  // validation pass (leaving a field re-validates, which would otherwise replace the button under the pointer).
   let shown = '';
   box.nsOnValidate = (issues: UiIssue[]): void => {
-    const wanted: Array<{ channel: Channel; candidates: UiProvider[] }> = [];
-    if (!issues.some((issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`))) {
-      // Only providers whose cards validate count, so a card still being filled in neither asks nor is offered.
-      const valid = validProviders(app.config, issues);
-      for (const channel of CHANNELS) {
-        if (!servesChannel(p, channel) || !defaultNeeded(channel, valid, app.config.defaultProviders)) {
-          continue;
-        }
-        const candidates = providersForChannel(valid, channel);
-        if (candidates[candidates.length - 1] === p) {
-          wanted.push({ channel, candidates });
-        }
+    const cardValid = !issues.some((issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`));
+    const valid = validProviders(app.config, issues);
+    const badges: Array<{ channel: Channel; isDefault: boolean }> = [];
+    const prompts: Array<{ channel: Channel; candidates: UiProvider[] }> = [];
+    for (const channel of CHANNELS) {
+      if (!servesChannel(p, channel) || providersForChannel(app.config.providers, channel).length < 2) {
+        continue;
+      }
+      const resolved = resolveDefaultProvider(channel, app.config.providers, app.config.defaultProviders).id;
+      badges.push({ channel, isDefault: resolved === p.id.trim() });
+      const candidates = providersForChannel(valid, channel);
+      if (cardValid && candidates.length > 1 && app.pendingDefaultPrompt(channel) === p) {
+        prompts.push({ channel, candidates });
       }
     }
-    const key = wanted.map((entry) => `${entry.channel}:${entry.candidates.map((c) => `${c.id.trim()}=${providerTitle(c)}`).join(',')}`).join('|');
+    const key = [
+      badges.map((entry) => `${entry.channel}=${entry.isDefault}`).join(','),
+      prompts.map((entry) => `${entry.channel}:${entry.candidates.map((c) => `${c.id.trim()}=${providerTitle(c)}`).join(',')}`).join('|'),
+      CHANNELS.map((channel) => app.config.defaultProviders[channel] ?? '').join(','),
+      app.config.providers.map((other) => providerTitle(other)).join(','),
+    ].join('#');
     if (key === shown) {
       return;
     }
     shown = key;
+    clear(slot);
+    for (const entry of badges) {
+      if (entry.isDefault) {
+        slot.appendChild(el('span', { class: 'badge text-bg-secondary ns-default-badge', 'data-channel': entry.channel }, DEFAULTS.badge(entry.channel)));
+      } else {
+        const make = linkButton(DEFAULTS.makeDefault(entry.channel), () => app.chooseDefault(entry.channel, p.id.trim()), 'ns-make-default');
+        make.setAttribute('data-channel', entry.channel);
+        slot.appendChild(make);
+      }
+    }
     clear(box);
-    for (const entry of wanted) {
-      box.appendChild(defaultPrompt(app, entry.channel, entry.candidates));
+    for (const entry of prompts) {
+      box.appendChild(defaultPrompt(app, p, entry.channel, entry.candidates));
     }
   };
   return box;
@@ -735,8 +760,10 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   const card = el('div', { class: 'card mb-3', 'data-path': path, 'data-type': p.type });
   const title = el('span', { class: 'fw-semibold' }, providerTitle(p));
   const badge = el('span', { class: 'badge text-bg-secondary ms-2' }, PROVIDER_TYPE_LABEL[p.type]);
+  // The platform default badge or "Make default" button per channel (SPEC section 11.2, item 25) sits after the type badge.
+  const defaultsSlot = el('span', { class: 'ns-default-slot' });
   const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' },
-    el('span', {}, title, badge), helpToggle(card, p));
+    el('span', { class: 'ns-card-title' }, title, badge, defaultsSlot), helpToggle(card, p));
 
   const body = el('div', { class: 'card-body' });
   // The id is generated from the name (SPEC section 11.2, item 14) and keeps following it until it is
@@ -752,7 +779,6 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   });
   const idInput = id.querySelector('input') as HTMLInputElement;
 
-  body.appendChild(defaultPrompts(app, p, index));
   body.appendChild(textField('Name', p.name, (value) => {
     p.name = value;
     title.textContent = providerTitle(p);
@@ -779,6 +805,8 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     ntfyFields(app, p, path, body, id);
     break;
   }
+  // The default provider prompt is the last thing in the body, directly above the footer (SPEC section 11.2, item 25).
+  body.appendChild(defaultsOnCard(app, p, index, defaultsSlot));
 
   // Footer (SPEC section 11.2, item 11): Remove provider on the left, Test connection on the right; the result below.
   const status = statusBox();

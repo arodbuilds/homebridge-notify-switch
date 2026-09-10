@@ -233,9 +233,15 @@ export const LEGACY = {
 
 /** Platform defaults per channel (SPEC section 5.7 and section 11.2, item 25). */
 export const DEFAULTS = {
-  prompt: (n: number, channel: Channel): string => `You now have ${n} ways to send ${CHANNEL_WORD[channel]}. Which should switches use unless told otherwise?`,
+  /** {defaultName} is the display name (else id) of the provider currently written as the default. */
+  prompt: (n: number, channel: Channel, defaultName: string): string =>
+    `You now have ${n} ways to send ${CHANNEL_WORD[channel]}. Switches use ${defaultName} unless told otherwise. Which should they use?`,
   confirm: 'Use the selected provider',
-  warning: (channel: Channel): string => `Choose a default ${CHANNEL_WORD[channel]} provider`,
+  keep: (defaultName: string): string => `Keep ${defaultName}`,
+  /** Card header, on the channel's default while more than one provider serves it. */
+  badge: (channel: Channel): string => `Default for ${CHANNEL_WORD[channel]}`,
+  /** Card header, on a provider that serves such a channel but is not its default. */
+  makeDefault: (channel: Channel): string => `Make default for ${CHANNEL_WORD[channel]}`,
   settingsLabel: (channel: Channel): string => `Default ${CHANNEL_WORD[channel]} provider`,
   settingsHelp: (channel: Channel): string => `Switches send ${CHANNEL_WORD[channel]} through this provider unless a switch says otherwise under Advanced.`,
   settingsPlaceholder: 'Choose a provider…',
@@ -329,8 +335,6 @@ export const VALIDATION = {
 /** The "Fix these before saving" box (SPEC section 11.2, item 15): a link per field, collapsed to a count past three entries. */
 export const ISSUES = {
   heading: 'Fix these before saving:',
-  /** The box heading while only warnings remain: Save is enabled (SPEC section 11.2, item 25). */
-  optional: 'Optional before saving:',
   count: (n: number): string => `${n} field${n === 1 ? '' : 's'} need${n === 1 ? 's' : ''} attention`,
   showAll: 'Show all',
   hide: 'Hide',

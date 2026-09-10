@@ -314,7 +314,34 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 }
 
 .ns-default-prompt {
-  margin-bottom: 1rem;
+  margin-bottom: 0;
+}
+
+.ns-default-prompt + .ns-default-prompt {
+  margin-top: 0.75rem;
+}
+
+/* The card header's default badge or "Make default" button per channel, after the type badge. */
+.ns-card-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.ns-card-title .badge {
+  margin-left: 0;
+}
+
+.ns-default-slot {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.ns-make-default {
+  font-size: 0.875rem;
 }
 
 .ns-default-providers {

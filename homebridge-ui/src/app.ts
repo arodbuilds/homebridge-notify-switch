@@ -1,4 +1,5 @@
-import type { UiConfig } from './model.js';
+import type { Channel } from '../../src/types.js';
+import type { UiConfig, UiProvider } from './model.js';
 import type { UiIssue } from './validate.js';
 
 export type Section = 'providers' | 'groups' | 'switches' | 'settings';
@@ -54,4 +55,11 @@ export interface App {
    * the entries after it moves down one index so it keeps following the right fields (SPEC section 11.2, item 15).
    */
   entryRemoved(listPath: string, index: number): void;
+  /**
+   * The provider whose card asks which provider switches should use for `channel` (SPEC section 11.2, item 25):
+   * set while this page wrote `defaultProviders[channel]` on appearance and nobody has answered yet.
+   */
+  pendingDefaultPrompt(channel: Channel): UiProvider | undefined;
+  /** Writes `defaultProviders[channel]` (with `id`), or keeps it (without), and closes the prompt for the channel. */
+  chooseDefault(channel: Channel, id?: string): void;
 }
