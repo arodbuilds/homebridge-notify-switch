@@ -1,6 +1,6 @@
-# homebridge-notify-switch v1 Specification
+# homebridge-notify-switch Specification
 
-Status: Current as of 1.2.0
+Status: Current as of 1.3.0
 Repository: https://github.com/arodbuilds/homebridge-notify-switch
 Package: homebridge-notify-switch
 Author: arodbuilds
@@ -20,15 +20,24 @@ A Homebridge dynamic platform plugin that exposes HomeKit switches. Each switch 
 5. Credentials are handled with least privilege and never logged.
 6. Configuration shape supports future channels without migration.
 
-### Non-goals for v1
+### Non-goals
 
 1. Inbound messages or replies.
 2. Delivery status callbacks or webhooks.
 3. MMS or attachments.
-4. WhatsApp (planned for a later version).
-5. Fallback routing (send on channel B only if channel A fails). v1 sends on every configured channel in parallel.
+4. WhatsApp (on the roadmap below, not in the current release).
+5. Fallback routing (send on channel B only if channel A fails). Every configured channel is sent in parallel.
 
-Planned for 1.1: WhatsApp via Twilio, using a single approved utility template with the message body as the template variable, so no per-message template approval is needed. Voice calls via Twilio are a candidate for the same release.
+### Roadmap
+
+Planned, in no particular order and with no dates; each arrives in its own minor release once its design is settled:
+
+1. iMessage for Homebridge hosts running on a Mac, sent through the Messages app on that Mac (1.4.0).
+2. Twilio voice: a call that reads the message aloud.
+3. WhatsApp through Twilio, using one approved utility template with the message body as its variable, so no per-message template approval is needed.
+4. Telnyx SMS as a second SMS provider.
+5. Discord and Slack incoming webhooks as channels.
+6. Matter exposure of the switches once Homebridge's Matter support is stable.
 
 ## 3. Terminology
 
@@ -616,8 +625,8 @@ Using it in HomeKit (bottom of page):
 ## 14. Verification checklist
 
 1. Dynamic platform. Yes.
-2. Not duplicating an existing verified plugin. homebridge-messenger covers Pushover, IFTTT, and SMTP only; no verified plugin offers SMS or Telegram, multi-channel groups, or a custom UI with test sends.
-3. Published to npm; source on GitHub with issues enabled; release per version.
+2. Not duplicating an existing verified plugin. The plugins compared: homebridge-messenger covers Pushover, IFTTT, and SMTP only; homebridge-twilio-sms sends SMS through Twilio with one recipient per switch and no other channel; homebridge-notifyevents and homebridge-notify-alerts each cover one push service; homebridge-icloud-smtp sends email through iCloud only. None offers SMS, email, Telegram and ntfy together, recipient groups, or a custom UI with test sends.
+3. Published to npm; source on GitHub with issues enabled; release per version. The verification request was submitted September 8, 2026 as homebridge/plugins issue 1216.
 4. Runs on Node 22 and 24; CI covers both and `engines.node` is `^22.12.0 || ^24.0.0`, matching the plugin template and Homebridge v2 guidance. Node 20 is not supported.
 5. Installs and does not start unless configured.
 6. No post-install scripts.
@@ -629,7 +638,7 @@ Using it in HomeKit (bottom of page):
 
 ## 15. Open questions
 
-The questions raised for the review of this document are settled and folded into the sections above: `emailFrom` stays optional and a missing value is a validation issue on the action (section 5.2); the master switch is exposed and on by default (section 4); the failure sensor resets only on success or timeout (section 9); email bodies are plain text (section 5.5); Node 20 is not supported (section 14). What remains open for a later release:
+Open for a later release:
 
 1. Telegram `markdown` maps to the legacy `Markdown` parse mode (section 5.2). Should a `markdownv2` value be added for people who write bodies in MarkdownV2, or should `markdown` switch to it and the escaping burden move to the user?
 2. Microsoft is retiring password sign-in for third-party apps on personal Outlook.com accounts (README, SMTP section). Should the Outlook.com preset stay, with its warning, or be removed once Microsoft completes the change?

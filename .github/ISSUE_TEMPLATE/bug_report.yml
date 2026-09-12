@@ -8,14 +8,14 @@ body:
     attributes:
       label: Plugin version
       description: Shown in the footer of the plugin settings page.
-      placeholder: "1.0.0"
+      placeholder: "1.3.0"
     validations:
       required: true
   - type: input
     id: homebridge-version
     attributes:
       label: Homebridge version
-      placeholder: "1.11.0"
+      placeholder: "2.4.0"
     validations:
       required: true
   - type: input
