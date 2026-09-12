@@ -42,16 +42,37 @@ export function helpToggle(card: HTMLElement, item: object): HTMLButtonElement {
   return toggle;
 }
 
+/**
+ * The header strip shared by every card (SPEC section 11.2, item 28). Left cluster: the bold title, the type badge and
+ * the status badges (`badges`, filled later by the card); right cluster: the card's header links (`actions`, such as
+ * "Make default for {channel}") and then the "Show help" / "Hide help" toggle. Every string is inserted as text.
+ */
+export function cardHeader(card: HTMLElement, item: object, title: HTMLElement, badges: HTMLElement[], actions: HTMLElement[]): HTMLElement {
+  return el('div', { class: 'card-header ns-card-header' },
+    el('span', { class: 'ns-card-title' }, title, ...badges),
+    el('span', { class: 'ns-card-actions' }, ...actions, helpToggle(card, item)),
+  );
+}
+
+/** A type badge (secondary fill) or a status badge (success fill, "Default for {channel}") for a card header. */
+export function headerBadge(text: string, kind: 'type' | 'status', extra = ''): HTMLElement {
+  const fill = kind === 'status' ? 'text-bg-success ns-status-badge' : 'text-bg-secondary ns-type-badge';
+  return el('span', { class: `badge ${fill}${extra ? ` ${extra}` : ''}` }, text);
+}
+
 export interface IdFieldOptions {
   path: string;
   value: string;
   help: string;
-  onChange(value: string): void;
+  onChange?(value: string): void;
+  /** False for the switch id, which is generated and never edited (SPEC section 11.2, item 8). Default true. */
+  editable?: boolean;
 }
 
 /**
  * The ID, read-only with an Edit toggle, for people who hand-edit config.json (SPEC section 11.2, item 14).
- * Uniqueness and format are still validated; an issue opens the disclosure it sits in.
+ * Uniqueness and format are still validated; an issue opens the disclosure it sits in. Without `editable`
+ * the field stays read-only and has no Edit link (the switch id, item 8).
  */
 export function idField(opts: IdFieldOptions): HTMLElement {
   const id = uniqueId('id');
@@ -59,16 +80,21 @@ export function idField(opts: IdFieldOptions): HTMLElement {
     id, class: 'form-control font-monospace', type: 'text', value: opts.value, autocomplete: 'off', spellcheck: 'false', readonly: true,
     'data-id-input': 'true',
   });
-  input.addEventListener('input', () => opts.onChange(input.value));
-  const edit = linkButton(ID_FIELD.edit, () => {
-    input.readOnly = false;
-    input.focus();
-    input.select();
-    edit.hidden = true;
-  }, 'ns-id-edit');
-  edit.setAttribute('aria-label', `${ID_FIELD.edit} ${ID_FIELD.label}`);
+  const label = el('label', { class: 'form-label', for: id }, ID_FIELD.label);
+  let labelRow: HTMLElement = label;
+  if (opts.editable !== false) {
+    input.addEventListener('input', () => opts.onChange?.(input.value));
+    const edit = linkButton(ID_FIELD.edit, () => {
+      input.readOnly = false;
+      input.focus();
+      input.select();
+      edit.hidden = true;
+    }, 'ns-id-edit');
+    edit.setAttribute('aria-label', `${ID_FIELD.edit} ${ID_FIELD.label}`);
+    labelRow = el('div', { class: 'ns-label-row' }, label, edit);
+  }
   return el('div', { class: 'mb-3 ns-id-field', 'data-path': opts.path },
-    el('div', { class: 'ns-label-row' }, el('label', { class: 'form-label', for: id }, ID_FIELD.label), edit),
+    labelRow,
     input,
     helpText(opts.help),
     el('div', { class: 'invalid-feedback' }),

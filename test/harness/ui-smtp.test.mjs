@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { URL } from 'node:url';
 
 import { launchOrSkip, openSettings } from './browser.mjs';
 import { SMTP } from './helpers.mjs';
@@ -55,6 +56,16 @@ test('smtp presets: choosing a preset fills and locks the server settings, Edit 
     assert.equal(await security.isDisabled(), true);
     assert.equal(await edit.isVisible(), true);
     assert.equal(await card.locator('.ns-server-help').textContent(), 'Filled in from the mail provider above. Click Edit to change them.');
+    // Host, Port and Security share one row at 7, 2 and 3 columns; the help sits under the whole row (SPEC section 11.2, item 22).
+    const serverRow = card.locator('.ns-server-help').evaluate((help) => {
+      const row = help.previousElementSibling;
+      return [...row.children].map((cell) => [cell.className, cell.firstElementChild.dataset.path]);
+    });
+    assert.deepEqual(await serverRow, [['ns-span-7', 'providers[0].host'], ['ns-span-2', 'providers[0].port'], ['ns-span-3', 'providers[0].security']]);
+    assert.equal(await card.locator('.ns-server-help').evaluate((help) => help.parentElement.classList.contains('card-body')), true, 'not inside one column');
+    // Advanced: ID and Credentials File side by side (item 28).
+    const advancedCells = card.locator('details.ns-advanced .ns-grid > *').evaluateAll((nodes) => nodes.map((node) => node.className));
+    assert.deepEqual(await advancedCells, ['ns-span-6', 'ns-span-6']);
     assert.match(await passwordHelp.textContent(), /^Use a Google app password, not your login password\. 2-Step Verification must be on first/);
     assert.equal(await passwordHelp.locator('a').textContent(), 'Create one at Google');
     assert.equal(await passwordHelp.locator('a').getAttribute('href'), 'https://myaccount.google.com/apppasswords');
@@ -92,8 +103,9 @@ test('smtp presets: choosing a preset fills and locks the server settings, Edit 
     for (const label of ['Fastmail', 'Outlook.com', 'Yahoo', 'Zoho']) {
       await card.locator('.ns-preset-segments label', { hasText: label }).click();
       assert.match(await passwordHelp.textContent(), /app password/);
-      assert.match(await passwordHelp.locator('a').getAttribute('href'), /^https:\/\//);
-      assert.ok(!(await passwordHelp.locator('a').getAttribute('href')).includes('github.com'), `${label} links to the provider, not the README`);
+      const href = await passwordHelp.locator('a').getAttribute('href');
+      assert.match(href, /^https:\/\//);
+      assert.notEqual(new URL(href).hostname, 'github.com', `${label} links to the provider, not the README`);
     }
     // From name help mentions the display name replacement.
     assert.equal(await card.locator('[data-path="providers[0].from.name"] .ns-help').textContent(),

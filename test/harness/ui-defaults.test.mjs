@@ -34,9 +34,13 @@ async function pushed(page, predicate) {
   return page.evaluate(() => window.__hb.updates.at(-1)[0]);
 }
 
-/** The header slot of a provider card: the default badges and Make default buttons it shows, in order. */
+/**
+ * The header of a provider card: the "Default for" badges (left cluster, after the type badge) and the "Make default"
+ * links (right cluster, before the help toggle) it shows, in document order (SPEC section 11.2, item 28).
+ */
 async function headerDefaults(page, index) {
-  return page.locator(`.card[data-path="providers[${index}]"] .card-header .ns-default-slot > *`).evaluateAll((nodes) => nodes.map((node) => [
+  const header = `.card[data-path="providers[${index}]"] .card-header`;
+  return page.locator(`${header} .ns-default-slot > *, ${header} .ns-default-actions > *`).evaluateAll((nodes) => nodes.map((node) => [
     node.tagName === 'BUTTON' ? 'button' : 'badge', node.dataset.channel, node.textContent.trim(),
   ]));
 }
@@ -83,13 +87,14 @@ test('defaults: the entry is written when the second provider validates; the pro
     assert.equal(await page.locator('.issues').isVisible(), false);
     assert.equal(await page.locator('.ns-issue-warning').count(), 0);
 
-    // The prompt, on the new card only, at the bottom of the body directly above the footer.
+    // The prompt, on the new card only, at the bottom of the body directly above the (empty) result bar and the footer strip.
     const prompt = card.locator('.ns-default-prompt[data-channel="email"]');
     assert.equal(await prompt.count(), 1);
     assert.equal(await page.locator('.card[data-path="providers[0]"] .ns-default-prompt').count(), 0);
     assert.equal(await card.evaluate((node) => {
       const body = node.querySelector('.card-body');
-      return body.lastElementChild.classList.contains('ns-default-prompts') && body.nextElementSibling.classList.contains('card-footer');
+      return body.lastElementChild.classList.contains('ns-default-prompts') && body.nextElementSibling.classList.contains('ns-card-results')
+        && body.nextElementSibling.childElementCount === 0 && body.nextElementSibling.nextElementSibling.classList.contains('card-footer');
     }), true, 'the prompt box is the last thing in the body and the footer follows');
     assert.equal(await prompt.locator('.ns-default-question').textContent(),
       'You now have 2 ways to send email. Switches use Twilio unless told otherwise. Which should they use?');
@@ -250,8 +255,10 @@ test('defaults: a Twilio provider with a from address asks for SMS and email sep
     // The provider name is inserted as text, character for character.
     assert.deepEqual(await card.locator('.ns-default-prompt[data-channel="sms"] .form-check-label').allTextContents(),
       ['Twilio Twilio', 'Backup & "co" \'x\' Twilio']);
-    assert.equal(await card.locator('.card-header .ns-card-title').evaluate((node) => node.querySelectorAll('*').length), 5,
-      'title, type badge, slot and its two children only');
+    assert.equal(await card.locator('.card-header .ns-card-title').evaluate((node) => node.querySelectorAll('*').length), 3,
+      'title, type badge and the empty badge slot only; the two Make default links are in the right cluster');
+    assert.equal(await card.locator('.card-header .ns-card-actions').evaluate((node) => node.querySelectorAll('*').length), 4,
+      'the actions slot, its two Make default links and the help toggle only');
     await card.locator('.ns-default-prompt[data-channel="sms"]').getByRole('button', { name: 'Use the selected provider' }).click();
     const config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].defaultProviders?.sms === 'twilio-backup');
     assert.deepEqual(config.defaultProviders, { sms: 'twilio-backup', email: 'twilio-main' });

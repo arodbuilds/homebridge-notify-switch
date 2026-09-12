@@ -91,7 +91,7 @@ test('per-field validation: an error appears only after blur, never while typing
     const name = sw.locator('[data-path="switches[1].name"] input');
     await name.fill('Water Leak Alert');
     await name.blur();
-    assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(), 'Another switch is already named "Water Leak Alert".');
+    assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(), 'Another switch already uses this name.');
     // The duplicate belongs to both name fields: the other switch's name shows it too once touched.
     const other = page.locator('.card[data-path="switches[0]"] [data-path="switches[0].name"]');
     assert.equal(await other.locator('.invalid-feedback').textContent(), '', 'untouched until the user goes there');
@@ -246,7 +246,8 @@ test('test send gating and remove confirmation', async (t) => {
     const footer = page.locator('.card[data-path="switches[0]"] .card-footer');
     await footer.getByRole('button', { name: 'Remove switch' }).click();
     const confirm = footer.locator('.ns-remove-confirm');
-    assert.equal(await confirm.locator('.ns-confirm-question').textContent(), 'Remove this switch?');
+    // The question names the switch (SPEC section 11.2, item 28).
+    assert.equal(await confirm.locator('.ns-confirm-question').textContent(), 'Remove Water Leak Alert?');
     const remove = confirm.getByRole('button', { name: 'Remove', exact: true });
     assert.match(await remove.getAttribute('class'), /\bbtn-danger\b/);
     assert.match(await confirm.getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-link\b/);
@@ -262,7 +263,7 @@ test('test send gating and remove confirmation', async (t) => {
     await confirm.getByRole('button', { name: 'Remove', exact: true }).click();
     assert.equal(await page.locator('.card[data-path^="switches"]').count(), 0);
     await page.getByRole('button', { name: 'Remove group' }).click();
-    assert.equal(await page.locator('.ns-remove-confirm .ns-confirm-question').textContent(), 'Remove this group?');
+    assert.equal(await page.locator('.ns-remove-confirm .ns-confirm-question').textContent(), 'Remove Family?');
     await page.locator('.ns-remove-confirm').getByRole('button', { name: 'Remove', exact: true }).click();
     assert.equal(await page.locator('.card[data-path^="groups"]').count(), 0);
   } finally {

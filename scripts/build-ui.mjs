@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -8,6 +9,10 @@ import { dirname, resolve } from 'node:path';
  * bundle (SPEC section 12, item 9). Targets the browsers the Homebridge UI itself supports.
  */
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// The page banner is served from the plugin's own public folder, never from an external host (SPEC section 11.2, item 28).
+// The copy is made here so assets/ stays the one source of the artwork; the copy is gitignored and published with the bundle.
+copyFileSync(resolve(root, 'assets/notify-switch-banner.png'), resolve(root, 'homebridge-ui/public/notify-switch-banner.png'));
 
 await build({
   entryPoints: [resolve(root, 'homebridge-ui/src/main.ts')],

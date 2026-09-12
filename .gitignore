@@ -1,8 +1,9 @@
 # Ignore compiled code
 dist
 
-# Built settings UI bundle (npm run build:ui)
+# Built settings UI bundle and the banner copied beside it (npm run build:ui)
 homebridge-ui/public/index.js
+homebridge-ui/public/notify-switch-banner.png
 
 # ------------- Defaults ------------- #
 .DS_Store

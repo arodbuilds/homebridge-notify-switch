@@ -5,12 +5,13 @@ Project conventions for every session working in this repository.
 ## Before any change
 
 - Read `SPEC.md` in full before changing anything. It is the source of truth for behavior, field names, copy, and security rules. If a change has to deviate from it, say so in the pull request and why.
-- Read the existing source for the area you are touching. Phase boundaries are recorded in `CHANGELOG.md` under Unreleased.
+- Read the existing source for the area you are touching. Release scope is recorded in `CHANGELOG.md` under Unreleased.
+- Every release updates the SPEC status line and rereads the SPEC title, section 2 and sections 13 to 15 in full, not only the sections the change touches.
 
 ## Branches and pull requests
 
 - The default branch is `latest`. Open pull requests against it.
-- One pull request per phase. Do not mix a phase with unrelated cleanups.
+- One pull request per release, or per half when a release is split (runtime first, UI second). Do not mix a release with unrelated cleanups.
 - Do not add "Generated with Claude Code" footers, session links, or `Co-Authored-By` trailers to commits or pull requests.
 - Update `CHANGELOG.md` Unreleased in the same pull request as the change.
 - Do not touch `config.schema.json` or `README.md` beyond what the change requires.
@@ -25,6 +26,7 @@ Project conventions for every session working in this repository.
 - Provider errors are reduced to a code and a short message before logging; never log raw provider error objects or request dumps.
 - TLS certificate verification is never configurable.
 - Provider modules are loaded lazily by type from `src/providers/index.ts`; the switch code depends only on the `Provider` interface in `src/types.ts`.
+- The settings UI follows the shared settings shell in SPEC section 11.2, item 28. A change to the shell must keep the page identical to the author's other plugins that share it.
 
 ## Verification before pushing
 

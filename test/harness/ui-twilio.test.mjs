@@ -30,9 +30,8 @@ const LOOKUP_OK = {
   truncated: false,
 };
 
-function requestScript(result) {
-  return `async (path) => path === '/twilio-lookup' ? ${JSON.stringify(result)} : { ok: true, message: 'stub' }`;
-}
+/** Answers Look up numbers with the fixture the test hands to the page as `window.__fixture` (data, never source). */
+const REQUESTS = 'async (path) => path === \'/twilio-lookup\' ? window.__fixture : { ok: true, message: \'stub\' }';
 
 const CARD = '.card[data-path="providers[0]"]';
 
@@ -42,7 +41,7 @@ test('twilio card: Look up numbers fills the dropdowns and selecting adds a send
     return;
   }
   try {
-    const page = await openSettings(browser, CONFIG, { requestScript: requestScript(LOOKUP_OK) });
+    const page = await openSettings(browser, CONFIG, { requestScript: REQUESTS, fixture: LOOKUP_OK });
     const lookup = page.locator(CARD).getByRole('button', { name: 'Look up numbers' });
     assert.equal(await lookup.isEnabled(), true, 'enabled: all three credentials are filled');
 
@@ -60,6 +59,10 @@ test('twilio card: Look up numbers fills the dropdowns and selecting adds a send
     assert.equal(await advanced.locator('[data-path="providers[0].credentialsFile"] input').count(), 1);
     assert.match(await advanced.locator('[data-path="providers[0].messagingServiceSid"] .form-text').textContent(),
       /^Optional\. Use a Messaging Service instead/);
+    // The Advanced grid (SPEC section 11.2, item 28): ID and Messaging Service SID share a row at 6 columns, the credentials file takes 12.
+    assert.deepEqual(await advanced.locator('.ns-grid > *').evaluateAll((nodes) => nodes.map((node) => [node.className, node.firstElementChild.dataset.path])),
+      [['ns-span-6', 'providers[0].id'], ['ns-span-6', 'providers[0].messagingServiceSid'], ['ns-span-12', 'providers[0].credentialsFile']]);
+    assert.equal(await page.locator(`${CARD} [data-path="providers[0].apiKeySid"] input`).getAttribute('placeholder'), 'e.g. SK…');
 
     await lookup.click();
     await page.waitForSelector(`${CARD} select[data-lookup="numbers"]`);
@@ -106,14 +109,14 @@ test('twilio card: the paging note and the permission failure are shown as retur
       truncated: true,
       message: 'Found 20 phone numbers and 1 Messaging Service. Showing the first 20; enter others manually.',
     };
-    let page = await openSettings(browser, CONFIG, { requestScript: requestScript(truncated) });
+    let page = await openSettings(browser, CONFIG, { requestScript: REQUESTS, fixture: truncated });
     await page.locator(CARD).getByRole('button', { name: 'Look up numbers' }).click();
     await page.waitForSelector(`${CARD} select[data-lookup="numbers"]`);
     assert.match(await page.locator(`${CARD} .ns-lookup .status-box`).textContent(), /Showing the first 20; enter others manually\.$/);
     await page.close();
 
     const denied = { ok: false, message: 'This API key cannot list numbers. Enter them manually.', numbers: [], services: [], truncated: false };
-    page = await openSettings(browser, CONFIG, { requestScript: requestScript(denied) });
+    page = await openSettings(browser, CONFIG, { requestScript: REQUESTS, fixture: denied });
     await page.locator(CARD).getByRole('button', { name: 'Look up numbers' }).click();
     await page.waitForSelector(`${CARD} .ns-lookup .status-box.alert-danger`);
     assert.equal(await page.locator(`${CARD} .ns-lookup .status-box`).textContent(), 'This API key cannot list numbers. Enter them manually.');

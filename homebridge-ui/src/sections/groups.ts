@@ -1,8 +1,10 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
-import { helpToggle, idField } from '../card.js';
-import { DUPLICATE, GROUP_NAME_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
-import { addButton, cardFooter, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, paragraph, textField } from '../dom.js';
+import { cardHeader, idField } from '../card.js';
+import { DUPLICATE, GROUP_NAME_HELP, GROUP_SMS_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
+import {
+  addButton, cardFooter, dangerLinkButton, disclosure, el, grid, gridCell, helpText, inlineConfirm, linkButton, paragraph, textField,
+} from '../dom.js';
 import { createGroup, duplicateGroup, slugify, uniqueSlug } from '../model.js';
 import type { UiGroup } from '../model.js';
 
@@ -20,7 +22,8 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   const others = (): string[] => app.config.groups.filter((other) => other !== g).map((other) => other.id);
   const title = el('span', { class: 'fw-semibold' }, groupTitle(g));
   const card = el('div', { class: 'card mb-3', 'data-path': path });
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, g));
+  // The shared header strip (SPEC section 11.2, item 28): a group card has no type badge and no header links.
+  const header = cardHeader(card, g, title, [], []);
   const body = el('div', { class: 'card-body' });
 
   // The id is generated from the name (SPEC section 11.2, item 14) and keeps following it until it is
@@ -50,7 +53,8 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     channel, values: g[channel], defaultCountry: app.config.defaultCountry, path: `${path}.${channel}`, onChange,
     onRemove: (i) => app.entryRemoved(`${path}.${channel}`, i),
   }).el;
-  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Phone numbers (SMS)'), list('sms')));
+  // The caption under the phone list (SPEC section 11.2, item 24): the numbers are stored in E.164 with the country from Settings.
+  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Phone numbers (SMS)'), list('sms'), helpText(GROUP_SMS_HELP)));
   body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Email addresses'), list('email')));
   body.appendChild(el('div', { class: 'mb-3' },
     el('label', { class: 'form-label' }, 'Telegram chat IDs'),
@@ -62,12 +66,14 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     list('ntfy'),
     helpText(NTFY_HELP.topics),
   ));
-  body.appendChild(disclosure('Advanced', [id], { attrs: { 'data-advanced': path } }));
+  // Advanced opens a second 12-column grid (SPEC section 11.2, item 28) holding the ID at 6 columns (item 24).
+  body.appendChild(disclosure('Advanced', [grid(gridCell(6, id))], { cls: 'mb-3', attrs: { 'data-advanced': path } }));
 
-  // Footer (SPEC section 11.2, item 11): Remove group on the left with its in-place confirmation, nothing on the right.
+  // Footer (SPEC section 11.2, items 11 and 28): Remove group on the left with its in-place confirmation ("Remove {name}?"),
+  // nothing on the right.
   const remove = inlineConfirm({
     start: dangerLinkButton('Remove group', () => undefined),
-    question: () => REMOVE.question('group'),
+    question: () => REMOVE.question('group', g.name.trim()),
     confirmLabel: REMOVE.confirm,
     confirmClass: 'btn btn-danger btn-sm',
     cancelLabel: REMOVE.cancel,

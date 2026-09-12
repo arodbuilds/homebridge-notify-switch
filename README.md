@@ -77,9 +77,9 @@ The plugin does nothing until it is configured, and it never registers accessori
 
 ## Provider setup guides
 
-In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, Telegram, or ntfy) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below.
+In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, Telegram, or ntfy) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below. **Remove provider** in a card's footer asks "Remove Fastmail?" (with the card's name) before anything goes.
 
-Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), Telegram asks the bot who it is, and ntfy checks the server's health and, when credentials are set, that it accepts them. Credentials in the form are used for that one request and are not stored until you click Save.
+Add only the providers you plan to use. Every provider has a **Test connection** button in the footer of its card in the settings UI that checks the credentials without sending anything; the answer appears just above the footer with a **Dismiss** link. Test connection SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), Telegram asks the bot who it is, and ntfy checks the server's health and, when credentials are set, that it accepts them. Credentials in the form are used for that one request and are not stored until you click Save.
 
 ### Twilio (SMS and email)
 
@@ -90,7 +90,7 @@ Twilio serves the `sms` channel and, once a domain is authenticated, the `email`
 | `accountSid` | [Console home page](https://console.twilio.com), **Account Info**. Starts with `AC`. |
 | `apiKeySid` and `apiKeySecret` | [Account > API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys). Create a **Standard** key, or a **Restricted** key with read and write access to Messaging. |
 | `smsSenders` | [Phone Numbers > Manage > Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming). E.164 format with the country code. In the settings UI, **Look up numbers** lists them for you. |
-| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. In the settings UI it is under the Twilio card's **Advanced** disclosure, and **Look up numbers** can fill it. |
+| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. In the settings UI it is under the Twilio card's **Advanced** disclosure, beside the ID and above `credentialsFile`, and **Look up numbers** can fill it. |
 | `emailFrom` | Optional. Required only for the `email` channel. The domain must be authenticated (see below). |
 
 #### API keys
@@ -133,7 +133,7 @@ Twilio Email adds an open-tracking pixel to every message. As of September 2026 
 
 SMTP serves the `email` channel through any mail account. The plugin sends one message per action with every recipient in `To`, so recipients see each other; tick **Hide recipients from each other (BCC)** on an action to put them in `Bcc` with your from address in `To` instead (a message to one recipient always uses `To`). TLS certificate verification is always on.
 
-In the settings UI the SMTP card opens with a **Mail provider** picker (Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other). Picking one fills the server settings below and locks them (click **Edit** to change them), and the password help links straight to that provider's app-password page. Choose **Other** for any other mail server.
+In the settings UI the SMTP card opens with a **Mail provider** picker (Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other). Picking one fills the **Host**, **Port** and **Security** row below and locks it (click **Edit** to change them), and the password help links straight to that provider's app-password page. Choose **Other** for any other mail server. The card's **Advanced** disclosure holds its ID and the optional `credentialsFile` side by side.
 
 | Field | Value |
 | --- | --- |
@@ -254,7 +254,7 @@ On the ntfy channel the switch's **Subject** is the notification title (defaults
 
 A group is a named list of people. Each group has four lists: `sms` (phone numbers), `email` (email addresses), `telegram` (chat IDs), and `ntfy` (topic names). A switch sends to whichever lists match the channels it has ticked, so one `Family` group can receive the same message by SMS and by email at the same time.
 
-- Phone numbers are stored in E.164 format, for example `+16785550101`. In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
+- Phone numbers are stored in E.164 format, for example `+16785550101`; the group card says so under its phone list ("Stored with the country code from Settings."). In the settings UI pick the country from the dropdown and type the national number as you like (digits, spaces, dashes, dots, parentheses); nothing is reformatted while you type. When you leave the field the number is checked, stored with its country code, and shown in the national format, and the country dropdown follows the number (a +1 305 number is United States even if Canada was selected). Pasting a number that already has a country code works the same way. A number in `config.json` without a leading `+` is normalized using `defaultCountry` and the normalized value is logged once at startup.
 - Email addresses are validated on entry. Telegram chat IDs are numbers, not usernames; use **Find people and groups** on the Telegram provider card to add them. ntfy topics are the names subscribed in the ntfy app (letters, numbers, dashes and underscores); see the [topic-name warning](#ntfy).
 - A group with no addresses is valid but produces a startup warning if a switch uses it.
 - **Duplicate group** in a group card's footer makes a copy directly below it, named `Family copy` (then `copy 2`), with every address list copied and its own id; no switch is changed.
@@ -267,10 +267,10 @@ A provider the settings UI names for you (`Twilio`, `Email`, or the mail provide
 
 Each switch appears in the Home app under its `name`. Turning it on sends your message to everyone in the groups you pick, on every channel they have, then the switch turns itself off.
 
-In the settings UI a switch card has four parts:
+In the settings UI a switch card starts with the **Name**, the **Enabled** checkbox, **Cooldown (seconds)** and **Failure Mode** side by side, and the **Failure Sensor** checkbox (with its reset time once it is on). Then come four parts:
 
 1. **Recipients.** Tick the groups to send to. Each group shows what it holds per channel, for example `Family: 3 SMS, 1 email, 2 ntfy`. Under **Extra recipients** you can add individual phone numbers, email addresses, Telegram chat IDs or ntfy topics for people outside the groups.
-2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default as soon as it appears (whether you ticked a group here, gave a group its first address on that channel, or added a provider for it), each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
+2. **Send by.** One checkbox per channel your recipients can be reached on, side by side, ticked by default as soon as it appears (whether you ticked a group here, gave a group its first address on that channel, or added a provider for it), each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
 3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)): **Show variables** next to either field lists them with what each would render right now, and clicking one inserts it at the cursor.
 4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
 
@@ -280,6 +280,7 @@ In the settings UI a switch card has four parts:
 
 Open **Advanced** on the card when you need more:
 
+- The switch's **ID**, a generated UUID shown read-only. HomeKit tracks the switch by it, so you can rename the switch freely; it is what `id` holds in `config.json`.
 - **Customize message per channel** gives each ticked channel its own message (and, for email and ntfy, its own subject or title), each starting as a copy of the shared message.
 - A **provider** dropdown appears for a channel that more than one provider can send on. It defaults to `Platform default (…)`, the provider chosen under **Settings**; pick another to send this switch's messages through it instead.
 - **Hide recipients from each other (BCC)** for email, the **Sender** number for SMS when the Twilio provider has several, and the ntfy **Priority** and **Tags**.
@@ -492,7 +493,7 @@ The file is read once at startup, and again when the settings UI runs **Test con
 
 ## Backup, restore, and reset
 
-At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure holds three actions:
+At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure opens with a reminder that the full backup contains your credentials, then holds these actions in this order:
 
 - **Download backup** saves the current platform configuration as `notify-switch-backup-YYYY-MM-DD.json`. The file contains your provider credentials, so store it like a password.
 - **Download backup without credentials** saves the same file as `notify-switch-backup-without-credentials-YYYY-MM-DD.json` with every secret (API key secret, SMTP password, bot token, and every field a `credentialsFile` may supply) replaced by an empty string and `"credentialsRemoved": true` at the top. It is safe to attach to an issue when [asking for help](#getting-help).
@@ -515,7 +516,7 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 - TLS certificate verification cannot be disabled.
 - Email subjects and from names have line breaks removed. Telegram bodies are sent as plain text unless you choose a `parseMode`.
 - Cooldown and the master switch limit the damage from a runaway automation.
-- The plugin has no analytics, writes no files, and reads only the `credentialsFile` you point it at.
+- The plugin has no analytics, writes no files, and reads only the `credentialsFile` you point it at. The settings page loads nothing from the internet: the banner at its top and every script and stylesheet ship inside the package.
 
 ## Troubleshooting
 
@@ -598,6 +599,7 @@ Notifications arrive but the phone does not show them: check the app's notificat
 ### Settings UI
 
 - **The custom settings page does not load**: the standard schema form covers every option; open the plugin settings and use it. Check the Homebridge UI log for the reason.
+- **Nothing on the page confirms a Save**: the Homebridge UI handles Save itself and shows its own restart prompt; the page is not told when it happens, so it shows no message of its own.
 - **Save is disabled**: the list at the bottom of the page shows what to fix. Every item names the provider, group, or switch it belongs to and is a link that takes you to the field. A field shows its error only after you leave it (or jump to it from the list), and a card you just added shows no errors until you leave one of its fields; until then the list reads "Fill in the new provider to enable Save." With more than three items the list collapses to "{n} fields need attention"; click **Show all**.
 - **"You have unsaved changes from earlier" appears at the top**: you closed the settings without saving last time. **Restore** brings those changes back into the form (every field is checked at once); **Discard** forgets them. The draft is kept in your browser for 24 hours and is cleared once the same configuration has been saved, or when you reset the plugin.
 - **The default country was wrong on first load**: on a fresh install the settings UI guesses it from your browser's language, else from the Homebridge host's time zone, else United States. Pick the right one under Settings; once saved it is never changed for you.
@@ -615,7 +617,7 @@ Say which Homebridge, Node.js and plugin versions you run (the settings page foo
 
 ## Development
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development loop, the test harness, and the release process. The full behavior specification is in [SPEC.md](./SPEC.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development loop, the test harness, and the release process. The full behavior specification is in [SPEC.md](./SPEC.md). Continuous integration runs the lint, build and test steps on Node 22 and 24 with read-only repository permissions and every GitHub Action pinned to a commit.
 
 ## Changelog
 

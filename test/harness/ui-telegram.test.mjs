@@ -137,6 +137,9 @@ test('telegram card: step 1 copy, step 2 driving step 3, and the invite copy but
     assert.equal(await advanced.evaluate((node) => node.open), false);
     assert.equal(await advanced.locator('[data-path="providers[0].parseMode"] select').inputValue(), 'none');
     assert.equal(await card.locator('.card-body > [data-path="providers[0].parseMode"]').count(), 0, 'Parse Mode is not in the main form');
+    // ID and Parse Mode share a row at 6 columns; the credentials file takes 12 (SPEC section 11.2, item 28).
+    assert.deepEqual(await advanced.locator('.ns-grid > *').evaluateAll((nodes) => nodes.map((node) => [node.className, node.firstElementChild.dataset.path])),
+      [['ns-span-6', 'providers[0].id'], ['ns-span-6', 'providers[0].parseMode'], ['ns-span-12', 'providers[0].credentialsFile']]);
 
     // The chat id help on the group card points at the renamed button.
     assert.match(await page.locator('.card[data-path="groups[0]"]').textContent(), /Use Find people and groups on your Telegram provider/);

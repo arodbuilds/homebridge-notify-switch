@@ -4,12 +4,12 @@ import { providersForChannel, resolveDefaultProvider } from '../../../src/defaul
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
-import { helpToggle, variablesToggle, variableValues } from '../card.js';
+import { cardHeader, idField, variablesToggle, variableValues } from '../card.js';
 import type { VariablesToggle, VariableValue } from '../card.js';
 import { CHANNEL_TITLE, DUPLICATE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
-  addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
-  statusBox, textField, textareaField,
+  addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, footerAction, grid, gridCell, helpText, inlineConfirm, linkButton, numberField,
+  paragraph, resultBar, selectField, statusBox, textField, textareaField,
 } from '../dom.js';
 import {
   channelRecipients, channelUnserved, duplicateSwitch, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels,
@@ -47,6 +47,11 @@ function withVariables(field: HTMLElement, variables: VariablesToggle): HTMLElem
     variables.bind(control);
   }
   return field;
+}
+
+/** A block sub-heading (SPEC section 11.2, item 28): bold, with its caption under it, grouping the checks or lists that follow. */
+function blockHeading(title: string, caption: string): HTMLElement {
+  return el('div', { class: 'ns-block' }, el('div', { class: 'fw-semibold ns-block-title' }, title), helpText(caption, undefined, 'ns-block-caption'));
 }
 
 /** A message textarea for one channel, or the shared one, with the SMS counter under it when it carries SMS. */
@@ -116,28 +121,28 @@ function testSendScope(app: App, s: UiSwitch, index: number): string[] {
 interface TestSendPanel {
   /** The footer control: the Test send button with its hint, replaced in place by the confirmation while it is open. */
   control: HTMLElement;
-  /** Per-recipient results, rendered below the footer with a Dismiss link. */
+  /** Per-recipient results, in the result bar between the body and the footer strip, with a Dismiss link. */
   results: HTMLElement;
 }
 
 /**
- * Test send (SPEC section 11.2, item 4, and section 11.3): the outlined Test send button is replaced in
+ * Test send (SPEC section 11.2, items 4 and 28, and section 11.3): the outlined Test send button is replaced in
  * place by "Send to {n} recipients now?" with a primary Send button and a text Cancel button. Escape or
- * Cancel restores the button. Results appear below the card footer with a Dismiss link. The button is
- * disabled, with a short hint beside it, while the switch has validation errors or no recipients, so the
- * confirmation can never read "Send to 0 recipients".
+ * Cancel restores the button. Results appear in the card's result bar, between the body and the footer strip,
+ * with a Dismiss link. The button is disabled, with a short hint beside it, while the switch has validation
+ * errors or no recipients, so the confirmation can never read "Send to 0 recipients".
  */
 function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
   const status = statusBox();
-  const results = el('div', { class: 'ns-card-results test-results' });
-  const start = el('button', { type: 'button', class: 'btn btn-outline-primary btn-sm' }, 'Test send');
+  const results = resultBar();
+  results.el.classList.add('test-results');
+  const start = footerAction('Test send');
   const hint = el('span', { class: 'form-text ns-test-send-hint', hidden: true });
   const showResults = (result: TestSendResult): void => {
-    clear(results);
     status.set(result.ok ? 'success' : 'danger', result.message);
-    results.appendChild(status.el);
+    const content: Node[] = [status.el];
     for (const error of result.errors ?? []) {
-      results.appendChild(el('div', { class: 'small text-danger font-monospace' }, error));
+      content.push(el('div', { class: 'small text-danger font-monospace' }, error));
     }
     for (const action of result.actions ?? []) {
       const table = el('table', { class: 'table table-sm mb-2' },
@@ -152,9 +157,9 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
         ));
       }
       table.appendChild(tbody);
-      results.appendChild(table);
+      content.push(table);
     }
-    results.appendChild(linkButton(TEST_SEND.dismiss, () => clear(results)));
+    results.show(...content);
   };
   const confirm = inlineConfirm({
     start,
@@ -164,9 +169,8 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
     cancelLabel: TEST_SEND.cancel,
     cls: 'test-send',
     onConfirm: async () => {
-      clear(results);
       status.set('info', 'Sending…');
-      results.appendChild(status.el);
+      results.show(status.el);
       showResults(await callServer<TestSendResult>('/test-send', { config: exportConfig(app.config), switchId: s.id }));
     },
   });
@@ -180,7 +184,7 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
     hint.textContent = reason;
     hint.hidden = reason.length === 0;
   };
-  return { control, results };
+  return { control, results: results.el };
 }
 
 /**
@@ -249,20 +253,20 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     extras.appendChild(el('div', { class: 'ns-span-6 ns-extra-channel', 'data-channel': channel },
       el('div', { class: 'small fw-semibold mb-1' }, SWITCH_EDITOR.extraChannelLabel[channel]), list.el));
   }
+  // Two blocks (SPEC section 11.2, items 8 and 28): a bold sub-heading with its caption, then the checks or lists it groups.
   root.appendChild(el('div', { class: 'mb-3 ns-recipients' },
-    el('label', { class: 'form-label' }, SWITCH_EDITOR.recipientsLabel),
+    blockHeading(SWITCH_EDITOR.recipientsLabel, SWITCH_EDITOR.recipientsHelp),
     groupBox,
-    helpText(SWITCH_EDITOR.recipientsHelp),
-    el('div', { class: 'mt-2' },
-      el('div', { class: 'form-label mb-1' }, SWITCH_EDITOR.extraLabel),
-      extras,
-      helpText(SWITCH_EDITOR.extraHelp),
-    ),
+  ));
+  root.appendChild(el('div', { class: 'mb-3 ns-extra-recipients-block' },
+    blockHeading(SWITCH_EDITOR.extraLabel, SWITCH_EDITOR.extraHelp),
+    extras,
   ));
 
   // ---- Send by ---------------------------------------------------------------------------------------------
   const channelBox = el('div', { class: 'ns-send-by', 'data-path': `${path}.channels` });
-  const channelRows = el('div', { class: 'ns-send-by-rows' });
+  // One checkbox per present channel, side by side at 4 columns each (SPEC section 11.2, item 8).
+  const channelRows = el('div', { class: 'ns-send-by-rows ns-grid' });
   const sendByEmpty = el('div', { class: 'form-text ns-send-by-empty' }, SWITCH_EDITOR.sendByEmpty);
   const renderChannels = (): void => {
     clear(channelRows);
@@ -294,13 +298,12 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
       } else {
         row.appendChild(el('div', { class: 'invalid-feedback' }));
       }
-      channelRows.appendChild(row);
+      channelRows.appendChild(gridCell(4, row));
     }
   };
-  channelBox.appendChild(el('label', { class: 'form-label' }, SWITCH_EDITOR.sendByLabel));
+  channelBox.appendChild(blockHeading(SWITCH_EDITOR.sendByLabel, SWITCH_EDITOR.sendByHelp));
   channelBox.appendChild(channelRows);
   channelBox.appendChild(sendByEmpty);
-  channelBox.appendChild(helpText(SWITCH_EDITOR.sendByHelp));
   channelBox.appendChild(el('div', { class: 'invalid-feedback' }));
   root.appendChild(el('div', { class: 'mb-3' }, channelBox));
 
@@ -331,7 +334,7 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     app.changed();
   });
   const customizedNote = el('div', { class: 'form-text mb-3 ns-customized-note', hidden: true }, SWITCH_EDITOR.customizedNote);
-  const preview = el('div', { class: 'ns-send-preview small mb-3', role: 'status', 'aria-live': 'polite' });
+  const preview = el('div', { class: 'ns-send-preview mb-3', role: 'status', 'aria-live': 'polite' });
   root.appendChild(el('div', { class: 'ns-message' }, sharedBody.el, subjectField, customizedNote, preview));
 
   // ---- Advanced --------------------------------------------------------------------------------------------
@@ -392,7 +395,8 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
       rerenderSwitch();
     }, { path: `${path}.providers.${channel}`, help: SWITCH_EDITOR.providerHelp });
     field.setAttribute('data-channel', channel);
-    overrides[channel] = field;
+    // The grid cell is what hides, so a hidden dropdown leaves no gap in the row.
+    overrides[channel] = gridCell(6, field);
   }
 
   // SMS sender, only when the resolved Twilio provider offers a choice (SPEC section 5.5, item 3).
@@ -414,27 +418,38 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     }
   }
 
-  const bcc = checkboxField(SWITCH_HELP.bcc, s.bcc, (value) => {
+  const bcc = gridCell(12, checkboxField(SWITCH_HELP.bcc, s.bcc, (value) => {
     s.bcc = value;
     app.changed();
-  }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp });
-  const ntfy = el('div', { class: 'ns-grid ns-ntfy-options' },
-    el('div', { class: 'ns-span-4' }, selectField(NTFY_HELP.priorityLabel, s.priority, NTFY_HELP.priorityOptions, (value) => {
-      s.priority = value as NtfyPriority;
-      app.changed();
-    }, { path: `${path}.priority`, help: NTFY_HELP.priority })),
-    el('div', { class: 'ns-span-8' }, textField(NTFY_HELP.tagsLabel, s.tags.join(', '), (value) => {
-      s.tags = parseTags(value);
-      app.changed();
-    }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags })),
-  );
+  }, { path: `${path}.bcc`, help: SWITCH_HELP.bccHelp }));
+  // Priority and Tags share one row at 6 columns each (SPEC section 11.2, item 8).
+  const priority = gridCell(6, selectField(NTFY_HELP.priorityLabel, s.priority, NTFY_HELP.priorityOptions, (value) => {
+    s.priority = value as NtfyPriority;
+    app.changed();
+  }, { path: `${path}.priority`, help: NTFY_HELP.priority }));
+  const tags = gridCell(6, textField(NTFY_HELP.tagsLabel, s.tags.join(', '), (value) => {
+    s.tags = parseTags(value);
+    app.changed();
+  }, { path: `${path}.tags`, placeholder: NTFY_HELP.tagsPlaceholder, help: NTFY_HELP.tags }));
+  priority.classList.add('ns-ntfy-option');
+  tags.classList.add('ns-ntfy-option');
   // An override that names a provider nobody can resolve on a channel no provider serves is the stored action's
   // provider (SPEC section 5.7, item 7); it is kept, not shown, so it does not open Advanced on its own.
   const overrideShown = (channel: Channel): boolean => s.providers[channel] !== '' && !channelUnserved(app.config, channel);
   const advancedOpen = s.customize || CHANNELS.some(overrideShown) || s.sender !== '' || s.bcc || s.priority !== 'default' || s.tags.length > 0;
-  const advanced = disclosure(SWITCH_EDITOR.advanced, [
-    customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy,
-  ], { open: advancedOpen, attrs: { 'data-advanced': path } });
+  // The switch id (SPEC section 11.2, item 8): generated, read-only, with no Edit link, first in the Advanced grid.
+  const id = idField({ path: `${path}.id`, value: s.id, help: SWITCH_EDITOR.idHelp, editable: false });
+  // Advanced opens a second 12-column grid (SPEC section 11.2, items 8 and 28): ID, Customize, the per-channel messages, the
+  // provider dropdowns and the Sender at 6 columns, Priority and Tags on one row, then BCC. The dropdowns and the ntfy pair
+  // each sit in a row of their own, so whichever dropdowns are hidden, Priority and Tags still share a row.
+  const senderCell = senderField ? gridCell(6, senderField) : el('span', { hidden: true });
+  const providerRow = grid(...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderCell);
+  providerRow.classList.add('ns-provider-row');
+  const ntfyRow = grid(priority, tags);
+  ntfyRow.classList.add('ns-ntfy-options');
+  const advanced = disclosure(SWITCH_EDITOR.advanced, [grid(
+    gridCell(12, id), gridCell(12, customize), gridCell(12, perChannel), gridCell(12, providerRow), gridCell(12, ntfyRow), bcc,
+  )], { open: advancedOpen, attrs: { 'data-advanced': path } });
   root.appendChild(advanced);
 
   // ---- Live state ------------------------------------------------------------------------------------------
@@ -465,7 +480,8 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
       senderField.hidden = !served.includes('sms');
     }
     bcc.hidden = !served.includes('email');
-    ntfy.hidden = !served.includes('ntfy');
+    priority.hidden = !served.includes('ntfy');
+    tags.hidden = !served.includes('ntfy');
     const parts = served.map((channel) => ({
       channel, provider: providerName(app, switchProviderId(s, channel, app.config)), count: channelRecipients(app.config, s, channel).size,
     })).filter((part) => part.count > 0);
@@ -483,27 +499,27 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     app.changed();
   };
   const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, s));
+  // The shared header strip (SPEC section 11.2, item 28): a switch card has no type badge and no header links.
+  const header = cardHeader(card, s, title, [], []);
   const body = el('div', { class: 'card-body' });
 
+  // The card's fields in shell order (SPEC section 11.2, item 8): Name, Enabled, Cooldown and Failure Mode on one row,
+  // Failure Sensor (with its reset field while it is on), then the editor. The id sits under Advanced.
   body.appendChild(textField('Name', s.name, (value) => {
     s.name = value;
     title.textContent = switchTitle(s);
     app.changed();
   }, { path: `${path}.name`, required: true, placeholder: 'e.g. Water Leak Alert', help: SWITCH_HELP.name }));
-  body.appendChild(el('div', { class: 'form-text ns-help mb-3 switch-id', 'data-path': `${path}.id` },
-    'ID ', el('code', {}, s.id), ' (generated; HomeKit tracks the switch by this id, so you can rename it freely)', el('div', { class: 'invalid-feedback' })));
-
-  body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-4' }, checkboxField('Enabled', s.enabled, (value) => {
-      s.enabled = value;
-      app.changed();
-    }, { path: `${path}.enabled`, help: 'A disabled switch still appears in the Home app but does nothing when turned on.' })),
-    el('div', { class: 'ns-span-4' }, numberField('Cooldown (seconds)', s.cooldownSeconds, (value) => {
+  body.appendChild(checkboxField('Enabled', s.enabled, (value) => {
+    s.enabled = value;
+    app.changed();
+  }, { path: `${path}.enabled`, help: SWITCH_HELP.enabled }));
+  body.appendChild(grid(
+    gridCell(6, numberField('Cooldown (seconds)', s.cooldownSeconds, (value) => {
       s.cooldownSeconds = value;
       app.changed();
     }, { path: `${path}.cooldownSeconds`, min: 0, max: 86400, help: SWITCH_HELP.cooldownSeconds })),
-    el('div', { class: 'ns-span-4' }, selectField('Failure Mode', s.failureMode, [
+    gridCell(6, selectField('Failure Mode', s.failureMode, [
       { value: 'any', label: 'Any' }, { value: 'all', label: 'All' }, { value: 'off', label: 'Off' },
     ], (value) => {
       s.failureMode = value as UiSwitch['failureMode'];
@@ -511,27 +527,26 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     }, { path: `${path}.failureMode`, help: SWITCH_HELP.failureMode })),
   ));
 
-  const resetField = numberField('Failure Sensor Reset (seconds)', s.failureSensorResetSeconds, (value) => {
+  const resetField = gridCell(6, numberField('Failure Sensor Reset (seconds)', s.failureSensorResetSeconds, (value) => {
     s.failureSensorResetSeconds = value;
     app.changed();
-  }, { path: `${path}.failureSensorResetSeconds`, min: 0, max: 86400, help: SWITCH_HELP.failureSensorReset });
+  }, { path: `${path}.failureSensorResetSeconds`, min: 0, max: 86400, help: SWITCH_HELP.failureSensorReset }));
   resetField.hidden = !s.failureSensor;
-  body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, checkboxField('Failure Sensor', s.failureSensor, (value) => {
-      s.failureSensor = value;
-      resetField.hidden = !value;
-      app.changed();
-    }, { path: `${path}.failureSensor`, help: SWITCH_HELP.failureSensor })),
-    el('div', { class: 'ns-span-6' }, resetField),
-  ));
+  body.appendChild(checkboxField('Failure Sensor', s.failureSensor, (value) => {
+    s.failureSensor = value;
+    resetField.hidden = !value;
+    app.changed();
+  }, { path: `${path}.failureSensor`, help: SWITCH_HELP.failureSensor }));
+  body.appendChild(grid(resetField));
 
   body.appendChild(editor(app, s, index, rerenderSwitch));
 
-  // Footer: Remove switch (with its in-place confirmation) on the left, Test send on the right; results below the footer.
+  // Footer strip (SPEC section 11.2, items 11 and 28): Remove switch (with its in-place confirmation, "Remove {name}?") on the
+  // left, Test send on the right; the results in the bar between the body and the footer.
   const testSend = testSendPanel(app, s, index);
   const remove = inlineConfirm({
     start: dangerLinkButton('Remove switch', () => undefined),
-    question: () => REMOVE.question('switch'),
+    question: () => REMOVE.question('switch', s.name.trim()),
     confirmLabel: REMOVE.confirm,
     confirmClass: 'btn btn-danger btn-sm',
     cancelLabel: REMOVE.cancel,
@@ -558,8 +573,8 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
 
   card.appendChild(header);
   card.appendChild(body);
-  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   card.appendChild(testSend.results);
+  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   app.watchCard(card, s);
   return card;
 }

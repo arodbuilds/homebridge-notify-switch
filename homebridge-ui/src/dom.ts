@@ -3,7 +3,7 @@
  * Homebridge UI, which injects its stylesheet and theme into the settings iframe.
  */
 
-import { GET_STARTED } from './copy.js';
+import { GET_STARTED, RESULT_BAR } from './copy.js';
 
 type Child = Node | string | null | undefined | false;
 
@@ -218,13 +218,18 @@ export function paragraph(text: string, cls = 'section-copy'): HTMLElement {
   return el('p', { class: cls }, text);
 }
 
+/** The classes of a section's Add button (SPEC section 11.2, item 28): 38px primary, or outlined secondary while gated. */
+export function sectionAddClass(enabled: boolean): string {
+  return enabled ? 'btn btn-primary ns-section-add' : 'btn btn-outline-secondary ns-section-add';
+}
+
 /**
- * A section's Add button (Add group, Add switch). While no provider exists it is disabled, drawn as an
- * outlined button so it reads as disabled on every theme, with the "Add a provider first." hint beside
- * it (SPEC section 11.2, item 19).
+ * A section's Add button (Add group, Add switch): the one 38px primary button of a section (SPEC section 11.2,
+ * item 28). While no provider exists it is disabled, drawn as an outlined button so it reads as disabled on
+ * every theme, with the "Add a provider first." hint beside it (item 19).
  */
 export function addButton(label: string, onClick: () => void, enabled: boolean): HTMLElement {
-  const node = button(label, onClick, enabled ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm');
+  const node = button(label, onClick, sectionAddClass(enabled));
   if (enabled) {
     return node;
   }
@@ -232,6 +237,17 @@ export function addButton(label: string, onClick: () => void, enabled: boolean):
   node.title = GET_STARTED.addProviderFirst;
   return el('div', { class: 'ns-add-row' }, node, el('span', { class: 'form-text ns-add-hint' }, GET_STARTED.addProviderFirst));
 }
+
+/** A cell of the 12-column grid (SPEC section 11.2, item 28): `span` columns wide, full width below 600px. */
+export function gridCell(span: number, ...children: Child[]): HTMLElement {
+  return el('div', { class: `ns-span-${span}` }, ...children);
+}
+
+/** The 12-column grid with its 8px column gap; `cells` come from `gridCell`. */
+export function grid(...cells: Child[]): HTMLElement {
+  return el('div', { class: 'ns-grid' }, ...cells);
+}
+
 
 /** Inline status line under a button: `kind` picks the Bootstrap alert colour. */
 export function statusBox(): { el: HTMLElement; set(kind: 'success' | 'danger' | 'warning' | 'info' | 'none', message: string, detail?: Node): void } {
@@ -253,6 +269,22 @@ export function statusBox(): { el: HTMLElement; set(kind: 'success' | 'danger' |
 /** A link-style (text) button: no border or background, used for secondary actions such as Cancel and Dismiss. */
 export function linkButton(label: string, onClick: () => void, extra = ''): HTMLButtonElement {
   return button(label, onClick, `btn btn-link btn-sm p-0 ns-link-button${extra ? ` ${extra}` : ''}`);
+}
+
+/**
+ * The result bar of a card (SPEC section 11.2, item 28): between the body and the footer strip, holding a Test
+ * connection or Test send result until its Dismiss link is used. Empty, it takes no space.
+ */
+export function resultBar(): { el: HTMLElement; show(...content: Node[]): void; clear(): void } {
+  const bar = el('div', { class: 'ns-card-results' });
+  return {
+    el: bar,
+    show(...content) {
+      clear(bar);
+      append(bar, ...content, linkButton(RESULT_BAR.dismiss, () => clear(bar), 'ns-result-dismiss'));
+    },
+    clear: () => clear(bar),
+  };
 }
 
 /** An outlined secondary button: every "Add …" control and Cancel in the chooser (SPEC section 11.2, item 11). */
@@ -319,22 +351,30 @@ export function inlineConfirm(opts: InlineConfirmOptions): HTMLElement {
   return control;
 }
 
-/** A red text button: Remove and Reset only (SPEC section 11.3). */
+/** A red text button: Remove and Reset only (SPEC section 11.3). `ns-danger-link` keeps it red under the host's dark marker (item 28). */
 export function dangerLinkButton(label: string, onClick: () => void): HTMLButtonElement {
-  return linkButton(label, onClick, 'text-danger');
+  return linkButton(label, onClick, 'text-danger ns-danger-link');
 }
 
 /**
- * Card footer row (SPEC section 11.2, item 11): the red text button on the left (with the Duplicate text button
- * beside it on switch and group cards), at most one outlined primary button on the right. `right` may be empty.
- * The primary side comes first in the markup and the stylesheet reverses the row, so when the footer wraps on a
- * phone the primary action stays on top.
+ * Card footer strip (SPEC section 11.2, items 11 and 28): the red text button on the left (with the Duplicate text
+ * button beside it on switch and group cards), at most one outlined primary action on the right. `right` may be
+ * empty. The primary side comes first in the markup and the stylesheet reverses the row, so when the footer wraps
+ * on a phone the primary action stays on top.
  */
 export function cardFooter(left: HTMLElement | HTMLElement[] | null, right: HTMLElement | null): HTMLElement {
   return el('div', { class: 'card-footer ns-card-footer' },
     el('div', { class: 'ns-footer-right' }, right),
     el('div', { class: 'ns-footer-left' }, ...(Array.isArray(left) ? left : [left])),
   );
+}
+
+/**
+ * The footer's primary action (Test connection, Test send): an outlined, link-coloured 31px button
+ * (SPEC section 11.2, item 28).
+ */
+export function footerAction(label: string, onClick?: () => void): HTMLButtonElement {
+  return button(label, onClick ?? (() => undefined), 'btn btn-outline-primary btn-sm ns-footer-action');
 }
 
 export interface ModalHandle {

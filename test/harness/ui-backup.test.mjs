@@ -55,9 +55,12 @@ test('settings advanced: Download backup writes the current configuration as not
     await advanced.locator('summary').click();
     assert.equal(await advanced.locator('.backup-note').textContent(),
       'The full backup contains your provider credentials; store it like a password. The version without credentials is safe to share when asking for help.');
-    // The note sits under the two buttons, which share one row.
+    // Shell order (SPEC section 11.2, items 12 and 28): the note first, then the two buttons at 6 columns each, then Restore, then Reset.
     assert.equal(await advanced.locator('.ns-backup-actions button').count(), 2);
-    assert.equal(await advanced.locator('.ns-backup-actions + .backup-note').count(), 1);
+    assert.equal(await advanced.locator('.backup-note + .ns-backup-actions').count(), 1, 'the note comes first');
+    assert.deepEqual(await advanced.locator('.ns-backup-actions > *').evaluateAll((nodes) => nodes.map((node) => node.className)), ['ns-span-6', 'ns-span-6']);
+    const order = await advanced.locator('summary + div > *').evaluateAll((nodes) => nodes.map((node) => node.className || node.textContent.trim()));
+    assert.deepEqual(order, ['form-text backup-note mb-2', 'ns-grid ns-backup-actions mb-3', 'mb-3', 'Reset plugin to fresh install']);
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       advanced.getByRole('button', { name: 'Download backup', exact: true }).click(),
@@ -135,7 +138,7 @@ test('settings advanced: Restore from a backup without credentials loads everyth
     await picker.setInputFiles(file('shared.json', stripped));
     await page.waitForSelector('.card[data-path="providers[1]"]');
     assert.equal(await page.locator(`${ADVANCED} .restore-status .alert-danger`).count(), 0, 'accepted');
-    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header > span').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
+    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header .ns-card-title').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
     assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored');
     assert.equal(await page.locator('.card[data-path="switches[0]"] [data-path="switches[0].name"] input').inputValue(), 'Smoke Alarm');
     assert.deepEqual(await page.evaluate(() => window.__hb.toasts.at(-1)), ['success', 'Backup loaded. Enter the credentials it left out, then click Save.']);
@@ -190,13 +193,13 @@ test('settings advanced: Restore from backup validates first and replaces the fo
     // A backup that fails the configuration rules: nothing changes.
     await picker.setInputFiles(file('invalid.json', { ...BACKUP, providers: [{ ...SMTP, host: '' }] }));
     await page.waitForFunction(() => /Host is required/.test(document.querySelector('.restore-status')?.textContent ?? ''));
-    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header > span').textContent(), 'TwilioTwilio', 'the form is untouched');
+    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header .ns-card-title').textContent(), 'TwilioTwilio', 'the form is untouched');
 
     // A valid backup replaces the form state and enables Save.
     await picker.setInputFiles(file('good.json', BACKUP));
     await page.waitForSelector('.card[data-path="providers[1]"]');
     assert.equal(await page.locator(`${ADVANCED} .restore-status .alert-danger`).count(), 0);
-    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header > span').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
+    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header .ns-card-title').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
     assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored');
     assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'GB');
     await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].name === 'Restored');

@@ -88,7 +88,7 @@ test('guided empty state: a Get started card with the chooser tiles, disabled Ad
 
     // Removing the last provider (through the in-place confirmation) brings the guided empty state back and disables the Add buttons again.
     await page.getByRole('button', { name: 'Remove provider' }).click();
-    assert.equal(await page.locator('.ns-remove-confirm .ns-confirm-question').textContent(), 'Remove this provider?');
+    assert.equal(await page.locator('.ns-remove-confirm .ns-confirm-question').textContent(), 'Remove Telegram?', 'the confirm names the card');
     await page.locator('.ns-remove-confirm').getByRole('button', { name: 'Remove', exact: true }).click();
     assert.equal(await page.locator('.ns-get-started').count(), 1);
     assert.equal(await page.locator('#section-groups').getByRole('button', { name: 'Add group' }).isDisabled(), true);

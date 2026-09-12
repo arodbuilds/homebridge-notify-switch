@@ -59,7 +59,7 @@ All four must pass. `npm run lint` fails on any warning. Then:
 
 ## Releases
 
-1. Set the new version in `package.json` (and `package-lock.json`; `npm version <version> --no-git-tag-version` updates both). Nothing else carries the version: README, SPEC and this file stay as they are.
+1. Set the new version in `package.json` and `package-lock.json` (`npm version <version> --no-git-tag-version` updates both) and in the status line at the top of `SPEC.md` ("Current as of <version>"). Nothing else carries the version: README and this file stay as they are.
 2. Move the Unreleased section of `CHANGELOG.md` into an entry for that version.
 3. Merge to `latest`, then publish a GitHub release whose tag is `v<version>`. Mark it as a pre-release for beta versions.
-4. The release workflow lints, builds, tests, and publishes to npm: pre-releases under the `beta` tag, releases under `latest`.
+4. The release workflow lints, builds, tests, and publishes to npm under `latest`. Pre-releases are the exception: mark a GitHub release as a pre-release only when a beta is deliberately wanted, and it is published under the `beta` tag instead.

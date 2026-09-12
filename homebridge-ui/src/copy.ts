@@ -18,6 +18,12 @@ export interface HelpLink {
   href: string;
 }
 
+/** The page banner (SPEC section 11.2, item 28): served from the plugin's own public folder, never an external host. */
+export const BANNER = {
+  file: 'notify-switch-banner.png',
+  alt: 'Notify Switch, Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.',
+};
+
 export const GETTING_STARTED = 'Notify Switch adds switches to the Home app. Turn one on, usually from an automation, and it sends a message, '
   + 'then turns itself off.';
 
@@ -160,6 +166,9 @@ export const GROUPS_SECTION = 'A group is a list of people. Switches send to gro
 /** Group Name field help, with examples (SPEC section 11.3). */
 export const GROUP_NAME_HELP = 'Who is in this list. For example: Family, Neighbors, On-call.';
 
+/** Group phone list caption (SPEC section 11.2, item 24, from 1.3.0). */
+export const GROUP_SMS_HELP = 'Stored with the country code from Settings.';
+
 export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on sends your message to everyone in the groups you pick, '
   + 'on every channel they have, then the switch turns itself off.';
 
@@ -206,6 +215,8 @@ export const SWITCH_EDITOR = {
     .map((part) => `${CHANNEL_WORD[part.channel]} via ${part.provider} to ${countRecipients(part.channel, part.count)}`).join(', ')}.`,
   previewNone: 'Nothing will be sent yet.',
   advanced: 'Advanced',
+  /** The read-only switch id under Advanced (SPEC section 11.2, item 8, from 1.3.0). */
+  idHelp: 'Generated. HomeKit tracks the switch by this id, so you can rename it freely.',
   customize: 'Customize message per channel',
   customizeHelp: 'Write a different message for each channel. Each starts as a copy of the shared message.',
   channelBody: { sms: 'SMS message', email: 'Email message', telegram: 'Telegram message', ntfy: 'ntfy message' } as Record<Channel, string>,
@@ -265,6 +276,7 @@ export const FORMAT_SETTINGS = {
 
 export const SWITCH_HELP = {
   name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes. For example: Water Leak Alert, Smoke Alarm.',
+  enabled: 'A disabled switch still appears in the Home app but does nothing when turned on.',
   cooldownSeconds: 'Minimum seconds between sends for this switch. 0 disables the cooldown.',
   failureMode: 'Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged.',
   failureSensor: 'Adds a sensor to this switch that HomeKit automations can watch. It opens when a message fails to send.',
@@ -311,6 +323,8 @@ export const VALIDATION = {
   switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
   /** Provider, group and platform names (SPEC section 5). */
   name: 'Use letters, numbers, spaces, and punctuation, up to 64 characters.',
+  /** A name another card of the same kind already uses (only switch names must be unique; SPEC section 11.3). */
+  duplicateName: (noun: 'switch' | 'provider' | 'group'): string => `Another ${noun} already uses this name.`,
   ntfyServer: 'That does not look like a server address. It starts with https:// or http://, for example https://ntfy.sh.',
   ntfyTopic: (topic: string): string => `Topic "${topic}" is not a topic name. Use letters, numbers, dashes and underscores, up to 64 characters.`,
   ntfyTag: (tag: string): string => `Tag "${tag}" is not a tag. Use letters, numbers, dashes, underscores and plus signs, up to 32 characters.`,
@@ -346,11 +360,19 @@ export const DUPLICATE = {
   group: 'Duplicate group',
 };
 
-/** In-place Remove confirmation on card footers (SPEC section 11.2, item 11). */
+/**
+ * In-place Remove confirmation on card footers (SPEC section 11.2, items 11 and 28): "Remove {title}?" with the card's
+ * current name, or "Remove this {noun}?" while it has none. The title is inserted as text, never as markup.
+ */
 export const REMOVE = {
-  question: (what: 'provider' | 'group' | 'switch'): string => `Remove this ${what}?`,
+  question: (what: 'provider' | 'group' | 'switch', title = ''): string => (title ? `Remove ${title}?` : `Remove this ${what}?`),
   confirm: 'Remove',
   cancel: 'Cancel',
+};
+
+/** The result bar between a card's body and its footer strip (SPEC section 11.2, item 28). */
+export const RESULT_BAR = {
+  dismiss: 'Dismiss',
 };
 
 /** Unsaved draft recovery banner (SPEC section 11.2, item 23). */

@@ -64,10 +64,13 @@ async function audit(page) {
   });
 }
 
-/** For each grid with two or more visible children, the distinct left edges of those children. */
+/**
+ * For each grid with two or more visible children that are not full rows (a 12-column cell is a row of its own, such
+ * as the ID at the top of a switch's Advanced grid), the distinct left edges of those children.
+ */
 async function gridColumns(page) {
   return page.evaluate(() => [...document.querySelectorAll('.ns-grid')].map((grid) => {
-    const children = [...grid.children].filter((child) => child.getBoundingClientRect().height > 0);
+    const children = [...grid.children].filter((child) => child.getBoundingClientRect().height > 0 && !child.classList.contains('ns-span-12'));
     const lefts = [...new Set(children.map((child) => Math.round(child.getBoundingClientRect().left)))];
     const widths = children.map((child) => Math.round(child.getBoundingClientRect().width));
     return { children: children.length, lefts, widths, gridWidth: Math.round(grid.getBoundingClientRect().width) };
