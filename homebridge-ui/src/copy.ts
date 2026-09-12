@@ -215,6 +215,8 @@ export const SWITCH_EDITOR = {
     .map((part) => `${CHANNEL_WORD[part.channel]} via ${part.provider} to ${countRecipients(part.channel, part.count)}`).join(', ')}.`,
   previewNone: 'Nothing will be sent yet.',
   advanced: 'Advanced',
+  /** The read-only switch id under Advanced (SPEC section 11.2, item 8, from 1.3.0). */
+  idHelp: 'Generated. HomeKit tracks the switch by this id, so you can rename it freely.',
   customize: 'Customize message per channel',
   customizeHelp: 'Write a different message for each channel. Each starts as a copy of the shared message.',
   channelBody: { sms: 'SMS message', email: 'Email message', telegram: 'Telegram message', ntfy: 'ntfy message' } as Record<Channel, string>,
@@ -274,6 +276,7 @@ export const FORMAT_SETTINGS = {
 
 export const SWITCH_HELP = {
   name: 'Shown in the Home app. Letters, numbers, spaces, and apostrophes. For example: Water Leak Alert, Smoke Alarm.',
+  enabled: 'A disabled switch still appears in the Home app but does nothing when turned on.',
   cooldownSeconds: 'Minimum seconds between sends for this switch. 0 disables the cooldown.',
   failureMode: 'Any: the sensor trips if any recipient fails. All: only if every recipient fails. Off: never trips; failures are still logged.',
   failureSensor: 'Adds a sensor to this switch that HomeKit automations can watch. It opens when a message fails to send.',

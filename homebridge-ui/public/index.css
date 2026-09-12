@@ -506,9 +506,17 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .btn-link {
 .address-row.has-issue > .invalid-feedback,
 .address-list.has-issue > .invalid-feedback,
 .list-feedback.has-issue > .invalid-feedback,
-.actions.has-issue > .invalid-feedback,
-.switch-id.has-issue > .invalid-feedback {
+.actions.has-issue > .invalid-feedback {
   display: block;
+}
+
+/* A block of the switch editor (SPEC section 11.2, items 8 and 28): a bold sub-heading with its caption under it. */
+.ns-block {
+  margin-bottom: 0.5rem;
+}
+
+.ns-block-caption {
+  margin-top: 0;
 }
 
 /* The switch editor (SPEC section 11.2, item 8). */
@@ -526,6 +534,12 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .btn-link {
 
 .ns-send-by .form-check[data-path] {
   margin-bottom: 0.25rem;
+}
+
+/* The Send by checkboxes sit side by side at 4 columns each and wrap as needed (SPEC section 11.2, item 8). */
+.ns-send-by-rows {
+  row-gap: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .ns-send-preview {

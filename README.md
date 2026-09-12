@@ -267,10 +267,10 @@ A provider the settings UI names for you (`Twilio`, `Email`, or the mail provide
 
 Each switch appears in the Home app under its `name`. Turning it on sends your message to everyone in the groups you pick, on every channel they have, then the switch turns itself off.
 
-In the settings UI a switch card has four parts:
+In the settings UI a switch card starts with the **Name**, the **Enabled** checkbox, **Cooldown (seconds)** and **Failure Mode** side by side, and the **Failure Sensor** checkbox (with its reset time once it is on). Then come four parts:
 
 1. **Recipients.** Tick the groups to send to. Each group shows what it holds per channel, for example `Family: 3 SMS, 1 email, 2 ntfy`. Under **Extra recipients** you can add individual phone numbers, email addresses, Telegram chat IDs or ntfy topics for people outside the groups.
-2. **Send by.** One checkbox per channel your recipients can be reached on, ticked by default as soon as it appears (whether you ticked a group here, gave a group its first address on that channel, or added a provider for it), each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
+2. **Send by.** One checkbox per channel your recipients can be reached on, side by side, ticked by default as soon as it appears (whether you ticked a group here, gave a group its first address on that channel, or added a provider for it), each with the number of people it reaches: `SMS (3 numbers)`, `Email (1 address)`. Untick a channel to skip it for this switch. A channel nobody can be reached on is not listed. A channel this switch already sends on whose provider has been removed stays listed, greyed out, with the note `No provider configured for Telegram; add one or untick to remove.`; add a provider or untick it before saving.
 3. **Message.** One message for every channel. While SMS is ticked a counter shows the characters and segments used and flags characters SMS cannot carry. A **Subject** field appears while email or ntfy is ticked; it is the email subject and the ntfy title, and defaults to the switch name. Template variables work in both (see [Template variables](#template-variables)): **Show variables** next to either field lists them with what each would render right now, and clicking one inserts it at the cursor.
 4. A preview line says exactly what will happen: `Will send SMS via Twilio to 3 numbers, email via Fastmail to 1 address, ntfy via ntfy to 2 topics.`
 
@@ -280,6 +280,7 @@ In the settings UI a switch card has four parts:
 
 Open **Advanced** on the card when you need more:
 
+- The switch's **ID**, a generated UUID shown read-only. HomeKit tracks the switch by it, so you can rename the switch freely; it is what `id` holds in `config.json`.
 - **Customize message per channel** gives each ticked channel its own message (and, for email and ntfy, its own subject or title), each starting as a copy of the shared message.
 - A **provider** dropdown appears for a channel that more than one provider can send on. It defaults to `Platform default (…)`, the provider chosen under **Settings**; pick another to send this switch's messages through it instead.
 - **Hide recipients from each other (BCC)** for email, the **Sender** number for SMS when the Twilio provider has several, and the ntfy **Priority** and **Tags**.

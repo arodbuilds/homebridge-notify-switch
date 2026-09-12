@@ -55,6 +55,53 @@ test('switch editor: recipients with counts, Send by with counts, one message an
     assert.equal(await sw.getByRole('button', { name: 'Add action' }).count(), 0);
     assert.equal(await sw.locator('.coverage-warning').count(), 0);
 
+    // The card's fields in shell order (SPEC section 11.2, items 8 and 28): Name, Enabled, Cooldown and Failure Mode on one row,
+    // Failure Sensor, then the editor blocks; the id is under Advanced, read-only, with its caption and no Edit link.
+    const bodyOrder = await sw.locator('.card-body').evaluate((body) => [...body.children].slice(0, 6).map((node) => {
+      const cells = [...node.querySelectorAll(':scope > [class^="ns-span-"]')];
+      return cells.length > 0 ? cells.map((cell) => `${cell.className}:${cell.firstElementChild.dataset.path}`).join(' ') : node.dataset.path ?? node.className;
+    }));
+    assert.deepEqual(bodyOrder, [
+      'switches[0].name', 'switches[0].enabled', 'ns-span-6:switches[0].cooldownSeconds ns-span-6:switches[0].failureMode', 'switches[0].failureSensor',
+      'ns-span-6:switches[0].failureSensorResetSeconds', 'ns-switch-editor',
+    ]);
+    assert.equal(await sw.locator('[data-path="switches[0].enabled"] .ns-help').textContent(),
+      'A disabled switch still appears in the Home app but does nothing when turned on.');
+    assert.equal(await sw.locator('.card-body > [data-path="switches[0].id"], .card-body > .switch-id').count(), 0, 'no id line in the body');
+    const idField = sw.locator('details.ns-advanced [data-path="switches[0].id"]');
+    assert.equal(await idField.locator('input').inputValue(), '6f1c2a9e-2b1c-4b8f-9d1e-0c5a1e2f3a4b');
+    assert.equal(await idField.locator('input').evaluate((node) => node.readOnly), true);
+    assert.equal(await idField.locator('label').textContent(), 'ID');
+    assert.equal(await idField.locator('.ns-help').textContent(), 'Generated. HomeKit tracks the switch by this id, so you can rename it freely.');
+    assert.equal(await idField.locator('.ns-id-edit').count(), 0, 'no Edit link on the switch id');
+    assert.equal(await idField.evaluate((node) => node.parentElement.className), 'ns-span-12');
+    const describe = (cells) => cells
+      .map((cell) => `${cell.className}:${cell.firstElementChild?.dataset.path ?? cell.firstElementChild?.className ?? cell.tagName}`);
+    const advancedOrder = await sw.locator('details.ns-advanced > div > .ns-grid > *').evaluateAll(describe);
+    assert.deepEqual(advancedOrder, [
+      'ns-span-12:switches[0].id', 'ns-span-12:switches[0].customize', 'ns-span-12:ns-per-channel', 'ns-span-12:ns-grid ns-provider-row',
+      'ns-span-12:ns-grid ns-ntfy-options', 'ns-span-12:switches[0].bcc',
+    ], 'ID, Customize, the per-channel messages, the provider row, the Priority and Tags row, BCC');
+    assert.deepEqual(await sw.locator('details.ns-advanced .ns-provider-row > *').evaluateAll(describe), [
+      'ns-span-6:switches[0].providers.sms', 'ns-span-6:switches[0].providers.email', 'ns-span-6:switches[0].providers.telegram',
+      'ns-span-6:switches[0].providers.ntfy', ':SPAN',
+    ], 'a provider dropdown per channel at 6 columns, then the Sender slot');
+    assert.deepEqual(await sw.locator('details.ns-advanced .ns-ntfy-options > *').evaluateAll(describe),
+      ['ns-span-6 ns-ntfy-option:switches[0].priority', 'ns-span-6 ns-ntfy-option:switches[0].tags'], 'Priority and Tags share a row');
+    // Blocks: a bold heading with the caption directly under it.
+    for (const [block, title, caption] of [
+      ['.ns-recipients', 'Recipients', 'Everyone in the groups you tick gets the message on every channel they have an address for.'],
+      ['.ns-extra-recipients-block', 'Extra recipients', 'People outside the groups above, entered under their channel.'],
+      ['.ns-send-by', 'Send by', 'Untick a channel to skip it for this switch.'],
+    ]) {
+      assert.equal(await sw.locator(`${block} .ns-block-title`).textContent(), title);
+      assert.equal(await sw.locator(`${block} .ns-block-title + .ns-block-caption`).textContent(), caption);
+    }
+    assert.deepEqual(await sw.locator('.ns-extra-recipients > *').evaluateAll((nodes) => nodes.map((node) => node.className.split(' ')[0])),
+      ['ns-span-6', 'ns-span-6', 'ns-span-6'], 'extra lists at 6 columns');
+    const sendByCells = sw.locator('.ns-send-by-rows > *').evaluateAll((nodes) => nodes.map((node) => node.className));
+    assert.deepEqual(await sendByCells, ['ns-span-4', 'ns-span-4', 'ns-span-4']);
+
     // Recipients: group checkboxes with per-channel counts, then extra addresses by channel.
     const groups = sw.locator('.ns-recipient-groups');
     assert.deepEqual(await groups.locator('.form-check-label').allTextContents(), ['Family: 2 SMS, 1 email, 2 ntfy', 'Neighbours: 1 email']);
