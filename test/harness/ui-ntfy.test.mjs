@@ -58,6 +58,10 @@ test('ntfy card: the fourth tile creates the card with its copy, the server defa
     const server = card.locator('[data-path="providers[1].server"]');
     assert.equal(await server.locator('input').inputValue(), 'https://ntfy.sh');
     assert.equal(await server.locator('.ns-help').textContent(), 'Leave as ntfy.sh unless you run your own server.');
+    // Advanced: ID and Credentials File side by side at 6 columns each (SPEC section 11.2, items 24 and 28).
+    const advancedCells = card.locator('details.ns-advanced .ns-grid > *')
+      .evaluateAll((nodes) => nodes.map((node) => [node.className, node.firstElementChild.dataset.path]));
+    assert.deepEqual(await advancedCells, [['ns-span-6', 'providers[1].id'], ['ns-span-6', 'providers[1].credentialsFile']]);
     let config = await pushed(page, () => window.__hb.updates.at(-1)?.[0].providers.length === 2);
     assert.deepEqual(config.providers[1], { id: 'ntfy', type: 'ntfy', name: 'ntfy', server: 'https://ntfy.sh', auth: 'none' });
 

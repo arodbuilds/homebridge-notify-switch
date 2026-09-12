@@ -90,7 +90,7 @@ Twilio serves the `sms` channel and, once a domain is authenticated, the `email`
 | `accountSid` | [Console home page](https://console.twilio.com), **Account Info**. Starts with `AC`. |
 | `apiKeySid` and `apiKeySecret` | [Account > API keys & tokens](https://console.twilio.com/us1/account/keys-credentials/api-keys). Create a **Standard** key, or a **Restricted** key with read and write access to Messaging. |
 | `smsSenders` | [Phone Numbers > Manage > Active numbers](https://console.twilio.com/us1/develop/phone-numbers/manage/incoming). E.164 format with the country code. In the settings UI, **Look up numbers** lists them for you. |
-| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. In the settings UI it is under the Twilio card's **Advanced** disclosure, and **Look up numbers** can fill it. |
+| `messagingServiceSid` | Optional. [Messaging > Services](https://console.twilio.com/us1/develop/sms/services). Starts with `MG`. In the settings UI it is under the Twilio card's **Advanced** disclosure, beside the ID and above `credentialsFile`, and **Look up numbers** can fill it. |
 | `emailFrom` | Optional. Required only for the `email` channel. The domain must be authenticated (see below). |
 
 #### API keys
@@ -133,7 +133,7 @@ Twilio Email adds an open-tracking pixel to every message. As of September 2026 
 
 SMTP serves the `email` channel through any mail account. The plugin sends one message per action with every recipient in `To`, so recipients see each other; tick **Hide recipients from each other (BCC)** on an action to put them in `Bcc` with your from address in `To` instead (a message to one recipient always uses `To`). TLS certificate verification is always on.
 
-In the settings UI the SMTP card opens with a **Mail provider** picker (Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other). Picking one fills the server settings below and locks them (click **Edit** to change them), and the password help links straight to that provider's app-password page. Choose **Other** for any other mail server.
+In the settings UI the SMTP card opens with a **Mail provider** picker (Fastmail, Gmail, iCloud, Outlook.com, Yahoo, Zoho, Other). Picking one fills the **Host**, **Port** and **Security** row below and locks it (click **Edit** to change them), and the password help links straight to that provider's app-password page. Choose **Other** for any other mail server. The card's **Advanced** disclosure holds its ID and the optional `credentialsFile` side by side.
 
 | Field | Value |
 | --- | --- |

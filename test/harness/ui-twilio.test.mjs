@@ -60,6 +60,10 @@ test('twilio card: Look up numbers fills the dropdowns and selecting adds a send
     assert.equal(await advanced.locator('[data-path="providers[0].credentialsFile"] input').count(), 1);
     assert.match(await advanced.locator('[data-path="providers[0].messagingServiceSid"] .form-text').textContent(),
       /^Optional\. Use a Messaging Service instead/);
+    // The Advanced grid (SPEC section 11.2, item 28): ID and Messaging Service SID share a row at 6 columns, the credentials file takes 12.
+    assert.deepEqual(await advanced.locator('.ns-grid > *').evaluateAll((nodes) => nodes.map((node) => [node.className, node.firstElementChild.dataset.path])),
+      [['ns-span-6', 'providers[0].id'], ['ns-span-6', 'providers[0].messagingServiceSid'], ['ns-span-12', 'providers[0].credentialsFile']]);
+    assert.equal(await page.locator(`${CARD} [data-path="providers[0].apiKeySid"] input`).getAttribute('placeholder'), 'e.g. SK…');
 
     await lookup.click();
     await page.waitForSelector(`${CARD} select[data-lookup="numbers"]`);

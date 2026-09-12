@@ -252,7 +252,7 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
     p.apiKeySid = v;
     refreshLookup();
     app.changed();
-  }, { path: `${path}.apiKeySid`, required: true, monospace: true, placeholder: 'SK…', help: TWILIO_HELP.apiKey, helpLink: TWILIO_HELP.apiKeyLink }));
+  }, { path: `${path}.apiKeySid`, required: true, monospace: true, placeholder: 'e.g. SK…', help: TWILIO_HELP.apiKey, helpLink: TWILIO_HELP.apiKeyLink }));
   body.appendChild(passwordField('API Key Secret', p.apiKeySecret, (v) => {
     p.apiKeySecret = v;
     refreshLookup();
@@ -294,13 +294,13 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
     }, { path: `${path}.emailFrom.name`, placeholder: 'e.g. Home' })),
   ));
 
-  // Advanced: ID, Messaging Service SID and credentials file (SPEC section 11.2, items 9 and 14).
+  // Advanced (SPEC section 11.2, items 9, 14 and 28): ID and Messaging Service SID on one row at 6 columns each, then the credentials file at 12.
   const serviceField = textField('Messaging Service SID', p.messagingServiceSid, (v) => {
     p.messagingServiceSid = v;
     app.changed(true);
   }, { path: `${path}.messagingServiceSid`, monospace: true, placeholder: 'MG…', help: TWILIO_HELP.messagingServiceSid });
   const serviceInput = serviceField.querySelector('input') as HTMLInputElement;
-  const advanced = advancedDisclosure(app, p, path, id, [[12, serviceField]], p.messagingServiceSid.trim().length > 0, { id: 12, credentials: 12 });
+  const advanced = advancedDisclosure(app, p, path, id, [[6, serviceField]], p.messagingServiceSid.trim().length > 0, { id: 6, credentials: 12 });
   lookup.onService = (sid) => {
     p.messagingServiceSid = sid;
     serviceInput.value = sid;
@@ -437,11 +437,8 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
     applyPreset(key);
     app.changed();
   }));
-  body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, hostField),
-    el('div', { class: 'ns-span-3' }, portField),
-    el('div', { class: 'ns-span-3' }, securityField),
-  ));
+  // Host, Port and Security on one row at 7, 2 and 3 columns, with the help under the whole row (SPEC section 11.2, item 22).
+  body.appendChild(grid(gridCell(7, hostField), gridCell(2, portField), gridCell(3, securityField)));
   body.appendChild(serverHelp);
   body.appendChild(textField('Username', p.username, (v) => {
     p.username = v;
@@ -458,7 +455,8 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
       app.changed();
     }, { path: `${path}.from.name`, placeholder: 'e.g. Home', help: SMTP_HELP.fromName })),
   ));
-  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 12, credentials: 12 }));
+  // Advanced: ID and credentials file side by side (SPEC section 11.2, item 28).
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 6, credentials: 6 }));
   // A stored preset locks the stored values; nothing is overwritten on load (the runtime reads host, port and security).
   applyPreset(p.smtpPreset);
 }
@@ -711,14 +709,14 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
   // Find people and groups (SPEC section 11.2, item 5).
   body.appendChild(findChatsPanel(app, p));
 
-  // Advanced: ID, Parse Mode (plain text by default) and credentials file.
+  // Advanced: ID and Parse Mode (plain text by default) on one row at 6 columns each, then the credentials file at 12 (SPEC section 11.2, item 28).
   const parseMode = selectField('Parse Mode', p.parseMode, [
     { value: 'none', label: 'None (plain text)' }, { value: 'markdown', label: 'Markdown' }, { value: 'html', label: 'HTML' },
   ], (v) => {
     p.parseMode = v as UiProvider['parseMode'];
     app.changed();
   }, { path: `${path}.parseMode`, help: TELEGRAM_HELP.parseMode });
-  body.appendChild(advancedDisclosure(app, p, path, id, [[12, parseMode]], p.parseMode !== 'none', { id: 12, credentials: 12 }));
+  body.appendChild(advancedDisclosure(app, p, path, id, [[6, parseMode]], p.parseMode !== 'none', { id: 6, credentials: 12 }));
 
   setUsername(undefined);
   if (BOT_TOKEN_PATTERN.test(p.botToken.trim())) {
@@ -768,7 +766,8 @@ function ntfyFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
     el('div', { class: 'ns-span-6' }, password),
   ));
   applyAuth();
-  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 12, credentials: 12 }));
+  // Advanced: ID and credentials file side by side (SPEC section 11.2, items 24 and 28).
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 6, credentials: 6 }));
 }
 
 // ---- Shared ---------------------------------------------------------------------------------------------
