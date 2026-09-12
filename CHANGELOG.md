@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Settings > Advanced in shell order.** The reminder that the full backup contains your credentials now comes first, then **Download backup** and **Download backup without credentials** side by side, then **Restore from backup** with its help, then **Reset plugin to fresh install** (SPEC section 11.2, item 12).
 
+- **No "Saved. Restart Homebridge to apply." box.** The shared shell shows one after a successful Save, but the Homebridge UI gives a custom settings page no event or callback when it saves (`@homebridge/plugin-ui-utils` 2.2.6 dispatches only `ready` and the plugin server's own pushed events), so the page cannot know that a Save happened. The host's own Save flow and restart prompt stand; the box is deliberately left out (SPEC section 11.2, item 28).
+
 ### Fixed
 
 - **Dark mode: text buttons keep their colours.** The Homebridge UI's dark theme painted every text button grey, so **Remove provider**, **Remove group**, **Remove switch** and **Reset plugin to fresh install** lost their red and **Duplicate**, **Make default**, **Keep**, **Cancel** and **Dismiss** their link colour. One rule gives them back their colours in dark mode; the help toggle stays secondary and the entries of the summary box keep its colour. The default-provider prompt and every other alert box are left-aligned whatever the host's alert styling, and the variable tokens under **Show variables** are drawn in the link colour so they read as clickable (SPEC section 11.2, items 18 and 28).
