@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -123,6 +123,9 @@ export function homebridgeStub(config, requestScript = 'async () => ({ ok: true,
 export function writePage() {
   const dir = mkdtempSync(join(tmpdir(), 'notify-switch-ui-'));
   const file = join(dir, 'index.html');
+  // The banner sits beside index.html in the plugin's public folder and the page references it by a relative path
+  // (SPEC section 11.2, item 28); the copy makes the temporary page load it the same way.
+  copyFileSync(join(PUBLIC, 'notify-switch-banner.png'), join(dir, 'notify-switch-banner.png'));
   // Same order as the Homebridge UI: the plugin's index.html links its own stylesheet, then the host appends its own.
   writeFileSync(file, `<!doctype html>
 <html lang="en">

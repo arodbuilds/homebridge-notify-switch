@@ -135,7 +135,7 @@ test('settings advanced: Restore from a backup without credentials loads everyth
     await picker.setInputFiles(file('shared.json', stripped));
     await page.waitForSelector('.card[data-path="providers[1]"]');
     assert.equal(await page.locator(`${ADVANCED} .restore-status .alert-danger`).count(), 0, 'accepted');
-    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header > span').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
+    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header .ns-card-title').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
     assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored');
     assert.equal(await page.locator('.card[data-path="switches[0]"] [data-path="switches[0].name"] input').inputValue(), 'Smoke Alarm');
     assert.deepEqual(await page.evaluate(() => window.__hb.toasts.at(-1)), ['success', 'Backup loaded. Enter the credentials it left out, then click Save.']);
@@ -190,13 +190,13 @@ test('settings advanced: Restore from backup validates first and replaces the fo
     // A backup that fails the configuration rules: nothing changes.
     await picker.setInputFiles(file('invalid.json', { ...BACKUP, providers: [{ ...SMTP, host: '' }] }));
     await page.waitForFunction(() => /Host is required/.test(document.querySelector('.restore-status')?.textContent ?? ''));
-    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header > span').textContent(), 'TwilioTwilio', 'the form is untouched');
+    assert.equal(await page.locator('.card[data-path="providers[0]"] .card-header .ns-card-title').textContent(), 'TwilioTwilio', 'the form is untouched');
 
     // A valid backup replaces the form state and enables Save.
     await picker.setInputFiles(file('good.json', BACKUP));
     await page.waitForSelector('.card[data-path="providers[1]"]');
     assert.equal(await page.locator(`${ADVANCED} .restore-status .alert-danger`).count(), 0);
-    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header > span').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
+    assert.deepEqual(await page.locator('.card[data-path^="providers"] .card-header .ns-card-title').allTextContents(), ['FastmailSMTP', 'TelegramTelegram']);
     assert.equal(await page.locator('[data-path="name"] input').inputValue(), 'Restored');
     assert.equal(await page.locator('[data-path="defaultCountry"] select').inputValue(), 'GB');
     await page.waitForFunction(() => window.__hb.updates.at(-1)?.[0].name === 'Restored');

@@ -77,9 +77,9 @@ The plugin does nothing until it is configured, and it never registers accessori
 
 ## Provider setup guides
 
-In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, Telegram, or ntfy) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below.
+In the settings UI, **Add provider** asks which service should send your messages (Twilio, Email over SMTP, Telegram, or ntfy) and creates the card for it; the type cannot be changed afterwards, so remove the card and add another to switch. Every card has a **Show help** toggle in its header that collapses the field help once you know the form, and the help lines link back to the sections below. **Remove provider** in a card's footer asks "Remove Fastmail?" (with the card's name) before anything goes.
 
-Add only the providers you plan to use. Every provider has a **Test connection** button in the settings UI that checks the credentials without sending anything: SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), Telegram asks the bot who it is, and ntfy checks the server's health and, when credentials are set, that it accepts them. Credentials in the form are used for that one request and are not stored until you click Save.
+Add only the providers you plan to use. Every provider has a **Test connection** button in the footer of its card in the settings UI that checks the credentials without sending anything; the answer appears just above the footer with a **Dismiss** link. Test connection SMTP logs in to the mail server, Twilio lists one message on your account (a read that both Standard and Messaging-scoped Restricted keys are allowed), Telegram asks the bot who it is, and ntfy checks the server's health and, when credentials are set, that it accepts them. Credentials in the form are used for that one request and are not stored until you click Save.
 
 ### Twilio (SMS and email)
 
@@ -515,7 +515,7 @@ Running this plugin as a [child bridge](https://github.com/homebridge/homebridge
 - TLS certificate verification cannot be disabled.
 - Email subjects and from names have line breaks removed. Telegram bodies are sent as plain text unless you choose a `parseMode`.
 - Cooldown and the master switch limit the damage from a runaway automation.
-- The plugin has no analytics, writes no files, and reads only the `credentialsFile` you point it at.
+- The plugin has no analytics, writes no files, and reads only the `credentialsFile` you point it at. The settings page loads nothing from the internet: the banner at its top and every script and stylesheet ship inside the package.
 
 ## Troubleshooting
 

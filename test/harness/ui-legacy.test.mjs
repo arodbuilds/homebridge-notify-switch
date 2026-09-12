@@ -39,7 +39,9 @@ test('legacy configuration: the notice is first, every section is disabled excep
     assert.equal(await notice.isVisible(), true);
     assert.equal(await notice.textContent(), NOTICE);
     assert.equal(await notice.getAttribute('role'), 'alert');
-    assert.equal(await page.locator('#app > :first-child').evaluate((node) => node.classList.contains('ns-legacy-notice')), true, 'at the top of the page');
+    // Directly under the page banner, before anything else (SPEC section 11.2, items 26 and 28).
+    assert.equal(await page.locator('#app > :first-child').evaluate((node) => node.classList.contains('ns-banner')), true);
+    assert.equal(await page.locator('#app > :nth-child(2)').evaluate((node) => node.classList.contains('ns-legacy-notice')), true, 'at the top of the page');
 
     // The switch is not represented: no card, a line naming it instead.
     assert.equal(await page.locator('.card[data-path^="switches"]').count(), 0);

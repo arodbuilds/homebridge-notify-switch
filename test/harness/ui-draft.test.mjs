@@ -60,7 +60,9 @@ test('draft recovery: a change is kept under the plugin key, offered back on the
     const banner = page.locator('.ns-draft-banner');
     assert.equal(await banner.isVisible(), true);
     assert.equal(await banner.locator('.ns-draft-message').textContent(), 'You have unsaved changes from earlier. Restore them?');
-    assert.equal(await page.evaluate(() => document.getElementById('app').firstElementChild.classList.contains('ns-draft-banner')), true);
+    // Directly under the page banner, before anything else (SPEC section 11.2, items 23 and 28).
+    assert.equal(await page.evaluate(() => document.getElementById('app').firstElementChild.classList.contains('ns-banner')), true);
+    assert.equal(await page.evaluate(() => document.getElementById('app').children[1].classList.contains('ns-draft-banner')), true);
     assert.equal(await page.locator('[data-path="groups[0].name"] input').inputValue(), 'Family', 'the saved configuration is shown until Restore');
     await banner.getByRole('button', { name: 'Restore' }).click();
     assert.equal(await banner.isVisible(), false);

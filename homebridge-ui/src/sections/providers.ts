@@ -5,14 +5,15 @@ import { BOT_TOKEN_PATTERN } from '../../../src/patterns.js';
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
-import { compactLinkActions, helpToggle, idField, qrBlock } from '../card.js';
+import { cardHeader, compactLinkActions, headerBadge, idField, qrBlock } from '../card.js';
 import {
   CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, DEFAULTS, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
   PROVIDER_TYPE_LABEL, PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
-  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, helpLink, helpText, inlineConfirm, linkButton, linkOut, numberField,
-  openModal, outlineButton, paragraph, passwordField, selectField, setHelp, statusBox, textField, uniqueId,
+  button, cardFooter, clear, copyButton, dangerLinkButton, disclosure, el, footerAction, grid, gridCell, helpLink, helpText, inlineConfirm, linkButton,
+  linkOut, numberField, openModal, outlineButton, paragraph, passwordField, resultBar, sectionAddClass, selectField, setHelp, statusBox, textField,
+  uniqueId,
 } from '../dom.js';
 import { createProvider, exportProvider, slugify, uniqueName, uniqueSlug } from '../model.js';
 import type { UiProvider } from '../model.js';
@@ -87,14 +88,15 @@ function defaultPrompt(app: App, p: UiProvider, channel: Channel, candidates: Ui
 }
 
 /**
- * The platform defaults on a provider card (SPEC section 5.7 and section 11.2, item 25). The header slot shows, for
- * every channel the provider serves while more than one provider serves it, either the badge "Default for {channel}"
- * (this provider is the written, or resolved, default) or the text button "Make default for {channel}", which writes
- * the entry. The prompt box, at the bottom of the card body, asks on the card the page marked when it wrote the
- * default on appearance, only while that card validates and the channel still has several validated providers.
- * Both are redrawn only when what they show changes, so a click is never lost to a validation pass.
+ * The platform defaults on a provider card (SPEC section 5.7 and section 11.2, items 25 and 28). The header shows, for
+ * every channel the provider serves while more than one provider serves it, either the status badge "Default for
+ * {channel}" in the left cluster (`slot`; this provider is the written, or resolved, default) or the link "Make default
+ * for {channel}" in the right cluster (`actions`), which writes the entry. The prompt box, at the bottom of the card
+ * body, asks on the card the page marked when it wrote the default on appearance, only while that card validates and
+ * the channel still has several validated providers. All are redrawn only when what they show changes, so a click is
+ * never lost to a validation pass.
  */
-function defaultsOnCard(app: App, p: UiProvider, index: number, slot: HTMLElement): ValidationListener {
+function defaultsOnCard(app: App, p: UiProvider, index: number, slot: HTMLElement, actions: HTMLElement): ValidationListener {
   const box: ValidationListener = el('div', { class: 'ns-default-prompts ns-on-validate' });
   const prefix = `providers[${index}]`;
   let shown = '';
@@ -125,13 +127,16 @@ function defaultsOnCard(app: App, p: UiProvider, index: number, slot: HTMLElemen
     }
     shown = key;
     clear(slot);
+    clear(actions);
     for (const entry of badges) {
       if (entry.isDefault) {
-        slot.appendChild(el('span', { class: 'badge text-bg-secondary ns-default-badge', 'data-channel': entry.channel }, DEFAULTS.badge(entry.channel)));
+        const badge = headerBadge(DEFAULTS.badge(entry.channel), 'status', 'ns-default-badge');
+        badge.setAttribute('data-channel', entry.channel);
+        slot.appendChild(badge);
       } else {
         const make = linkButton(DEFAULTS.makeDefault(entry.channel), () => app.chooseDefault(entry.channel, p.id.trim()), 'ns-make-default');
         make.setAttribute('data-channel', entry.channel);
-        slot.appendChild(make);
+        actions.appendChild(make);
       }
     }
     clear(box);
@@ -142,11 +147,17 @@ function defaultsOnCard(app: App, p: UiProvider, index: number, slot: HTMLElemen
   return box;
 }
 
+/** A field of the Advanced grid with the columns it spans (SPEC section 11.2, item 28). */
+type AdvancedCell = [span: number, field: HTMLElement];
+
 /**
- * The "Advanced" disclosure (SPEC section 11.2, item 14): the ID first, then any extra fields for the
- * type, then the credentials file. Open when something optional in it is set.
+ * The "Advanced" disclosure (SPEC section 11.2, items 14 and 28): a second 12-column grid holding the ID first, then
+ * any extra fields for the type, then the credentials file, each at the width the type's card gives it. Open when
+ * something optional in it is set.
  */
-function advancedDisclosure(app: App, p: UiProvider, path: string, id: HTMLElement, extra: HTMLElement[], open: boolean): HTMLDetailsElement {
+function advancedDisclosure(
+  app: App, p: UiProvider, path: string, id: HTMLElement, extra: AdvancedCell[], open: boolean, spans: { id: number; credentials: number },
+): HTMLDetailsElement {
   const credentials = textField('Credentials File', p.credentialsFile, (v) => {
     p.credentialsFile = v;
     app.changed();
@@ -155,7 +166,9 @@ function advancedDisclosure(app: App, p: UiProvider, path: string, id: HTMLEleme
     helpLink: CREDENTIALS_FILE_LINK,
   });
   const isOpen = open || p.credentialsFile.trim().length > 0;
-  return disclosure('Advanced', [id, ...extra, credentials], { cls: 'mb-3', open: isOpen, attrs: { 'data-advanced': path } });
+  const cells: AdvancedCell[] = [[spans.id, id], ...extra, [spans.credentials, credentials]];
+  const body = grid(...cells.map(([span, field]) => gridCell(span, field)));
+  return disclosure('Advanced', [body], { cls: 'mb-3', open: isOpen, attrs: { 'data-advanced': path } });
 }
 
 interface LookupPanel {
@@ -287,7 +300,7 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
     app.changed(true);
   }, { path: `${path}.messagingServiceSid`, monospace: true, placeholder: 'MG…', help: TWILIO_HELP.messagingServiceSid });
   const serviceInput = serviceField.querySelector('input') as HTMLInputElement;
-  const advanced = advancedDisclosure(app, p, path, id, [serviceField], p.messagingServiceSid.trim().length > 0);
+  const advanced = advancedDisclosure(app, p, path, id, [[12, serviceField]], p.messagingServiceSid.trim().length > 0, { id: 12, credentials: 12 });
   lookup.onService = (sid) => {
     p.messagingServiceSid = sid;
     serviceInput.value = sid;
@@ -445,7 +458,7 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
       app.changed();
     }, { path: `${path}.from.name`, placeholder: 'e.g. Home', help: SMTP_HELP.fromName })),
   ));
-  body.appendChild(advancedDisclosure(app, p, path, id, [], false));
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 12, credentials: 12 }));
   // A stored preset locks the stored values; nothing is overwritten on load (the runtime reads host, port and security).
   applyPreset(p.smtpPreset);
 }
@@ -705,7 +718,7 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
     p.parseMode = v as UiProvider['parseMode'];
     app.changed();
   }, { path: `${path}.parseMode`, help: TELEGRAM_HELP.parseMode });
-  body.appendChild(advancedDisclosure(app, p, path, id, [parseMode], p.parseMode !== 'none'));
+  body.appendChild(advancedDisclosure(app, p, path, id, [[12, parseMode]], p.parseMode !== 'none', { id: 12, credentials: 12 }));
 
   setUsername(undefined);
   if (BOT_TOKEN_PATTERN.test(p.botToken.trim())) {
@@ -755,7 +768,7 @@ function ntfyFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
     el('div', { class: 'ns-span-6' }, password),
   ));
   applyAuth();
-  body.appendChild(advancedDisclosure(app, p, path, id, [], false));
+  body.appendChild(advancedDisclosure(app, p, path, id, [], false, { id: 12, credentials: 12 }));
 }
 
 // ---- Shared ---------------------------------------------------------------------------------------------
@@ -765,11 +778,12 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   const others = (): string[] => app.config.providers.filter((other) => other !== p).map((other) => other.id);
   const card = el('div', { class: 'card mb-3', 'data-path': path, 'data-type': p.type });
   const title = el('span', { class: 'fw-semibold' }, providerTitle(p));
-  const badge = el('span', { class: 'badge text-bg-secondary ms-2' }, PROVIDER_TYPE_LABEL[p.type]);
-  // The platform default badge or "Make default" button per channel (SPEC section 11.2, item 25) sits after the type badge.
+  const badge = headerBadge(PROVIDER_TYPE_LABEL[p.type], 'type');
+  // The shared header strip (SPEC section 11.2, item 28): the "Default for {channel}" status badges sit after the type badge
+  // in the left cluster, the "Make default for {channel}" links in the right cluster before the help toggle (item 25).
   const defaultsSlot = el('span', { class: 'ns-default-slot' });
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' },
-    el('span', { class: 'ns-card-title' }, title, badge, defaultsSlot), helpToggle(card, p));
+  const defaultsActions = el('span', { class: 'ns-default-actions' });
+  const header = cardHeader(card, p, title, [badge, defaultsSlot], [defaultsActions]);
 
   const body = el('div', { class: 'card-body' });
   // The id is generated from the name (SPEC section 11.2, item 14) and keeps following it until it is
@@ -821,21 +835,21 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     break;
   }
   // The default provider prompt is the last thing in the body, directly above the footer (SPEC section 11.2, item 25).
-  body.appendChild(defaultsOnCard(app, p, index, defaultsSlot));
+  body.appendChild(defaultsOnCard(app, p, index, defaultsSlot, defaultsActions));
 
-  // Footer (SPEC section 11.2, item 11): Remove provider on the left, Test connection on the right; the result below.
+  // Footer strip (SPEC section 11.2, items 11 and 28): Remove provider on the left, Test connection on the right; the
+  // result in the bar between the body and the footer, with its Dismiss link.
   const status = statusBox();
-  const results = el('div', { class: 'ns-card-results' });
-  const test = button('Test connection', async () => {
-    clear(results);
+  const results = resultBar();
+  const test = footerAction('Test connection', async () => {
     status.set('info', 'Testing…');
-    results.appendChild(status.el);
+    results.show(status.el);
     const result = await callServer<{ ok: boolean; message: string }>('/test-provider', { provider: exportProvider(p) });
     status.set(result.ok ? 'success' : 'danger', result.message);
-  }, 'btn btn-outline-primary btn-sm');
+  });
   const remove = inlineConfirm({
     start: dangerLinkButton('Remove provider', () => undefined),
-    question: () => REMOVE.question('provider'),
+    question: () => REMOVE.question('provider', providerTitle(p) === 'New provider' ? '' : providerTitle(p)),
     confirmLabel: REMOVE.confirm,
     confirmClass: 'btn btn-danger btn-sm',
     cancelLabel: REMOVE.cancel,
@@ -852,8 +866,8 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
 
   card.appendChild(header);
   card.appendChild(body);
+  card.appendChild(results.el);
   card.appendChild(cardFooter(remove, test));
-  card.appendChild(results);
   app.watchCard(card, p);
   return card;
 }
@@ -885,7 +899,7 @@ function addProviderControl(app: App): HTMLElement {
   let showChooser: () => void = () => undefined;
   const showButton = (): void => {
     clear(slot);
-    slot.appendChild(button(CHOOSER.add, () => showChooser(), 'btn btn-primary btn-sm'));
+    slot.appendChild(button(CHOOSER.add, () => showChooser(), sectionAddClass(true)));
   };
   showChooser = (): void => {
     clear(slot);

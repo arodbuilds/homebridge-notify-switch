@@ -1,6 +1,6 @@
 import { setSaveEnabled, toastError } from './api.js';
 import type { App, LegacyConfig, Section, ValidationListener } from './app.js';
-import { DRAFT, GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, ISSUES, LEGACY, SAVE_STATUS, VALIDATION } from './copy.js';
+import { BANNER, DRAFT, GETTING_STARTED, GETTING_STARTED_STEPS, HOMEKIT_USAGE, ISSUES, LEGACY, SAVE_STATUS, VALIDATION } from './copy.js';
 import { button, clear, el, linkButton } from './dom.js';
 import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
@@ -91,14 +91,17 @@ class Page implements App {
 
   constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
-    // A configuration with more than one action on the same channel: the blocking notice comes first, before
-    // anything else on the page, and stays until Reset plugin to fresh install replaces the configuration.
-    // It is only in the page while it applies, so the draft banner stays the first element otherwise.
+    // The page banner is the first element of the page (SPEC section 11.2, item 28), served from the plugin's own
+    // public folder beside this bundle; nothing on the page loads from an external host.
+    root.appendChild(el('img', { class: 'ns-banner', src: BANNER.file, alt: BANNER.alt, width: '2560', height: '640' }));
+    // A configuration with more than one action on the same channel: the blocking notice comes right after the
+    // banner, before anything else on the page, and stays until Reset plugin to fresh install replaces the
+    // configuration. It is only in the page while it applies, so the draft banner follows the banner otherwise.
     this.legacyNotice = el('div', { class: 'ns-legacy-notice alert alert-warning', role: 'alert' }, LEGACY.notice);
     if (legacy) {
       root.appendChild(this.legacyNotice);
     }
-    // Unsaved draft recovery banner (SPEC section 11.2, item 23), the first element of the page when a draft waits.
+    // Unsaved draft recovery banner (SPEC section 11.2, item 23), directly under the page banner when a draft waits.
     // Laid out by its own rule, not `d-flex`, whose `!important` display would defeat the `hidden` attribute.
     this.draftBanner = el('div', { class: 'ns-draft-banner alert alert-info', role: 'status', hidden: true });
     root.appendChild(this.draftBanner);

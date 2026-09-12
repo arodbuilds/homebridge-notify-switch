@@ -91,7 +91,8 @@ test('provider chooser: four tiles create a card with the type fixed, the name p
     assert.deepEqual(config.providers.map((p) => p.name), ['Twilio', 'Email', 'Twilio 2', 'Twilio 3']);
     assert.equal(await page.locator('.card[data-path="providers[3]"] .card-header .badge').textContent(), 'Twilio');
 
-    // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in four equal columns (SPEC section 11.2, item 13).
+    // The chooser's Cancel is an outlined secondary button, and the tiles fill the width in equal columns of at least 150px:
+    // four across on a desktop, fewer as the width shrinks, one on a phone (SPEC section 11.2, items 13 and 28).
     await page.getByRole('button', { name: 'Add provider' }).click();
     assert.match(await page.locator('.ns-chooser').getByRole('button', { name: 'Cancel' }).getAttribute('class'), /\bbtn-outline-secondary\b/);
     const tileBoxes = async () => page.locator('.ns-chooser .ns-chooser-tile').evaluateAll((nodes) => nodes.map((node) => {
@@ -104,9 +105,10 @@ test('provider chooser: four tiles create a card with the type fixed, the name p
     assert.ok(boxes.every((b) => Math.abs(b.width - boxes[0].width) <= 1), `equal columns: ${boxes.map((b) => b.width).join(', ')}`);
     const last = boxes[boxes.length - 1];
     assert.ok(Math.abs(last.left + last.width - boxes[0].left - tilesWidth) <= 1, 'the tiles fill the card width');
-    await page.setViewportSize({ width: 700, height: 900 });
+    await page.setViewportSize({ width: 620, height: 900 });
     boxes = await tileBoxes();
-    assert.equal(new Set(boxes.map((b) => b.top)).size, 2, 'two rows between 600px and 768px');
+    assert.equal(new Set(boxes.map((b) => b.top)).size, 2, 'a second row once four 150px tiles no longer fit');
+    assert.ok(boxes.every((b) => b.width >= 150), `every tile keeps its 150px minimum: ${boxes.map((b) => b.width).join(', ')}`);
     await page.setViewportSize({ width: 400, height: 900 });
     boxes = await tileBoxes();
     assert.equal(new Set(boxes.map((b) => b.left)).size, 1, 'stacked below 600px');

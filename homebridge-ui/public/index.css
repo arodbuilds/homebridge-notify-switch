@@ -41,6 +41,13 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   --bs-link-hover-color-rgb: 139, 185, 254;
 }
 
+/* The card's own variables are declared on `.card` by Bootstrap, so the dark values it needs are re-declared
+   there too: the subtle strip behind the header and footer (SPEC section 11.2, item 28). */
+body.dark-mode .notify-switch-ui .card,
+body[class*="config-ui-x-dark-mode"] .notify-switch-ui .card {
+  --bs-card-cap-bg: #262626;
+}
+
 /* Secondary text, one rule for all of it: field help, hints, empty-state lines, captions, disclosure
    labels (every details > summary), the help toggle, table captions and disabled buttons. The theme's
    secondary colour where the host defines it, otherwise the surrounding text colour, which the host
@@ -86,6 +93,9 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   min-width: 0;
 }
 
+/* Every width the cards use (SPEC section 11.2, item 28): 2 (Port), 3, 4 (Send by), 5, 6, 7 (Host), 8, 9 and 12 (a full row). */
+.ns-span-1 { grid-column: span 1; }
+.ns-span-2 { grid-column: span 2; }
 .ns-span-3 { grid-column: span 3; }
 .ns-span-4 { grid-column: span 4; }
 .ns-span-5 { grid-column: span 5; }
@@ -93,6 +103,9 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 .ns-span-7 { grid-column: span 7; }
 .ns-span-8 { grid-column: span 8; }
 .ns-span-9 { grid-column: span 9; }
+.ns-span-10 { grid-column: span 10; }
+.ns-span-11 { grid-column: span 11; }
+.ns-span-12 { grid-column: span 12; }
 
 /* A single column on phones: every field takes the full width below 600px. */
 @media (max-width: 599.98px) {
@@ -115,14 +128,234 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 }
 
 .ns-section h2 {
+  font-weight: 300;
   margin-bottom: 0.5rem;
   padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
 }
 
-.card-header .badge {
-  vertical-align: middle;
+/* ---- Shell (SPEC section 11.2, item 28): the card and control rules shared with the author's other plugins. ---- */
+
+/* The page banner: the first element of the page, full container width at 4:1, served from the plugin's own folder. */
+.notify-switch-ui .ns-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-top: 16px;
+  margin-bottom: 1rem;
 }
+
+/* Buttons: 4px radius throughout; small (secondary) actions are 31px tall, 13.5px uppercase; the one section Add button
+   is 38px with uppercase 16px text. Text buttons keep their case. Form controls keep their own 6px radius. */
+.notify-switch-ui .btn {
+  border-radius: 4px;
+}
+
+.notify-switch-ui .btn-sm {
+  min-height: 31px;
+  padding: 4px 8px;
+  font-size: 13.5px;
+  line-height: 21px;
+  text-transform: uppercase;
+}
+
+.notify-switch-ui .ns-section-add {
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 16px;
+  line-height: 24px;
+  text-transform: uppercase;
+}
+
+/* Text buttons (links), the mail provider segments (a selection, not an action) and the password field's attached
+   Show / Hide keep their case and size; the attached button follows the 38px control it is joined to. */
+.notify-switch-ui .btn-link,
+.notify-switch-ui .ns-preset-segments .btn {
+  text-transform: none;
+  font-size: inherit;
+  line-height: inherit;
+  min-height: 0;
+}
+
+.notify-switch-ui .btn-sm.btn-link {
+  padding: 0;
+}
+
+.notify-switch-ui .input-group > .btn {
+  font-size: 13.5px;
+  text-transform: uppercase;
+}
+
+/* A gated section Add button: outlined, disabled, secondary text, and the cursor says so. */
+.notify-switch-ui .btn:disabled,
+.notify-switch-ui .btn.disabled {
+  cursor: not-allowed;
+}
+
+/* Form controls: 38px tall, 6px radius, 11px side padding, 16px text; checkboxes 16px. */
+.notify-switch-ui .form-control:not(.form-control-sm) {
+  padding-left: 11px;
+  padding-right: 11px;
+}
+
+.notify-switch-ui .form-select:not(.form-select-sm) {
+  padding-left: 11px;
+}
+
+.notify-switch-ui .form-check-input {
+  width: 16px;
+  height: 16px;
+}
+
+/* Card header strip: the bold title, the type badge and the status badges on the left; the header links and the
+   help toggle on the right (12.6px, 12px apart). Aligned on the first baseline, so on a phone the badges wrap under
+   the title while the right cluster stays on the first row. */
+.notify-switch-ui .ns-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+}
+
+.notify-switch-ui .ns-card-header .ns-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notify-switch-ui .ns-card-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 12px;
+  font-size: 0.875em;
+}
+
+.notify-switch-ui .ns-card-actions .btn-link {
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+.notify-switch-ui .ns-card-actions .ns-make-default {
+  --ns-text-button-color: var(--bs-link-color, #0d6efd);
+}
+
+/* Badges: 11.5px weight 600, 3px 7px padding, 4px radius; the type badge on the secondary fill, a status badge on the success fill. */
+.notify-switch-ui .badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 4px;
+  vertical-align: middle;
+  top: 0;
+}
+
+.notify-switch-ui .badge.text-bg-secondary {
+  color: #fff;
+  background-color: var(--bs-secondary, #6c757d) !important;
+}
+
+.notify-switch-ui .badge.text-bg-success {
+  color: #fff;
+  background-color: var(--bs-success, #198754) !important;
+}
+
+/* Card body: 16px padding with none at the bottom (each field carries 16px below it); the Advanced disclosure and the
+   default provider prompt keep that spacing themselves. */
+.notify-switch-ui .card-body {
+  padding: 16px 16px 0;
+}
+
+.notify-switch-ui .card-body details.ns-advanced,
+.notify-switch-ui .card-body > .ns-default-prompts:not(:empty),
+.notify-switch-ui .ns-get-started .ns-chooser-tiles {
+  margin-bottom: 1rem;
+}
+
+/* The Advanced disclosure line: "▸ Advanced" closed, "▾ Advanced" open, in secondary text at 12.6px. The glyph is drawn
+   by the stylesheet so the label itself stays the word. */
+.notify-switch-ui details.ns-advanced > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.notify-switch-ui details.ns-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.notify-switch-ui details.ns-advanced > summary::before {
+  content: "\25B8\00A0";
+}
+
+.notify-switch-ui details.ns-advanced[open] > summary::before {
+  content: "\25BE\00A0";
+}
+
+/* Result bar: between the body and the footer strip, 12px 16px, a 1px rule above, the message (or the per-recipient
+   table) and its Dismiss link. Empty, it takes no space. */
+.notify-switch-ui .ns-card-results:not(:empty) {
+  padding: 12px 16px;
+  border-top: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
+}
+
+.notify-switch-ui .ns-card-results .status-box {
+  margin-bottom: 0.5rem;
+}
+
+/* Footer strip: 8px 16px on the subtle fill with a 1px rule above (Bootstrap's card footer); the primary action is an
+   outlined, link-coloured 31px button. */
+.notify-switch-ui .ns-card-footer {
+  padding: 8px 16px;
+}
+
+.notify-switch-ui .ns-card-footer .btn-outline-primary,
+.notify-switch-ui .ns-footer-action {
+  color: var(--bs-link-color, #0d6efd);
+  border-color: var(--bs-link-color, #0d6efd);
+}
+
+.notify-switch-ui .ns-footer-action:not(:disabled):hover,
+.notify-switch-ui .ns-footer-action:not(:disabled):focus-visible {
+  color: var(--bs-link-color, #0d6efd);
+  background-color: rgba(128, 128, 128, 0.08);
+  border-color: var(--bs-link-color, #0d6efd);
+}
+
+/* Every alert box (the default provider prompt, the summary box, result messages) is left-aligned whatever the host's own alert styling. */
+.notify-switch-ui .alert {
+  text-align: start;
+}
+
+/* Text buttons keep their intent colours under the host's dark marker, which paints every `.btn-link` grey: one rule
+   reads the button's intent (danger for Remove and Reset, secondary for the help toggle, the surrounding colour for the
+   summary box entries) and falls back to the link colour. */
+body.dark-mode .notify-switch-ui .btn-link,
+body[class*="config-ui-x-dark-mode"] .notify-switch-ui .btn-link {
+  color: var(--ns-text-button-color, var(--bs-link-color, #6ea8fe)) !important;
+}
+
+.notify-switch-ui .ns-danger-link {
+  --ns-text-button-color: var(--bs-danger, #dc3545);
+}
+
+.notify-switch-ui .ns-help-toggle {
+  --ns-text-button-color: var(--bs-secondary-color, currentColor);
+}
+
+.notify-switch-ui .ns-issue-link {
+  --ns-text-button-color: currentColor;
+}
+
+/* Variable tokens in the Variables list read as clickable: link colour. */
+.notify-switch-ui .ns-variable code {
+  color: var(--bs-link-color, #0d6efd);
+}
+
+/* ---- End of the shell rules. ---- */
 
 /* Placeholders (SPEC section 11.2, item 15) read as examples: italic and lighter than typed text. The colour
    itself is the host's (it paints placeholders for its theme with `!important`); only the style is added. */
@@ -215,7 +448,6 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 
 .ns-help-toggle {
   white-space: nowrap;
-  font-size: 0.875rem;
 }
 
 /* A list row (SPEC section 11.2, item 15): the control and its Remove button share a flex line; the
@@ -299,6 +531,7 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
 .ns-send-preview {
   padding: 0.5rem 0.75rem;
   border-left: 3px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
+  font-size: inherit;
 }
 
 .ns-channel-message {
@@ -321,7 +554,7 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   margin-top: 0.75rem;
 }
 
-/* The card header's default badge or "Make default" button per channel, after the type badge. */
+/* The card header's left cluster: the title, the type badge and the "Default for {channel}" badges after it. */
 .ns-card-title {
   display: inline-flex;
   flex-wrap: wrap;
@@ -338,10 +571,6 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.5rem;
-}
-
-.ns-make-default {
-  font-size: 0.875rem;
 }
 
 .ns-default-providers {
@@ -384,10 +613,6 @@ mark.sms-bad {
   vertical-align: baseline;
 }
 
-.notify-switch-ui .ns-variable code {
-  color: inherit;
-}
-
 .ns-variables-help {
   margin-bottom: 0.25rem;
 }
@@ -408,7 +633,9 @@ mark.sms-bad {
   font-size: 0.9rem;
 }
 
-.issues {
+/* The Save status area (SPEC section 11.2, item 15): sticky at the bottom of the scroll area. Prefixed so it wins over
+   Bootstrap's `.alert { position: relative }`, which the host loads after this file. */
+.notify-switch-ui .issues {
   position: sticky;
   bottom: 0.5rem;
   z-index: 5;
@@ -557,27 +784,17 @@ mark.sms-bad {
   display: none;
 }
 
-.ns-card-results {
-  padding: 0.75rem 1rem;
-}
-
 .ns-card-results:empty {
   display: none;
 }
 
-/* Provider chooser (SPEC section 11.2, item 13): four tiles in equal columns that fill the card width,
-   two by two between 600px and 768px, stacked below 600px. */
+/* Provider chooser (SPEC section 11.2, items 13 and 28): tiles in equal columns that fill the width, as many across as
+   fit at 150px minimum each (four on a desktop), wrapping to further rows as the width shrinks, and a single column on phones. */
 .ns-chooser-tiles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
   width: 100%;
-}
-
-@media (max-width: 767.98px) {
-  .ns-chooser-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 599.98px) {

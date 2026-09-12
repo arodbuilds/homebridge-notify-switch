@@ -18,6 +18,12 @@ export interface HelpLink {
   href: string;
 }
 
+/** The page banner (SPEC section 11.2, item 28): served from the plugin's own public folder, never an external host. */
+export const BANNER = {
+  file: 'notify-switch-banner.png',
+  alt: 'Notify Switch, Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.',
+};
+
 export const GETTING_STARTED = 'Notify Switch adds switches to the Home app. Turn one on, usually from an automation, and it sends a message, '
   + 'then turns itself off.';
 
@@ -346,11 +352,19 @@ export const DUPLICATE = {
   group: 'Duplicate group',
 };
 
-/** In-place Remove confirmation on card footers (SPEC section 11.2, item 11). */
+/**
+ * In-place Remove confirmation on card footers (SPEC section 11.2, items 11 and 28): "Remove {title}?" with the card's
+ * current name, or "Remove this {noun}?" while it has none. The title is inserted as text, never as markup.
+ */
 export const REMOVE = {
-  question: (what: 'provider' | 'group' | 'switch'): string => `Remove this ${what}?`,
+  question: (what: 'provider' | 'group' | 'switch', title = ''): string => (title ? `Remove ${title}?` : `Remove this ${what}?`),
   confirm: 'Remove',
   cancel: 'Cancel',
+};
+
+/** The result bar between a card's body and its footer strip (SPEC section 11.2, item 28). */
+export const RESULT_BAR = {
+  dismiss: 'Dismiss',
 };
 
 /** Unsaved draft recovery banner (SPEC section 11.2, item 23). */

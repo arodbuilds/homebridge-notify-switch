@@ -4,12 +4,12 @@ import { providersForChannel, resolveDefaultProvider } from '../../../src/defaul
 import { addressList } from '../addressList.js';
 import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
-import { helpToggle, variablesToggle, variableValues } from '../card.js';
+import { cardHeader, variablesToggle, variableValues } from '../card.js';
 import type { VariablesToggle, VariableValue } from '../card.js';
 import { CHANNEL_TITLE, DUPLICATE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
 import {
-  addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, helpText, inlineConfirm, linkButton, numberField, paragraph, selectField,
-  statusBox, textField, textareaField,
+  addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, footerAction, grid, gridCell, helpText, inlineConfirm, linkButton, numberField,
+  paragraph, resultBar, selectField, statusBox, textField, textareaField,
 } from '../dom.js';
 import {
   channelRecipients, channelUnserved, duplicateSwitch, enabledChannels, exportConfig, newSwitch, presentChannels, switchProviderId, unservedChannels,
@@ -116,28 +116,28 @@ function testSendScope(app: App, s: UiSwitch, index: number): string[] {
 interface TestSendPanel {
   /** The footer control: the Test send button with its hint, replaced in place by the confirmation while it is open. */
   control: HTMLElement;
-  /** Per-recipient results, rendered below the footer with a Dismiss link. */
+  /** Per-recipient results, in the result bar between the body and the footer strip, with a Dismiss link. */
   results: HTMLElement;
 }
 
 /**
- * Test send (SPEC section 11.2, item 4, and section 11.3): the outlined Test send button is replaced in
+ * Test send (SPEC section 11.2, items 4 and 28, and section 11.3): the outlined Test send button is replaced in
  * place by "Send to {n} recipients now?" with a primary Send button and a text Cancel button. Escape or
- * Cancel restores the button. Results appear below the card footer with a Dismiss link. The button is
- * disabled, with a short hint beside it, while the switch has validation errors or no recipients, so the
- * confirmation can never read "Send to 0 recipients".
+ * Cancel restores the button. Results appear in the card's result bar, between the body and the footer strip,
+ * with a Dismiss link. The button is disabled, with a short hint beside it, while the switch has validation
+ * errors or no recipients, so the confirmation can never read "Send to 0 recipients".
  */
 function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
   const status = statusBox();
-  const results = el('div', { class: 'ns-card-results test-results' });
-  const start = el('button', { type: 'button', class: 'btn btn-outline-primary btn-sm' }, 'Test send');
+  const results = resultBar();
+  results.el.classList.add('test-results');
+  const start = footerAction('Test send');
   const hint = el('span', { class: 'form-text ns-test-send-hint', hidden: true });
   const showResults = (result: TestSendResult): void => {
-    clear(results);
     status.set(result.ok ? 'success' : 'danger', result.message);
-    results.appendChild(status.el);
+    const content: Node[] = [status.el];
     for (const error of result.errors ?? []) {
-      results.appendChild(el('div', { class: 'small text-danger font-monospace' }, error));
+      content.push(el('div', { class: 'small text-danger font-monospace' }, error));
     }
     for (const action of result.actions ?? []) {
       const table = el('table', { class: 'table table-sm mb-2' },
@@ -152,9 +152,9 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
         ));
       }
       table.appendChild(tbody);
-      results.appendChild(table);
+      content.push(table);
     }
-    results.appendChild(linkButton(TEST_SEND.dismiss, () => clear(results)));
+    results.show(...content);
   };
   const confirm = inlineConfirm({
     start,
@@ -164,9 +164,8 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
     cancelLabel: TEST_SEND.cancel,
     cls: 'test-send',
     onConfirm: async () => {
-      clear(results);
       status.set('info', 'Sending…');
-      results.appendChild(status.el);
+      results.show(status.el);
       showResults(await callServer<TestSendResult>('/test-send', { config: exportConfig(app.config), switchId: s.id }));
     },
   });
@@ -180,7 +179,7 @@ function testSendPanel(app: App, s: UiSwitch, index: number): TestSendPanel {
     hint.textContent = reason;
     hint.hidden = reason.length === 0;
   };
-  return { control, results };
+  return { control, results: results.el };
 }
 
 /**
@@ -331,7 +330,7 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
     app.changed();
   });
   const customizedNote = el('div', { class: 'form-text mb-3 ns-customized-note', hidden: true }, SWITCH_EDITOR.customizedNote);
-  const preview = el('div', { class: 'ns-send-preview small mb-3', role: 'status', 'aria-live': 'polite' });
+  const preview = el('div', { class: 'ns-send-preview mb-3', role: 'status', 'aria-live': 'polite' });
   root.appendChild(el('div', { class: 'ns-message' }, sharedBody.el, subjectField, customizedNote, preview));
 
   // ---- Advanced --------------------------------------------------------------------------------------------
@@ -432,9 +431,11 @@ function editor(app: App, s: UiSwitch, index: number, rerenderSwitch: () => void
   // provider (SPEC section 5.7, item 7); it is kept, not shown, so it does not open Advanced on its own.
   const overrideShown = (channel: Channel): boolean => s.providers[channel] !== '' && !channelUnserved(app.config, channel);
   const advancedOpen = s.customize || CHANNELS.some(overrideShown) || s.sender !== '' || s.bcc || s.priority !== 'default' || s.tags.length > 0;
-  const advanced = disclosure(SWITCH_EDITOR.advanced, [
-    customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy,
-  ], { open: advancedOpen, attrs: { 'data-advanced': path } });
+  // Advanced opens a second 12-column grid (SPEC section 11.2, item 28).
+  const advanced = disclosure(SWITCH_EDITOR.advanced, [grid(
+    ...[customize, perChannel, ...CHANNELS.map((channel) => overrides[channel] as HTMLElement), senderField ?? el('span'), bcc, ntfy]
+      .map((field) => gridCell(12, field)),
+  )], { open: advancedOpen, attrs: { 'data-advanced': path } });
   root.appendChild(advanced);
 
   // ---- Live state ------------------------------------------------------------------------------------------
@@ -483,7 +484,8 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     app.changed();
   };
   const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
-  const header = el('div', { class: 'card-header d-flex justify-content-between align-items-center gap-2' }, title, helpToggle(card, s));
+  // The shared header strip (SPEC section 11.2, item 28): a switch card has no type badge and no header links.
+  const header = cardHeader(card, s, title, [], []);
   const body = el('div', { class: 'card-body' });
 
   body.appendChild(textField('Name', s.name, (value) => {
@@ -527,11 +529,12 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
 
   body.appendChild(editor(app, s, index, rerenderSwitch));
 
-  // Footer: Remove switch (with its in-place confirmation) on the left, Test send on the right; results below the footer.
+  // Footer strip (SPEC section 11.2, items 11 and 28): Remove switch (with its in-place confirmation, "Remove {name}?") on the
+  // left, Test send on the right; the results in the bar between the body and the footer.
   const testSend = testSendPanel(app, s, index);
   const remove = inlineConfirm({
     start: dangerLinkButton('Remove switch', () => undefined),
-    question: () => REMOVE.question('switch'),
+    question: () => REMOVE.question('switch', s.name.trim()),
     confirmLabel: REMOVE.confirm,
     confirmClass: 'btn btn-danger btn-sm',
     cancelLabel: REMOVE.cancel,
@@ -558,8 +561,8 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
 
   card.appendChild(header);
   card.appendChild(body);
-  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   card.appendChild(testSend.results);
+  card.appendChild(cardFooter([remove, duplicate], testSend.control));
   app.watchCard(card, s);
   return card;
 }
