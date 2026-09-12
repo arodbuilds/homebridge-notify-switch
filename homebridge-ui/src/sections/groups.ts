@@ -1,7 +1,7 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
 import { cardHeader, idField } from '../card.js';
-import { DUPLICATE, GROUP_NAME_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
+import { DUPLICATE, GROUP_NAME_HELP, GROUP_SMS_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
 import {
   addButton, cardFooter, dangerLinkButton, disclosure, el, grid, gridCell, helpText, inlineConfirm, linkButton, paragraph, textField,
 } from '../dom.js';
@@ -53,7 +53,8 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     channel, values: g[channel], defaultCountry: app.config.defaultCountry, path: `${path}.${channel}`, onChange,
     onRemove: (i) => app.entryRemoved(`${path}.${channel}`, i),
   }).el;
-  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Phone numbers (SMS)'), list('sms')));
+  // The caption under the phone list (SPEC section 11.2, item 24): the numbers are stored in E.164 with the country from Settings.
+  body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Phone numbers (SMS)'), list('sms'), helpText(GROUP_SMS_HELP)));
   body.appendChild(el('div', { class: 'mb-3' }, el('label', { class: 'form-label' }, 'Email addresses'), list('email')));
   body.appendChild(el('div', { class: 'mb-3' },
     el('label', { class: 'form-label' }, 'Telegram chat IDs'),
@@ -65,8 +66,8 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     list('ntfy'),
     helpText(NTFY_HELP.topics),
   ));
-  // Advanced opens a second 12-column grid (SPEC section 11.2, item 28) holding the ID.
-  body.appendChild(disclosure('Advanced', [grid(gridCell(12, id))], { cls: 'mb-3', attrs: { 'data-advanced': path } }));
+  // Advanced opens a second 12-column grid (SPEC section 11.2, item 28) holding the ID at 6 columns (item 24).
+  body.appendChild(disclosure('Advanced', [grid(gridCell(6, id))], { cls: 'mb-3', attrs: { 'data-advanced': path } }));
 
   // Footer (SPEC section 11.2, items 11 and 28): Remove group on the left with its in-place confirmation ("Remove {name}?"),
   // nothing on the right.

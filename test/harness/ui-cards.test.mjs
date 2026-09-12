@@ -241,6 +241,9 @@ test('group card empty state: each empty address list reads "No … yet." with t
     const group = page.locator('.card[data-path="groups[1]"]');
     assert.deepEqual(await group.locator('.ns-list-empty').allTextContents(),
       ['No phone numbers yet.', 'No email addresses yet.', 'No chat IDs yet.', 'No topics yet.']);
+    // The phone list carries its caption, and the ID sits under Advanced at 6 columns (SPEC section 11.2, items 24 and 28).
+    assert.equal(await family.locator('[data-path="groups[0].sms"] + .ns-help').textContent(), 'Stored with the country code from Settings.');
+    assert.deepEqual(await family.locator('details.ns-advanced .ns-grid > *').evaluateAll((nodes) => nodes.map((node) => node.className)), ['ns-span-6']);
 
     // Adding an entry removes the line; removing the entry brings it back.
     await group.getByRole('button', { name: 'Add email address' }).click();

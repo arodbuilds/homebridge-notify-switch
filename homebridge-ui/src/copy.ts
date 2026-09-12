@@ -166,6 +166,9 @@ export const GROUPS_SECTION = 'A group is a list of people. Switches send to gro
 /** Group Name field help, with examples (SPEC section 11.3). */
 export const GROUP_NAME_HELP = 'Who is in this list. For example: Family, Neighbors, On-call.';
 
+/** Group phone list caption (SPEC section 11.2, item 24, from 1.3.0). */
+export const GROUP_SMS_HELP = 'Stored with the country code from Settings.';
+
 export const SWITCHES_SECTION = 'Each switch appears in the Home app. Turning it on sends your message to everyone in the groups you pick, '
   + 'on every channel they have, then the switch turns itself off.';
 

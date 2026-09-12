@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Provider cards on the shell grid.** On the SMTP card, **Host**, **Port** and **Security** share one row at 7, 2 and 3 columns with the "Filled in from the mail provider above" help under the whole row. Under **Advanced**, the Twilio card puts the ID and the Messaging Service SID side by side above the credentials file, the Telegram card the ID and Parse Mode above the credentials file, and the ntfy and SMTP cards the ID and the credentials file side by side. The API Key SID placeholder now reads `e.g. SK…`. Every field, caption, link and behaviour is otherwise as before (SPEC section 11.2, items 9, 10, 22 and 24).
 
+- **Group card.** The phone list carries the caption "Stored with the country code from Settings." and the ID under **Advanced** takes half the width. Everything else is as before (SPEC section 11.2, item 24).
+
 ### Fixed
 
 - **Dark mode: text buttons keep their colours.** The Homebridge UI's dark theme painted every text button grey, so **Remove provider**, **Remove group**, **Remove switch** and **Reset plugin to fresh install** lost their red and **Duplicate**, **Make default**, **Keep**, **Cancel** and **Dismiss** their link colour. One rule gives them back their colours in dark mode; the help toggle stays secondary and the entries of the summary box keep its colour. The default-provider prompt and every other alert box are left-aligned whatever the host's alert styling, and the variable tokens under **Show variables** are drawn in the link colour so they read as clickable (SPEC section 11.2, items 18 and 28).
