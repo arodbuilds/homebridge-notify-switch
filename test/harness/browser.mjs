@@ -98,14 +98,16 @@ export async function launchOrSkip(t) {
 /**
  * Stands in for the `homebridge` object the Homebridge UI injects into the settings iframe.
  * `requestScript` is the source of an `async (path, payload) => result` function that answers server
- * calls; every call is also recorded in `window.__hb.requests`.
+ * calls; every call is also recorded in `window.__hb.requests`. The configuration and any fixture the
+ * request function reads are handed to the page as init-script arguments (`window.__hbConfig`,
+ * `window.__fixture`), never interpolated into source.
  */
-export function homebridgeStub(config, requestScript = 'async () => ({ ok: true, message: "stub" })') {
+export function homebridgeStub(requestScript = 'async () => ({ ok: true, message: "stub" })') {
   return `
     window.__hb = { updates: [], save: [], requests: [], toasts: [] };
     window.__hbRequest = ${requestScript};
     window.homebridge = {
-      getPluginConfig: async () => [${JSON.stringify(config)}],
+      getPluginConfig: async () => [window.__hbConfig],
       updatePluginConfig: async (blocks) => { window.__hb.updates.push(blocks); },
       savePluginConfig: async () => undefined,
       showSpinner() {}, hideSpinner() {},
@@ -149,10 +151,11 @@ export function writePage() {
  * Opens the built settings UI with `config` loaded and the stubbed server. Fails the test on any page error.
  * `hasTouch` emulates a touch device; `dark` renders the page in dark mode the way the Homebridge UI does
  * (its dark body classes, see HOST_BODY_CLASSES, and no `data-bs-theme` on the root); `locale` sets the
- * browser language (`navigator.language`); `initScript` runs before the page.
+ * browser language (`navigator.language`); `initScript` runs before the page; `fixture` is any value the
+ * request function may read as `window.__fixture` (passed as data, not built into its source).
  */
 export async function openSettings(browser, config, {
-  requestScript, viewport = { width: 900, height: 900 }, onPageError, hasTouch = false, dark = false, locale, initScript,
+  requestScript, viewport = { width: 900, height: 900 }, onPageError, hasTouch = false, dark = false, locale, initScript, fixture,
 } = {}) {
   const page = await browser.newPage({ viewport, hasTouch, colorScheme: dark ? 'dark' : 'light', ...(locale ? { locale } : {}) });
   page.on('pageerror', (err) => {
@@ -162,7 +165,16 @@ export async function openSettings(browser, config, {
       throw new Error(`page error: ${err.message}`);
     }
   });
-  await page.addInitScript(homebridgeStub(config, requestScript));
+  // Data first (the configuration, the fixture), each as an argument the page receives as a value; then the stub.
+  await page.addInitScript((value) => {
+    window.__hbConfig = value;
+  }, config);
+  if (fixture !== undefined) {
+    await page.addInitScript((value) => {
+      window.__fixture = value;
+    }, fixture);
+  }
+  await page.addInitScript(homebridgeStub(requestScript));
   if (initScript) {
     await page.addInitScript(initScript);
   }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { URL } from 'node:url';
 
 import { launchOrSkip, openSettings } from './browser.mjs';
 import { SMTP } from './helpers.mjs';
@@ -102,8 +103,9 @@ test('smtp presets: choosing a preset fills and locks the server settings, Edit 
     for (const label of ['Fastmail', 'Outlook.com', 'Yahoo', 'Zoho']) {
       await card.locator('.ns-preset-segments label', { hasText: label }).click();
       assert.match(await passwordHelp.textContent(), /app password/);
-      assert.match(await passwordHelp.locator('a').getAttribute('href'), /^https:\/\//);
-      assert.ok(!(await passwordHelp.locator('a').getAttribute('href')).includes('github.com'), `${label} links to the provider, not the README`);
+      const href = await passwordHelp.locator('a').getAttribute('href');
+      assert.match(href, /^https:\/\//);
+      assert.notEqual(new URL(href).hostname, 'github.com', `${label} links to the provider, not the README`);
     }
     // From name help mentions the display name replacement.
     assert.equal(await card.locator('[data-path="providers[0].from.name"] .ns-help').textContent(),
