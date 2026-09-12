@@ -493,7 +493,7 @@ The file is read once at startup, and again when the settings UI runs **Test con
 
 ## Backup, restore, and reset
 
-At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure holds three actions:
+At the bottom of the **Settings** section of the settings UI, the **Advanced** disclosure opens with a reminder that the full backup contains your credentials, then holds these actions in this order:
 
 - **Download backup** saves the current platform configuration as `notify-switch-backup-YYYY-MM-DD.json`. The file contains your provider credentials, so store it like a password.
 - **Download backup without credentials** saves the same file as `notify-switch-backup-without-credentials-YYYY-MM-DD.json` with every secret (API key secret, SMTP password, bot token, and every field a `credentialsFile` may supply) replaced by an empty string and `"credentialsRemoved": true` at the top. It is safe to attach to an issue when [asking for help](#getting-help).

@@ -1079,11 +1079,9 @@ body.ns-touch .ns-modal .btn-close {
   min-width: 0;
 }
 
+/* The two backup downloads at 6 columns each (SPEC section 11.2, item 12); each cell holds its 31px button. */
 .ns-backup-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
+  row-gap: 0.5rem;
 }
 
 /* Version and credit footer (SPEC section 11.2, item 20): the last element on the page, one line of

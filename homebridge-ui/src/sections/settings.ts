@@ -4,7 +4,7 @@ import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
 import type { DateFormat, TimeFormat } from '../../../src/types.js';
 import { BACKUP, DEFAULTS, FORMAT_SETTINGS, PROVIDER_TYPE_LABEL } from '../copy.js';
-import { button, checkboxField, clear, dangerLinkButton, el, helpText, openModal, selectField, textField } from '../dom.js';
+import { button, checkboxField, clear, dangerLinkButton, el, grid, gridCell, helpText, openModal, selectField, textField } from '../dom.js';
 import {
   backupBlock, blockWithoutCredentials, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, legacySwitches, MAX_BACKUP_BYTES,
   readConfig,
@@ -163,16 +163,18 @@ function advancedPanel(app: App): HTMLElement {
 
   // The three controls that stay usable while the loaded configuration cannot be represented (SPEC section 11.2, item 26).
   reset.classList.add('ns-legacy-allowed');
+  // Shell order (SPEC section 11.2, items 12 and 28): the note first, the two downloads at 6 columns each, Restore with its
+  // help, then the danger text button.
+  const downloads = grid(
+    gridCell(6, button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm ns-legacy-allowed')),
+    gridCell(6, button(BACKUP.downloadWithoutCredentials, () => downloadBackup(app, true), 'btn btn-outline-secondary btn-sm ns-legacy-allowed')),
+  );
+  downloads.classList.add('ns-backup-actions', 'mb-3');
   return el('details', { class: 'ns-advanced mt-3', 'data-advanced': 'settings', open: app.legacy !== undefined },
     el('summary', { class: 'ns-secondary small' }, BACKUP.summary),
     el('div', { class: 'mt-2' },
-      el('div', { class: 'mb-3' },
-        el('div', { class: 'ns-backup-actions' },
-          button(BACKUP.download, () => downloadBackup(app), 'btn btn-outline-secondary btn-sm ns-legacy-allowed'),
-          button(BACKUP.downloadWithoutCredentials, () => downloadBackup(app, true), 'btn btn-outline-secondary btn-sm ns-legacy-allowed'),
-        ),
-        el('div', { class: 'form-text backup-note' }, BACKUP.backupNote),
-      ),
+      el('div', { class: 'form-text backup-note mb-2' }, BACKUP.backupNote),
+      downloads,
       el('div', { class: 'mb-3' },
         el('label', { class: 'form-label' }, BACKUP.restore),
         fileInput,
