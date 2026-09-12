@@ -338,8 +338,8 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   const name = s.name.trim();
   if (name && HAP_NAME_PATTERN.test(name)) {
     if (seenNames.has(name)) {
-      // A duplicate name belongs to both name fields: touching either reveals it.
-      issues.add(`${path}.name`, label, `Another switch is already named "${name}".`, [`${seenNames.get(name)}.name`]);
+      // A duplicate name belongs to both name fields: touching either reveals it (the message from SPEC section 11.3).
+      issues.add(`${path}.name`, label, VALIDATION.duplicateName('switch'), [`${seenNames.get(name)}.name`]);
     } else {
       seenNames.set(name, path);
     }

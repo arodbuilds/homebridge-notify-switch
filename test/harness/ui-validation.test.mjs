@@ -91,7 +91,7 @@ test('per-field validation: an error appears only after blur, never while typing
     const name = sw.locator('[data-path="switches[1].name"] input');
     await name.fill('Water Leak Alert');
     await name.blur();
-    assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(), 'Another switch is already named "Water Leak Alert".');
+    assert.equal(await sw.locator('[data-path="switches[1].name"] .invalid-feedback').textContent(), 'Another switch already uses this name.');
     // The duplicate belongs to both name fields: the other switch's name shows it too once touched.
     const other = page.locator('.card[data-path="switches[0]"] [data-path="switches[0].name"]');
     assert.equal(await other.locator('.invalid-feedback').textContent(), '', 'untouched until the user goes there');

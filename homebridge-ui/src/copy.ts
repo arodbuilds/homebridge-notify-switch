@@ -323,6 +323,8 @@ export const VALIDATION = {
   switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
   /** Provider, group and platform names (SPEC section 5). */
   name: 'Use letters, numbers, spaces, and punctuation, up to 64 characters.',
+  /** A name another card of the same kind already uses (only switch names must be unique; SPEC section 11.3). */
+  duplicateName: (noun: 'switch' | 'provider' | 'group'): string => `Another ${noun} already uses this name.`,
   ntfyServer: 'That does not look like a server address. It starts with https:// or http://, for example https://ntfy.sh.',
   ntfyTopic: (topic: string): string => `Topic "${topic}" is not a topic name. Use letters, numbers, dashes and underscores, up to 64 characters.`,
   ntfyTag: (tag: string): string => `Tag "${tag}" is not a tag. Use letters, numbers, dashes, underscores and plus signs, up to 32 characters.`,

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.3.0] - 2026-09-12
+
+The settings page moves onto one shell shared with the author's other Homebridge plugins, the provider, group, switch and Settings cards take their places on its grid, the documentation is refreshed, and the workflows and harness are hardened for code scanning. Nothing changes in the configuration format or in what the plugin sends; a configuration written by 1.2.x loads and saves unchanged.
+
 ### Changed
 
 - **The settings page now shares one shell with the author's other Homebridge plugins.** The page opens with the Notify Switch banner (shipped inside the package and served from the plugin's own folder, so nothing on the page loads from the internet). Every card has the same anatomy: a header strip with the bold title, the type badge and, on the default provider for a channel, a green **Default for email** badge on the left, and the **Make default for email** link and the **Show help** toggle on the right; a body on a 12-column grid; a **▸ Advanced** disclosure line that opens a second grid; a result bar just above the footer where **Test connection** and **Test send** answers appear with a **Dismiss** link (they used to appear below the footer); and a footer strip with **Remove …** and **Duplicate …** on the left and the outlined **Test connection** or **Test send** on the right. Removing a card now asks with its name ("Remove Fastmail?", "Remove Water Leak Alert?"). Small buttons (list Remove and Add buttons, Look up numbers, Open BotFather, Find people and groups, the backup downloads, the Remove and Send confirms, Test connection, Test send, Restore and Discard) are 31px tall with uppercase lettering; the one **Add provider**, **Add group** or **Add switch** button of a section is 38px; touch devices keep the 44px minimum. On a phone the header badges wrap under the title while the links stay on the first row. The provider chooser tiles now fill the width with as many 150px tiles as fit. While no provider exists, **Add group** and **Add switch** are outlined, disabled and show a not-allowed cursor next to "Add a provider first." Colours stay the host's own in both themes (SPEC section 11.2, item 28, and items 8, 11, 13, 14, 18, 19, 20, 23, 25 and 26).
@@ -22,6 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Workflows and harness hardened for code scanning.** The build workflow declares `permissions: contents: read`, and both workflows pin `actions/checkout` and `actions/setup-node` to the full commit SHA of their current `v7` tags (v7.0.1 and v7.0.0) with the version in a comment, which Dependabot keeps current. In the harness, the Twilio lookup fixture reaches the page as an init-script argument instead of being written into script source, the stub configuration likewise, and the SMTP test checks a link's hostname with `new URL(href).hostname` rather than searching the string (SPEC section 13, item 4).
 
+- **Duplicate switch names.** The message now reads "Another switch already uses this name." instead of quoting the name (SPEC section 11.3).
+- Version 1.3.0. SPEC.md records everything above in sections 2, 11.2 (items 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22, 23, 24, 25, 26 and 28), 11.3, 13, 14 and 15; status is current as of 1.3.0.
 - **Documentation refresh.** SPEC.md is retitled "homebridge-notify-switch Specification", its non-goals no longer carry a version, a Roadmap subsection lists what is planned (iMessage for Mac-hosted Homebridge, Twilio voice, WhatsApp through Twilio, Telnyx SMS, Discord and Slack webhooks, Matter exposure once Homebridge's Matter support is stable), the verification checklist records the request submitted September 8, 2026 as homebridge/plugins issue 1216 and names the plugins compared, and the open questions stand on their own. CLAUDE.md and CONTRIBUTING.md describe one pull request per release, the SPEC status line as part of a release, and the shared settings shell; the bug report template's placeholders are current. The README's Switches and Settings sections describe the new card order and the ID under Advanced; its screenshot is retaken after release.
 
 ### Fixed
@@ -349,7 +357,8 @@ Usability and copy. Runtime behavior does not change.
 - The package is no longer marked private and is published as `0.1.0-beta.1`. The published package contains only `dist`, the built settings UI, `config.schema.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, and `package.json`; the source, tests, specification, and project conventions are excluded.
 - README rewritten as the full user guide: provider setup guides with credential steps and links, recipient groups, switches and actions, HomeKit automations, template variables, cooldown and master switch, failure sensor, `credentialsFile`, child bridge, security notes, and troubleshooting by provider.
 
-[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/arodbuilds/homebridge-notify-switch/compare/v1.1.0...v1.1.1
