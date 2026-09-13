@@ -259,8 +259,9 @@ test('restore and drafts: a file with a __proto__ key or over 1 MB is refused be
     const withDraft = await openSettings(browser, CONFIG, { initScript });
     assert.equal(await withDraft.locator('.ns-draft-banner').isVisible(), false, 'no banner for a draft with a forbidden key');
     await withDraft.waitForFunction(() => window.__hb.updates.length > 0);
-    const stored = await withDraft.evaluate(() => JSON.parse(window.localStorage.getItem('homebridge-notify-switch:draft')));
-    assert.equal(stored.config.name, 'Notify Switch', 'the poisoned draft was replaced by the page\'s own');
+    await withDraft.waitForTimeout(400);
+    // The poisoned draft is removed on load; the load itself writes none (a draft is written only after a change).
+    assert.equal(await withDraft.evaluate(() => window.localStorage.getItem('homebridge-notify-switch:draft')), null, 'the poisoned draft is gone');
     assert.equal(await withDraft.evaluate(() => ({}).polluted), undefined);
   } finally {
     await browser.close();

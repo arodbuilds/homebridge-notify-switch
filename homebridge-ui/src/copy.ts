@@ -21,7 +21,7 @@ export interface HelpLink {
 /** The page banner (SPEC section 11.2, item 28): served from the plugin's own public folder, never an external host. */
 export const BANNER = {
   file: 'notify-switch-banner.png',
-  alt: 'Notify Switch, Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.',
+  alt: 'Notify Switch: Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.',
 };
 
 export const GETTING_STARTED = 'Notify Switch adds switches to the Home app. Turn one on, usually from an automation, and it sends a message, '

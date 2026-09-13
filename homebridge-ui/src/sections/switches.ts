@@ -498,7 +498,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
     host.replaceChild(switchCard(app, s, index, host), card);
     app.changed();
   };
-  const title = el('span', { class: 'fw-semibold' }, switchTitle(s));
+  const title = el('span', { class: 'fw-bold ns-card-name' }, switchTitle(s));
   // The shared header strip (SPEC section 11.2, item 28): a switch card has no type badge and no header links.
   const header = cardHeader(card, s, title, [], []);
   const body = el('div', { class: 'card-body' });
@@ -559,16 +559,15 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
   });
 
   // Duplicate switch (SPEC section 11.2, item 11): a copy directly below this card, treated like a switch added with Add
-  // switch (fresh, so it shows no errors until touched); its Name field takes focus and the card scrolls into view.
+  // switch (fresh, so it shows no errors until touched); its Name field takes focus, which brings the card into view
+  // (the host scrolls the modal; the page scrolls nothing itself).
   const duplicate = linkButton(DUPLICATE.switch, () => {
     const copy = duplicateSwitch(s, app.config.switches);
     app.config.switches.splice(index + 1, 0, copy);
     app.addFresh(copy);
     app.rerender('switches');
     // The section was redrawn, so the copy's card is looked up in the document, not in this card's (replaced) host.
-    const nameInput = document.querySelector<HTMLInputElement>(`[data-path="switches[${index + 1}].name"] input`);
-    nameInput?.closest('.card')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    nameInput?.focus({ preventScroll: true });
+    document.querySelector<HTMLInputElement>(`[data-path="switches[${index + 1}].name"] input`)?.focus();
   }, 'ns-duplicate');
 
   card.appendChild(header);

@@ -5,7 +5,7 @@ import { button, clear, el, linkButton } from './dom.js';
 import { clearDraft, readDraft, saveDraft, stableStringify } from './draft.js';
 import type { Draft } from './draft.js';
 import { renderFooter } from './footer.js';
-import { exportConfig, legacySwitches, presentChannels, readConfig } from './model.js';
+import { exportConfig, exportConfigWithoutCredentials, fillSecrets, legacySwitches, presentChannels, readConfig } from './model.js';
 import type { UiConfig, UiProvider, UiSwitch } from './model.js';
 import { CHANNELS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
@@ -88,9 +88,16 @@ class Page implements App {
    * asked about yet, with the card that asks. An entry loaded from config.json never prompts.
    */
   private readonly pendingPrompts = new Map<Channel, UiProvider>();
+  /** The platform block as loaded, before any edit: the credentials a restored draft takes back (SPEC section 11.2, item 23). */
+  private readonly loadedBlock: Record<string, unknown>;
+  /** True while `renderAll` draws the page: the pushes it makes are the load, not a change of the user's. */
+  private rendering = false;
+  /** True once the user has changed something on this page; only then is a draft written (SPEC section 11.2, item 23). */
+  private dirty = false;
 
   constructor(public config: UiConfig, private readonly root: HTMLElement, pendingDraft?: Draft, public legacy?: LegacyConfig) {
     this.providersEmpty = config.providers.length === 0;
+    this.loadedBlock = exportConfig(config);
     // The page banner is the first element of the page (SPEC section 11.2, item 28), served from the plugin's own
     // public folder beside this bundle; nothing on the page loads from an external host.
     root.appendChild(el('img', { class: 'ns-banner', src: BANNER.file, alt: BANNER.alt, width: '2560', height: '640' }));
@@ -122,8 +129,9 @@ class Page implements App {
       this.revalidate();
     }, 'ns-issues-toggle');
     this.issuesToggle.hidden = true;
-    // The Save status area: the issue list, the "Fill in the new …" line, or "Nothing to save yet".
-    this.issuesBox = el('div', { class: 'issues alert alert-warning', role: 'alert', hidden: true },
+    // The summary box (the Save status area): the issue list, the "Fill in the new …" line, or "Nothing to save yet". It sits
+    // in the page flow after the sections and before the closing paragraph; the host scrolls the modal (SPEC section 11.2, item 15).
+    this.issuesBox = el('div', { class: 'issues ns-issues alert alert-warning', role: 'alert', hidden: true },
       el('div', { class: 'd-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-1' }, this.issuesHeading, this.issuesToggle),
       this.issuesList);
     root.appendChild(this.issuesBox);
@@ -150,22 +158,27 @@ class Page implements App {
   }
 
   renderAll(): void {
-    // A loaded (or restored) configuration is the baseline: nothing is ticked on the way in.
-    this.syncPresence(false);
-    // The on-appearance defaults (SPEC section 5.7) are written before any section is drawn, so the sections render with
-    // the entry in place and nothing on the page redraws itself after load without a user action. The entry goes out
-    // with the load's own push (each section's rerender pushes).
-    if (!this.legacy) {
-      this.writeDefaults(validate(this.config));
+    this.rendering = true;
+    try {
+      // A loaded (or restored) configuration is the baseline: nothing is ticked on the way in.
+      this.syncPresence(false);
+      // The on-appearance defaults (SPEC section 5.7) are written before any section is drawn, so the sections render with
+      // the entry in place and nothing on the page redraws itself after load without a user action. The entry goes out
+      // with the load's own push (each section's rerender pushes).
+      if (!this.legacy) {
+        this.writeDefaults(validate(this.config));
+      }
+      this.providersEmpty = this.config.providers.length === 0;
+      for (const section of SECTIONS) {
+        this.rerender(section.key);
+      }
+      if (this.legacy) {
+        this.lockSections();
+      }
+      this.revalidate();
+    } finally {
+      this.rendering = false;
     }
-    this.providersEmpty = this.config.providers.length === 0;
-    for (const section of SECTIONS) {
-      this.rerender(section.key);
-    }
-    if (this.legacy) {
-      this.lockSections();
-    }
-    this.revalidate();
   }
 
   /**
@@ -195,8 +208,12 @@ class Page implements App {
     this.legacy = undefined;
     this.legacyNotice.remove();
     if (reason === 'reset') {
-      // A draft never survives a Reset confirm (SPEC section 11.2, item 23).
+      // A draft never survives a Reset confirm, and none is written until the next change (SPEC section 11.2, item 23).
       clearDraft();
+      this.dirty = false;
+    } else if (reason === 'restore') {
+      // A restored backup or draft is unsaved work of the user's: it is kept as a draft from here on.
+      this.dirty = true;
     }
     this.renderAll();
     this.justReset = reason === 'reset';
@@ -238,6 +255,9 @@ class Page implements App {
 
   changed(refs = false): void {
     this.justReset = false;
+    if (!this.rendering) {
+      this.dirty = true;
+    }
     this.syncPresence(true);
     if (refs) {
       // Provider or group identity changed: the Switches dropdowns must reflect it. Debounced because this runs per keystroke.
@@ -418,10 +438,11 @@ class Page implements App {
   }
 
   /**
-   * An issue list entry was clicked (SPEC section 11.2, item 15): the field counts as touched so its message
-   * shows, the page scrolls to it, and it takes focus. A field under a collapsed disclosure is opened first.
+   * A summary box entry was clicked (SPEC section 11.2, item 15): the field counts as touched so its message shows,
+   * and its control takes focus. A field under a collapsed disclosure is opened first. Nothing scrolls the page
+   * itself: the host scrolls the modal around this iframe, and moving focus is what brings the field into view.
    */
-  private jumpTo(path: string): void {
+  private focusField(path: string): void {
     this.touched.add(path);
     this.revalidate();
     const node = this.root.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`);
@@ -431,11 +452,10 @@ class Page implements App {
     for (let details = node.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
       details.open = true;
     }
-    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
     const focusable = [...node.querySelectorAll<HTMLElement>('input, select, textarea, button')].find((candidate) => {
       return !(candidate as HTMLInputElement).disabled && candidate.getClientRects().length > 0;
     });
-    focusable?.focus({ preventScroll: true });
+    focusable?.focus();
   }
 
   private switchRefreshTimer: number | undefined;
@@ -479,10 +499,10 @@ class Page implements App {
       this.pushTimer = undefined;
       const block = exportConfig(this.config);
       const blocks = [block, ...this.otherBlocks];
-      // The in-progress configuration is kept as a draft for the next load (SPEC section 11.2, item 23),
-      // except right after a Reset, which never leaves a draft behind.
-      if (!this.justReset) {
-        saveDraft(block);
+      // Once the user has changed something, the in-progress configuration is kept as a draft for the next load, without
+      // its credentials (SPEC section 11.2, item 23). The load's own pushes write none, and neither does a Reset.
+      if (this.dirty && !this.justReset) {
+        saveDraft(exportConfigWithoutCredentials(this.config));
       }
       window.homebridge.updatePluginConfig(blocks).catch((err: unknown) => {
         toastError(`Could not update the configuration: ${err instanceof Error ? err.message : String(err)}`);
@@ -498,7 +518,11 @@ class Page implements App {
     };
     const restore = button(DRAFT.restore, () => {
       hide();
-      this.replaceConfig(readConfig(draft.config), 'restore');
+      // The draft holds structure only: each restored provider takes its credentials back from the saved configuration,
+      // matched by id and type; a provider the draft added keeps its secret fields empty and their errors show at once.
+      const restored = readConfig(draft.config);
+      fillSecrets(restored, this.loadedBlock);
+      this.replaceConfig(restored, 'restore');
       this.touchAll();
     }, 'btn btn-primary btn-sm ns-draft-restore');
     const discard = button(DRAFT.discard, () => {
@@ -559,7 +583,7 @@ class Page implements App {
       }
     }
     const entry = (issue: UiIssue): HTMLElement => {
-      const link = button('', () => this.jumpTo(issue.path), 'btn btn-link btn-sm p-0 ns-link-button ns-issue-link text-start');
+      const link = button('', () => this.focusField(issue.path), 'btn btn-link btn-sm p-0 ns-link-button ns-issue-link text-start');
       link.appendChild(el('strong', {}, `${issue.label}: `));
       link.appendChild(document.createTextNode(issue.message));
       link.setAttribute('data-issue-path', issue.path);
@@ -580,18 +604,18 @@ class Page implements App {
       this.issuesToggle.hidden = !collapsible;
       this.issuesToggle.textContent = collapsed ? ISSUES.showAll : ISSUES.hide;
       this.issuesToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      this.issuesBox.className = 'issues alert alert-warning';
+      this.issuesBox.className = 'issues ns-issues alert alert-warning';
       this.issuesBox.setAttribute('role', 'alert');
     } else if (held.length > 0) {
       // Nothing to fix yet, only cards nobody has touched: say why Save is still disabled without listing errors.
       const kinds = [...new Set(held.map((issue) => fresh.find((card) => underPath(issue.path, card.path))?.kind ?? 'card'))];
       this.issuesHeading.textContent = VALIDATION.finishNew(kinds.join(' and '));
-      this.issuesBox.className = 'issues alert alert-info';
+      this.issuesBox.className = 'issues ns-issues alert alert-info';
       this.issuesBox.setAttribute('role', 'status');
     } else if (nothingToSave) {
       // An empty configuration is valid; say so, or that a Reset is waiting to be saved (SPEC section 11.2, item 19).
       this.issuesHeading.textContent = this.justReset ? SAVE_STATUS.reset : SAVE_STATUS.nothing;
-      this.issuesBox.className = 'issues alert alert-secondary';
+      this.issuesBox.className = 'issues ns-issues alert alert-secondary';
       this.issuesBox.setAttribute('role', 'status');
     }
     this.issuesBox.hidden = all.length === 0 && !nothingToSave;
@@ -686,15 +710,16 @@ async function hostCountry(): Promise<string | undefined> {
 }
 
 /**
- * A draft that differs from the configuration the page is about to show, when there is one. A draft equal
- * to it means the changes were saved (or nothing changed) and is removed.
+ * A draft that differs from the configuration the page is about to show, when there is one. A draft equal to it
+ * means the changes were saved (or nothing changed) and is removed. Both sides are compared without credentials,
+ * since the draft holds none.
  */
 function pendingDraft(config: UiConfig): Draft | undefined {
   const draft = readDraft();
   if (!draft) {
     return undefined;
   }
-  if (stableStringify(exportConfig(readConfig(draft.config))) === stableStringify(exportConfig(config))) {
+  if (stableStringify(exportConfigWithoutCredentials(readConfig(draft.config))) === stableStringify(exportConfigWithoutCredentials(config))) {
     clearDraft();
     return undefined;
   }

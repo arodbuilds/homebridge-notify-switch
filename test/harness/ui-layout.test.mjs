@@ -367,7 +367,7 @@ test('settings UI layout: nothing is clipped at the left edge or overflows the i
     assert.ok(redButtons.every((label) => /^(Remove|Reset plugin to fresh install)/.test(label)),
       `only Remove and Reset buttons are red: ${redButtons.join(', ')}`);
 
-    // With validation issues showing, the sticky issues box is inside the viewport too, and its entries are
+    // With validation issues showing, the summary box is inside the viewport too, and its entries are
     // left-aligned with the bullet beside the text (SPEC section 11.2, item 15).
     await page.locator('[data-path="switches[0].bodies.sms"] textarea').fill('');
     await page.locator('[data-path="switches[0].name"] input').fill('Bad-Name!');
