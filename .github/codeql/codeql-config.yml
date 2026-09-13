@@ -1,0 +1,11 @@
+# CodeQL configuration for GitHub code scanning.
+#
+# Code scanning runs as GitHub's default setup; there is no CodeQL workflow in this repository.
+# Default setup reads this file when the repository property `github-codeql-config-file` names it
+# (an advanced-setup workflow would pass it to codeql-action/init as `config-file` instead). Either
+# way the settings here are merged with the built-in defaults; nothing else is changed.
+#
+# design/ holds the committed Claude Design prototype, which is reference only and never shipped
+# (see design/README.md), so it is left out of the scan.
+paths-ignore:
+  - design/**
