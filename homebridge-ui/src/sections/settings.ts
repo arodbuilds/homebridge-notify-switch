@@ -3,7 +3,7 @@ import { providersForChannel, resolveDefaultProvider } from '../../../src/defaul
 import { toastSuccess } from '../api.js';
 import type { App } from '../app.js';
 import type { DateFormat, TimeFormat } from '../../../src/types.js';
-import { BACKUP, DEFAULTS, FORMAT_SETTINGS, PROVIDER_TYPE_LABEL } from '../copy.js';
+import { BACKUP, DEFAULTS, FIELD_LABELS, FORMAT_SETTINGS, PROVIDER_TYPE_LABEL } from '../copy.js';
 import { button, checkboxField, clear, dangerLinkButton, el, grid, gridCell, helpText, openModal, selectField, textField } from '../dom.js';
 import {
   backupBlock, blockWithoutCredentials, emptyConfig, emptySecretPaths, exportConfig, exportConfigWithoutCredentials, legacySwitches, MAX_BACKUP_BYTES,
@@ -192,7 +192,7 @@ export function renderSettings(app: App, container: HTMLElement): void {
   container.appendChild(el('p', { class: 'section-copy' },
     'Platform-wide options. The default country is used when a phone number is entered without a country code.'));
   container.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-6' }, textField('Name', c.name, (value) => {
+    el('div', { class: 'ns-span-6' }, textField(FIELD_LABELS.name, c.name, (value) => {
       c.name = value;
       app.changed();
     }, { path: 'name', required: true, help: 'Platform display name shown in the Homebridge logs.' })),
@@ -219,7 +219,7 @@ export function renderSettings(app: App, container: HTMLElement): void {
     ),
     helpText(FORMAT_SETTINGS.help, undefined, 'ns-format-help'),
   ));
-  const nameField = textField('Master switch name', c.masterSwitch.name, (value) => {
+  const nameField = textField(FIELD_LABELS.masterSwitchName, c.masterSwitch.name, (value) => {
     c.masterSwitch.name = value;
     app.changed();
   }, { path: 'masterSwitch.name', help: 'Letters, numbers, spaces, and apostrophes only. Must start and end with a letter or number.' });

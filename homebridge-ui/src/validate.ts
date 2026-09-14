@@ -7,7 +7,7 @@ import {
 import { CHANNELS, DATE_FORMATS, TIME_FORMATS } from '../../src/types.js';
 import type { Channel } from '../../src/types.js';
 import { servesChannel } from '../../src/defaults.js';
-import { VALIDATION } from './copy.js';
+import { FIELD_LABELS, SWITCH_EDITOR, VALIDATION } from './copy.js';
 import { isCountry } from './phone.js';
 import { channelRecipients, channelUnserved, enabledChannels, presentChannels, switchProviderId } from './model.js';
 import type { UiConfig, UiGroup, UiProvider, UiSwitch } from './model.js';
@@ -62,22 +62,26 @@ function switchLabel(s: UiSwitch, i: number): string {
   return `Switch ${i + 1}${s.name.trim() ? ` "${s.name.trim()}"` : ''}`;
 }
 
-function checkHapName(issues: Issues, name: string, path: string, label: string, related?: string[]): void {
+/**
+ * HAP names (a switch, the master switch): `what` is the field's own label, so an empty field reads "{Label} is required."
+ * (SPEC section 11.3) and the length message names the same field.
+ */
+function checkHapName(issues: Issues, name: string, path: string, label: string, related?: string[], what: string = FIELD_LABELS.name): void {
   const value = name.trim();
   if (!value) {
-    issues.add(path, label, 'Name is required.', related);
+    issues.add(path, label, VALIDATION.required(what), related);
   } else if (value.length > HAP_NAME_MAX_LENGTH) {
-    issues.add(path, label, `Name must be ${HAP_NAME_MAX_LENGTH} characters or fewer.`, related);
+    issues.add(path, label, `${what} must be ${HAP_NAME_MAX_LENGTH} characters or fewer.`, related);
   } else if (!HAP_NAME_PATTERN.test(value)) {
     issues.add(path, label, VALIDATION.switchName, related);
   }
 }
 
 /** Provider, group and platform names (SPEC section 5): printable characters, no angle brackets, 1 to 64 characters. */
-function checkDisplayName(issues: Issues, name: string, path: string, label: string, what = 'Name'): void {
+function checkDisplayName(issues: Issues, name: string, path: string, label: string, what: string = FIELD_LABELS.name): void {
   const value = name.trim();
   if (!value) {
-    issues.add(path, label, `${what} is required.`);
+    issues.add(path, label, VALIDATION.required(what));
   } else if (!DISPLAY_NAME_PATTERN.test(value)) {
     issues.add(path, label, VALIDATION.name);
   }
@@ -135,7 +139,7 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
   const id = p.id.trim();
   // The id is generated from the name (SPEC section 11.2, item 14), so an id issue belongs to the name field too.
   if (!id) {
-    issues.add(`${path}.id`, label, 'ID is required.', [`${path}.name`]);
+    issues.add(`${path}.id`, label, VALIDATION.required(FIELD_LABELS.id), [`${path}.name`]);
   } else if (!SLUG_PATTERN.test(id)) {
     issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.', [`${path}.name`]);
   } else if (seen.has(id)) {
@@ -147,16 +151,23 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
   checkDisplayName(issues, p.name, `${path}.name`, label);
   // With a credentialsFile the secret fields may come from the file, which the UI cannot read (SPEC section 12, item 2).
   const fromFile = p.credentialsFile.trim().length > 0;
+  // An empty field reads "{Label} is required." (unless the file may supply it); a filled one that does not look right gets
+  // the format message of SPEC section 11.3.
+  const requiredOrFormat = (field: string, value: string, what: string, pattern: RegExp, format: string, mayComeFromFile = true): void => {
+    if (!value) {
+      if (!(mayComeFromFile && fromFile)) {
+        issues.add(`${path}.${field}`, label, VALIDATION.required(what));
+      }
+    } else if (!pattern.test(value)) {
+      issues.add(`${path}.${field}`, label, format);
+    }
+  };
   switch (p.type) {
   case 'twilio':
-    if (!(fromFile && !p.accountSid.trim()) && !ACCOUNT_SID_PATTERN.test(p.accountSid.trim())) {
-      issues.add(`${path}.accountSid`, label, VALIDATION.accountSid);
-    }
-    if (!(fromFile && !p.apiKeySid.trim()) && !API_KEY_SID_PATTERN.test(p.apiKeySid.trim())) {
-      issues.add(`${path}.apiKeySid`, label, VALIDATION.apiKeySid);
-    }
+    requiredOrFormat('accountSid', p.accountSid.trim(), FIELD_LABELS.accountSid, ACCOUNT_SID_PATTERN, VALIDATION.accountSid);
+    requiredOrFormat('apiKeySid', p.apiKeySid.trim(), FIELD_LABELS.apiKeySid, API_KEY_SID_PATTERN, VALIDATION.apiKeySid);
     if (!fromFile && !p.apiKeySecret) {
-      issues.add(`${path}.apiKeySecret`, label, 'API Key Secret is required.');
+      issues.add(`${path}.apiKeySecret`, label, VALIDATION.required(FIELD_LABELS.apiKeySecret));
     }
     checkListSize(issues, p.smsSenders, `${path}.smsSenders`, label, 'SMS senders');
     p.smsSenders.forEach((sender, s) => {
@@ -176,41 +187,39 @@ function checkProvider(issues: Issues, p: UiProvider, i: number, seen: Map<strin
     break;
   case 'smtp':
     if (!p.host.trim()) {
-      issues.add(`${path}.host`, label, 'Host is required.');
+      issues.add(`${path}.host`, label, VALIDATION.required(FIELD_LABELS.host));
     }
     if (!Number.isInteger(p.port) || p.port < 1 || p.port > 65535) {
       issues.add(`${path}.port`, label, VALIDATION.port);
     }
     if (!fromFile && !p.username.trim()) {
-      issues.add(`${path}.username`, label, 'Username is required.');
+      issues.add(`${path}.username`, label, VALIDATION.required(FIELD_LABELS.username));
     }
     if (!fromFile && !p.password) {
-      issues.add(`${path}.password`, label, 'Password is required.');
+      issues.add(`${path}.password`, label, VALIDATION.required(FIELD_LABELS.password));
     }
-    if (!EMAIL_PATTERN.test(p.from.address.trim())) {
-      issues.add(`${path}.from.address`, label, 'From address is required and must be a valid email address.');
-    }
+    requiredOrFormat('from.address', p.from.address.trim(), FIELD_LABELS.fromAddress, EMAIL_PATTERN, VALIDATION.fromAddress, false);
     break;
   case 'telegram':
-    if (!(fromFile && !p.botToken.trim()) && !BOT_TOKEN_PATTERN.test(p.botToken.trim())) {
-      issues.add(`${path}.botToken`, label, VALIDATION.botToken);
-    }
+    requiredOrFormat('botToken', p.botToken.trim(), FIELD_LABELS.botToken, BOT_TOKEN_PATTERN, VALIDATION.botToken);
     break;
   case 'ntfy':
-    if (!isServerUrl(p.server.trim())) {
+    if (!p.server.trim()) {
+      issues.add(`${path}.server`, label, VALIDATION.required(FIELD_LABELS.server));
+    } else if (!isServerUrl(p.server.trim())) {
       issues.add(`${path}.server`, label, VALIDATION.ntfyServer);
     }
     if (p.auth === 'token' && !fromFile && !p.token.trim()) {
-      issues.add(`${path}.token`, label, 'Access token is required.');
+      issues.add(`${path}.token`, label, VALIDATION.required(FIELD_LABELS.accessToken));
     }
     if (p.auth === 'basic') {
       if (!fromFile && !p.username.trim()) {
-        issues.add(`${path}.username`, label, 'Username is required.');
+        issues.add(`${path}.username`, label, VALIDATION.required(FIELD_LABELS.username));
       } else if (p.username.includes(':')) {
         issues.add(`${path}.username`, label, 'Username must not contain a colon.');
       }
       if (!fromFile && !p.password) {
-        issues.add(`${path}.password`, label, 'Password is required.');
+        issues.add(`${path}.password`, label, VALIDATION.required(FIELD_LABELS.password));
       }
     }
     break;
@@ -222,7 +231,7 @@ function checkGroup(issues: Issues, g: UiGroup, i: number, seen: Map<string, str
   const label = groupLabel(g, i);
   const id = g.id.trim();
   if (!id) {
-    issues.add(`${path}.id`, label, 'ID is required.', [`${path}.name`]);
+    issues.add(`${path}.id`, label, VALIDATION.required(FIELD_LABELS.id), [`${path}.name`]);
   } else if (!SLUG_PATTERN.test(id)) {
     issues.add(`${path}.id`, label, 'ID must be lowercase letters, digits, dashes or underscores, starting with a letter or digit.', [`${path}.name`]);
   } else if (seen.has(id)) {
@@ -243,10 +252,11 @@ function checkGroup(issues: Issues, g: UiGroup, i: number, seen: Map<string, str
   }
 }
 
-function checkBody(issues: Issues, channel: Channel, body: string, path: string, label: string): void {
+/** `what` is the field's own label: "Message" for the shared field, "SMS message" and so on under Advanced (SPEC section 11.3). */
+function checkBody(issues: Issues, channel: Channel, body: string, path: string, label: string, what: string): void {
   const length = Array.from(body).length;
   if (length === 0) {
-    issues.add(path, label, 'Message is required.');
+    issues.add(path, label, VALIDATION.required(what));
     return;
   }
   switch (channel) {
@@ -398,12 +408,12 @@ function checkSwitch(issues: Issues, config: UiConfig, s: UiSwitch, i: number, s
   // Message: the shared body against every enabled channel's rules, or each channel's own body.
   if (s.customize) {
     for (const channel of enabled) {
-      checkBody(issues, channel, s.bodies[channel], `${path}.bodies.${channel}`, label);
+      checkBody(issues, channel, s.bodies[channel], `${path}.bodies.${channel}`, label, SWITCH_EDITOR.channelBody[channel]);
     }
   } else if (enabled.length > 0) {
     const before = issues.list.length;
     for (const channel of enabled) {
-      checkBody(issues, channel, s.body, `${path}.body`, label);
+      checkBody(issues, channel, s.body, `${path}.body`, label, FIELD_LABELS.message);
       if (issues.list.length > before) {
         break;
       }
@@ -424,8 +434,9 @@ export function validProviders(config: UiConfig, issues: UiIssue[]): UiProvider[
 
 export function validate(config: UiConfig): UiIssue[] {
   const issues = new Issues();
-  // Homebridge prefixes every log line with the platform name, so it follows the provider and group name rule.
-  checkDisplayName(issues, config.name, 'name', 'Settings', 'Platform name');
+  // Homebridge prefixes every log line with the platform name, so it follows the provider and group name rule. The field
+  // is labelled Name under Settings, so its empty message reads "Name is required." like every other Name field.
+  checkDisplayName(issues, config.name, 'name', 'Settings');
   if (!isCountry(config.defaultCountry)) {
     issues.add('defaultCountry', 'Settings', 'Default country is not a known country code.');
   }
@@ -437,7 +448,7 @@ export function validate(config: UiConfig): UiIssue[] {
     issues.add('dateFormat', 'Settings', 'Date format must be Month/Day/Year, Day/Month/Year or Year-Month-Day.');
   }
   if (config.masterSwitch.enabled) {
-    checkHapName(issues, config.masterSwitch.name, 'masterSwitch.name', 'Settings');
+    checkHapName(issues, config.masterSwitch.name, 'masterSwitch.name', 'Settings', undefined, FIELD_LABELS.masterSwitchName);
   }
 
   // No providers or no switches is valid (a fresh install, or after Reset plugin to fresh install); startup then registers nothing.

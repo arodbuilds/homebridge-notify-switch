@@ -57,6 +57,8 @@ class Page implements App {
   private readonly issuesBox: HTMLElement;
   private readonly issuesHeading: HTMLElement;
   private readonly issuesList: HTMLElement;
+  /** The summary box entries by field path, updated in place by `updateIssueEntries` (SPEC section 11.2, item 15). */
+  private readonly issueEntries = new Map<string, { li: HTMLElement; label: HTMLElement; message: Text; text: string }>();
   private readonly issuesToggle: HTMLButtonElement;
   private issuesExpanded = false;
   private readonly draftBanner: HTMLElement;
@@ -439,12 +441,16 @@ class Page implements App {
 
   /**
    * A summary box entry was clicked (SPEC section 11.2, item 15): the field counts as touched so its message shows,
-   * and its control takes focus. A field under a collapsed disclosure is opened first. Nothing scrolls the page
-   * itself: the host scrolls the modal around this iframe, and moving focus is what brings the field into view.
+   * and its control (the input, select, textarea or checkbox itself) takes focus. A field under a collapsed
+   * disclosure is opened first. Nothing on the page is rebuilt on the click: the inline messages are redrawn in
+   * place and the entry list is left as it is, so the control that takes focus is the one already on the page and
+   * stays there. Nothing scrolls the page itself: the iframe document is not a scroll container (the host scrolls
+   * the modal around it), and moving focus is what brings the field into view.
    */
   private focusField(path: string): void {
     this.touched.add(path);
-    this.revalidate();
+    // Inline state only (the message under the field, the details it opens); the list of entries is not rebuilt here.
+    this.markIssues(validate(this.config));
     const node = this.root.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`);
     if (!node) {
       return;
@@ -452,10 +458,10 @@ class Page implements App {
     for (let details = node.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
       details.open = true;
     }
-    const focusable = [...node.querySelectorAll<HTMLElement>('input, select, textarea, button')].find((candidate) => {
-      return !(candidate as HTMLInputElement).disabled && candidate.getClientRects().length > 0;
+    const control = [...node.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(CONTROLS)].find((candidate) => {
+      return !candidate.disabled && candidate.getClientRects().length > 0;
     });
-    focusable?.focus();
+    control?.focus();
   }
 
   private switchRefreshTimer: number | undefined;
@@ -574,24 +580,14 @@ class Page implements App {
     for (const node of this.root.querySelectorAll<ValidationListener>('.ns-on-validate')) {
       node.nsOnValidate?.(all);
     }
-    // One entry per field, each a link that scrolls to the field, marks it touched and focuses it (SPEC section 11.2, item 15).
-    clear(this.issuesList);
+    // One entry per field, each a link that marks the field touched and focuses its control (SPEC section 11.2, item 15).
     const byPath = new Map<string, UiIssue>();
     for (const issue of listed) {
       if (!byPath.has(issue.path)) {
         byPath.set(issue.path, issue);
       }
     }
-    const entry = (issue: UiIssue): HTMLElement => {
-      const link = button('', () => this.focusField(issue.path), 'btn btn-link btn-sm p-0 ns-link-button ns-issue-link text-start');
-      link.appendChild(el('strong', {}, `${issue.label}: `));
-      link.appendChild(document.createTextNode(issue.message));
-      link.setAttribute('data-issue-path', issue.path);
-      return el('li', {}, link);
-    };
-    for (const issue of byPath.values()) {
-      this.issuesList.appendChild(entry(issue));
-    }
+    this.updateIssueEntries(byPath);
     const nothingToSave = all.length === 0 && this.config.providers.length === 0 && this.config.groups.length === 0 && this.config.switches.length === 0;
     this.issuesToggle.hidden = true;
     this.issuesList.hidden = false;
@@ -620,6 +616,48 @@ class Page implements App {
     }
     this.issuesBox.hidden = all.length === 0 && !nothingToSave;
     setSaveEnabled(all.length === 0);
+  }
+
+  /**
+   * Brings the summary box entries in line with the issues, in place: an entry whose field still has an issue keeps its
+   * node (its text follows the issue), one whose field is fixed is removed, a new one is inserted at its place in issue
+   * order. The list is never rebuilt wholesale. A validation pass runs whenever a control loses focus, and pressing the
+   * mouse on an entry while a field has focus is exactly that: rebuilding the list then would replace the entry under
+   * the pointer before the click landed, so the click would go nowhere and focus would be lost (SPEC section 11.2,
+   * item 15). The card label and the message are inserted as text, never as markup.
+   */
+  private updateIssueEntries(byPath: Map<string, UiIssue>): void {
+    for (const [path, entry] of this.issueEntries) {
+      if (!byPath.has(path)) {
+        entry.li.remove();
+        this.issueEntries.delete(path);
+      }
+    }
+    let previous: HTMLElement | null = null;
+    for (const issue of byPath.values()) {
+      let entry = this.issueEntries.get(issue.path);
+      if (!entry) {
+        const label = el('strong', {}, '');
+        const message = document.createTextNode('');
+        const link = button('', () => this.focusField(issue.path), 'btn btn-link btn-sm p-0 ns-link-button ns-issue-link text-start');
+        link.appendChild(label);
+        link.appendChild(message);
+        link.setAttribute('data-issue-path', issue.path);
+        entry = { li: el('li', {}, link), label, message, text: '' };
+        this.issueEntries.set(issue.path, entry);
+      }
+      const text = `${issue.label}: ${issue.message}`;
+      if (entry.text !== text) {
+        entry.label.textContent = `${issue.label}: `;
+        entry.message.nodeValue = issue.message;
+        entry.text = text;
+      }
+      const expected: Element | null = previous ? previous.nextElementSibling : this.issuesList.firstElementChild;
+      if (expected !== entry.li) {
+        this.issuesList.insertBefore(entry.li, expected);
+      }
+      previous = entry.li;
+    }
   }
 
   /** True when the field wrapper holds a value worth a green check: a non-empty input or textarea, or a select. */

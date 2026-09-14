@@ -7,7 +7,7 @@ import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { cardHeader, compactLinkActions, headerBadge, idField, qrBlock } from '../card.js';
 import {
-  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, DEFAULTS, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
+  CHOOSER, CREDENTIALS_FILE_HELP, CREDENTIALS_FILE_LINK, DEFAULTS, FIELD_LABELS, GET_STARTED, ID_FIELD, NTFY_HELP, PROVIDER_CHOOSER, PROVIDER_NAME_HELP,
   PROVIDER_TYPE_LABEL, PROVIDERS_SECTION, REMOVE, SMTP_HELP, TELEGRAM_HELP, TELEGRAM_ONBOARDING, TWILIO_HELP, TWILIO_LOOKUP,
 } from '../copy.js';
 import {
@@ -241,19 +241,19 @@ function twilioFields(app: App, p: UiProvider, path: string, body: HTMLElement, 
   const credentialsReady = (): boolean => p.accountSid.trim().length > 0 && p.apiKeySid.trim().length > 0 && p.apiKeySecret.length > 0;
   const refreshLookup = (): void => lookup.setEnabled(credentialsReady());
 
-  body.appendChild(textField('Account SID', p.accountSid, (v) => {
+  body.appendChild(textField(FIELD_LABELS.accountSid, p.accountSid, (v) => {
     p.accountSid = v;
     refreshLookup();
     app.changed();
   }, {
     path: `${path}.accountSid`, required: true, monospace: true, placeholder: 'AC…', help: TWILIO_HELP.accountSid, helpLink: TWILIO_HELP.accountSidLink,
   }));
-  body.appendChild(textField('API Key SID', p.apiKeySid, (v) => {
+  body.appendChild(textField(FIELD_LABELS.apiKeySid, p.apiKeySid, (v) => {
     p.apiKeySid = v;
     refreshLookup();
     app.changed();
   }, { path: `${path}.apiKeySid`, required: true, monospace: true, placeholder: 'e.g. SK…', help: TWILIO_HELP.apiKey, helpLink: TWILIO_HELP.apiKeyLink }));
-  body.appendChild(passwordField('API Key Secret', p.apiKeySecret, (v) => {
+  body.appendChild(passwordField(FIELD_LABELS.apiKeySecret, p.apiKeySecret, (v) => {
     p.apiKeySecret = v;
     refreshLookup();
     app.changed();
@@ -371,7 +371,7 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
   let unlock: () => void = () => undefined;
   const edit = linkButton(SMTP_HELP.edit, () => unlock(), 'ns-server-edit');
   edit.setAttribute('aria-label', `${SMTP_HELP.edit} server settings`);
-  const hostField = textField('Host', p.host, (v) => {
+  const hostField = textField(FIELD_LABELS.host, p.host, (v) => {
     p.host = v;
     app.changed();
   }, { path: `${path}.host`, required: true, placeholder: 'e.g. smtp.fastmail.com', labelExtra: edit });
@@ -401,7 +401,7 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
   };
   unlock = (): void => server.setLocked(false);
 
-  const passwordField_ = passwordField('Password', p.password, (v) => {
+  const passwordField_ = passwordField(FIELD_LABELS.password, p.password, (v) => {
     p.password = v;
     app.changed();
   }, { path: `${path}.password`, required: true, help: SMTP_HELP.password, helpLink: SMTP_HELP.passwordLink });
@@ -440,13 +440,13 @@ function smtpFields(app: App, p: UiProvider, path: string, body: HTMLElement, id
   // Host, Port and Security on one row at 7, 2 and 3 columns, with the help under the whole row (SPEC section 11.2, item 22).
   body.appendChild(grid(gridCell(7, hostField), gridCell(2, portField), gridCell(3, securityField)));
   body.appendChild(serverHelp);
-  body.appendChild(textField('Username', p.username, (v) => {
+  body.appendChild(textField(FIELD_LABELS.username, p.username, (v) => {
     p.username = v;
     app.changed();
   }, { path: `${path}.username`, required: true, autocomplete: 'off', placeholder: 'e.g. you@example.com', help: SMTP_HELP.username }));
   body.appendChild(passwordField_);
   body.appendChild(el('div', { class: 'ns-grid' },
-    el('div', { class: 'ns-span-7' }, textField('From address', p.from.address, (v) => {
+    el('div', { class: 'ns-span-7' }, textField(FIELD_LABELS.fromAddress, p.from.address, (v) => {
       p.from.address = v;
       app.changed();
     }, { path: `${path}.from.address`, required: true, type: 'email', placeholder: 'e.g. you@example.com', help: SMTP_HELP.fromAddress })),
@@ -607,7 +607,7 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
       ),
       qrBlock(copy.botFatherUrl, 'QR code for BotFather', copy.botFatherCaption),
     ),
-    passwordField('Bot Token', p.botToken, (v) => {
+    passwordField(FIELD_LABELS.botToken, p.botToken, (v) => {
       p.botToken = v;
       app.changed();
       scheduleLookup();
@@ -728,21 +728,21 @@ function telegramFields(app: App, p: UiProvider, path: string, body: HTMLElement
 
 function ntfyFields(app: App, p: UiProvider, path: string, body: HTMLElement, id: HTMLElement): void {
   body.appendChild(el('p', { class: 'ns-card-intro ns-help mb-3' }, NTFY_HELP.intro, ' ', helpLink(NTFY_HELP.introLink)));
-  body.appendChild(textField('Server', p.server, (v) => {
+  body.appendChild(textField(FIELD_LABELS.server, p.server, (v) => {
     p.server = v;
     app.changed();
   }, { path: `${path}.server`, required: true, monospace: true, placeholder: 'e.g. https://ntfy.sh', help: NTFY_HELP.server }));
 
   // The credential fields for the chosen auth mode; the others stay in the model but out of the form.
-  const token = passwordField('Access token', p.token, (v) => {
+  const token = passwordField(FIELD_LABELS.accessToken, p.token, (v) => {
     p.token = v;
     app.changed();
   }, { path: `${path}.token`, required: true, help: NTFY_HELP.token, helpLink: NTFY_HELP.authLink });
-  const username = textField('Username', p.username, (v) => {
+  const username = textField(FIELD_LABELS.username, p.username, (v) => {
     p.username = v;
     app.changed();
   }, { path: `${path}.username`, required: true, autocomplete: 'off', help: NTFY_HELP.username });
-  const password = passwordField('Password', p.password, (v) => {
+  const password = passwordField(FIELD_LABELS.password, p.password, (v) => {
     p.password = v;
     app.changed();
   }, { path: `${path}.password`, required: true, help: NTFY_HELP.password });
@@ -810,7 +810,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
     }
     app.changed(true);
   };
-  const nameField = textField('Name', p.name, applyName, {
+  const nameField = textField(FIELD_LABELS.name, p.name, applyName, {
     path: `${path}.name`, required: true, placeholder: `e.g. ${PROVIDER_CHOOSER[p.type].name}`, help: PROVIDER_NAME_HELP,
   });
   const nameInput = nameField.querySelector('input') as HTMLInputElement;

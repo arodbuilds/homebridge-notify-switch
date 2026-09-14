@@ -152,13 +152,18 @@ test('fresh cards: no errors until a field is touched, then errors appear; the i
     assert.equal(await page.locator('.issues li').count(), 3, 'the issue list fills in: Account SID, API Key SID, API Key Secret');
     assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:', 'three entries are shown in full');
     assert.equal(await page.locator('.issues .ns-issues-toggle').isVisible(), false);
-    // Each entry is a link that marks the field touched, focuses it and shows its message.
+    // Each entry is a link that marks the field touched, focuses it and shows its message. The field is still empty, so
+    // the message names the field ("{Label} is required."); the format message is for a value that is filled in.
     const apiKeyLink = page.locator('.issues .ns-issue-link[data-issue-path="providers[1].apiKeySid"]');
     assert.equal(await apiKeyLink.count(), 1);
+    assert.equal(await apiKeyLink.textContent(), 'Provider 2 "Twilio 2": API Key SID is required.');
     await apiKeyLink.click();
+    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] .invalid-feedback').textContent(), 'API Key SID is required.');
+    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] input').evaluate((node) => node === document.activeElement), true);
+    await card.locator('[data-path="providers[1].apiKeySid"] input').fill('nope');
+    await card.locator('[data-path="providers[1].apiKeySid"] input').blur();
     assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] .invalid-feedback').textContent(),
       'That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console.');
-    assert.equal(await card.locator('[data-path="providers[1].apiKeySid"] input').evaluate((node) => node === document.activeElement), true);
 
     // The id follows the name until the provider is referenced by a switch.
     const name = card.locator('[data-path="providers[1].name"] input');

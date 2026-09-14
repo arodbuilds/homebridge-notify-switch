@@ -27,9 +27,13 @@ const BOOTSTRAP = require.resolve('bootstrap/dist/css/bootstrap.min.css');
  * or `config-ui-x-dark-mode-{theme}`, `modal-content`, and `dark-mode` when dark. It never sets Bootstrap's
  * `data-bs-theme` there, so Bootstrap's variables keep their light values in dark mode; the theme colours
  * the body, cards, alerts, links and primary buttons with these rules instead. Kept verbatim so a colour
- * that is unreadable in the real UI is unreadable here too.
+ * that is unreadable in the real UI is unreadable here too. The first rule is the host's own root sizing
+ * (`html, body { height: 100% }`, from its `styles-*.css`, which it links into the iframe after the plugin's
+ * stylesheet): a page that let it apply would be as tall as the iframe and grow with every resize the host
+ * makes (SPEC section 11.2, item 28), so it is kept here for the sizing tests to catch.
  */
 const HOST_THEME_CSS = `
+html,body{height:100%;-webkit-font-smoothing:subpixel-antialiased}
 .modal-content{border-radius:.7rem!important;border:none;line-height:1.5rem;font-size:.9rem;font-weight:300}
 .config-ui-x-purple.modal-content{background-color:#fff!important;color:#000!important}
 .config-ui-x-purple .alert{color:#000;background-color:#eee;border-color:#ccc}

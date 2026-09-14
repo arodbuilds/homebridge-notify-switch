@@ -15,6 +15,7 @@ Decisions applied to the rule text in this revision, each settling a difference 
 - W1: no emoji anywhere, including the country lists.
 - C6: the result bar is toneless and holds a toned status box.
 - C1 (header strip): "Make default for {channel}" appears only on providers that can be the default and are not currently the default.
+- S1, T5 and W4 (1.3.2): the iframe document is never a scroll container (`html` and `body` use `overflow: hidden` with no fixed height; the host owns all scrolling); a summary-box entry focuses the named control itself without rebuilding the page; every "is required." message carries the field's own label.
 
 ## Overview
 
@@ -56,8 +57,8 @@ The rule ids and owner tags are those of `BUILD-CONTRACT.md`. Rule text is the c
 ### S: the page every plugin renders
 
 **S1 Host owns the frame** (invariant)
-The page renders inside the Homebridge settings modal in an iframe: 800px dialog, host header with title and close, scrolling body, host footer with CLOSE and SAVE. The plugin never draws that chrome and never sets a page background. The host sizes the iframe to the page's own height and scrolls its modal body around it, so the page owns no scroll container.
-Status: implemented.
+The page renders inside the Homebridge settings modal in an iframe: 800px dialog, host header with title and close, scrolling body, host footer with CLOSE and SAVE. The plugin never draws that chrome and never sets a page background. The host sizes the iframe to the page's own height and scrolls its modal body around it, so the page owns no scroll container. Host constraints: the iframe document is never a scroll container. `html` and `body` use `overflow: hidden` with no fixed height; the host owns all scrolling. (The host links its own stylesheet into the iframe, and that stylesheet sets `html, body { height: 100% }`; the page's rule is written on `:root` so it wins. The host sizes the iframe to `document.body.scrollHeight` plus 10px on every resize of the body, so a body that took its height from the iframe would make the host grow the iframe without end.)
+Status: implemented (the host constraint from 1.3.2; `homebridge-ui/public/index.css`, the `:root` rule at the top).
 
 **S2 Container padding** (invariant)
 One root element with padding 0 16px 16px and overflow-wrap: anywhere. No negative margins, nothing wider than 100%.
@@ -197,8 +198,8 @@ Below 600px every grid cell is full width, chooser tiles stack, segmented contro
 Status: implemented.
 
 **T5 Focus is visible** (invariant)
-Keyboard focus is never removed. Summary-box entries move focus to the field they name, and a newly added card focuses its Name field.
-Status: implemented differently. Focus is never removed and summary entries move focus; a newly added card (Add group, Add switch, a chooser tile) does not focus its Name field, only Duplicate does.
+Keyboard focus is never removed. Summary-box entries move focus to the control of the field they name (the input, select, textarea or checkbox itself), opening a collapsed Advanced first when the field sits inside one, and rebuild nothing on the page in doing so, so the control that takes focus stays in the document and Tab moves on from it. A newly added card focuses its Name field.
+Status: implemented differently. Focus is never removed; summary entries focus the named control itself without rebuilding the page, and the entry list is updated in place rather than rebuilt on a validation pass (from 1.3.2; before, the pass that runs when a field loses focus rebuilt the list under the pointer before the click landed, so the click went nowhere and focus was lost); a newly added card (Add group, Add switch, a chooser tile) does not focus its Name field, only Duplicate does.
 
 ### W: words
 
@@ -215,8 +216,8 @@ Status: implemented.
 Status: implemented.
 
 **W4 Errors** (invariant)
-Say what a good value looks like and where to get it. "Name is required." is acceptable only where the value is self-evident. Duplicate name within a section (case-insensitive): "Another {noun} already uses this name."
-Status: implemented differently. Format messages say what a good value looks like and where to get it; empty required fields read "{Label} is required." also where the value is not self-evident (Account SID, Host, Username, Password).
+Say what a good value looks like and where to get it. An empty required field reads "{Label} is required." with the field's own label verbatim ("Master switch name is required.", "Account SID is required."); a field labelled Name reads "Name is required.". The summary box entry carries the same text after the card's name. Duplicate name within a section (case-insensitive): "Another {noun} already uses this name."
+Status: implemented (from 1.3.2). Format messages say what a good value looks like and where to get it, for a value that is filled in; every empty required field names itself from the one label table the sections render from (`FIELD_LABELS` in `homebridge-ui/src/copy.ts`).
 
 **W5 Button labels** (invariant)
 Sentence case in the source; the host renders them uppercase. Verb plus noun: Add provider, Test connection, Download backup.
