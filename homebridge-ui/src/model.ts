@@ -680,6 +680,31 @@ export function exportConfigWithoutCredentials(config: UiConfig): Raw {
   return blockWithoutCredentials(exportConfig(config));
 }
 
+/**
+ * Fills the empty secret fields of `config`'s providers from `saved`, the platform block the page loaded, matched by
+ * id and type (SPEC section 11.2, item 23): a draft holds structure only, so a restored provider takes its credentials
+ * back from the saved configuration. A provider the draft added, or whose type changed, keeps its secrets empty; a
+ * secret the draft holds (never, unless the stored text was edited by hand) is left as it is.
+ */
+export function fillSecrets(config: UiConfig, saved: Record<string, unknown>): void {
+  const providers = Array.isArray(saved.providers) ? saved.providers.filter(isRaw) : [];
+  for (const p of config.providers) {
+    const id = p.id.trim();
+    const source = providers.find((raw) => id.length > 0 && str(raw.id).trim() === id && raw.type === p.type);
+    if (!source) {
+      continue;
+    }
+    const target = p as unknown as Record<string, unknown>;
+    for (const key of secretFields(p)) {
+      const current = target[key];
+      const value = source[key];
+      if ((typeof current !== 'string' || current.length === 0) && typeof value === 'string' && value.length > 0) {
+        target[key] = value;
+      }
+    }
+  }
+}
+
 /** The field paths (`providers[0].apiKeySecret`) of the secret fields that are empty in `config`. */
 export function emptySecretPaths(config: UiConfig): string[] {
   const paths: string[] = [];

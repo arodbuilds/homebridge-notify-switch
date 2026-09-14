@@ -43,7 +43,7 @@ export function helpToggle(card: HTMLElement, item: object): HTMLButtonElement {
 }
 
 /**
- * The header strip shared by every card (SPEC section 11.2, item 28). Left cluster: the bold title, the type badge and
+ * The header strip shared by every card (SPEC section 11.2, item 28). Left cluster: the bold title (weight 700), the type badge and
  * the status badges (`badges`, filled later by the card); right cluster: the card's header links (`actions`, such as
  * "Make default for {channel}") and then the "Show help" / "Hide help" toggle. Every string is inserted as text.
  */

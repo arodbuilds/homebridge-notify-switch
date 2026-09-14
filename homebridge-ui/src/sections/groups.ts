@@ -20,7 +20,7 @@ function groupReferenced(app: App, id: string): boolean {
 function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   const path = `groups[${index}]`;
   const others = (): string[] => app.config.groups.filter((other) => other !== g).map((other) => other.id);
-  const title = el('span', { class: 'fw-semibold' }, groupTitle(g));
+  const title = el('span', { class: 'fw-bold ns-card-name' }, groupTitle(g));
   const card = el('div', { class: 'card mb-3', 'data-path': path });
   // The shared header strip (SPEC section 11.2, item 28): a group card has no type badge and no header links.
   const header = cardHeader(card, g, title, [], []);
@@ -85,15 +85,14 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
     },
   });
   // Duplicate group (SPEC section 11.2, item 11): a copy directly below this card with every address list, treated like a
-  // group added with Add group; its Name field takes focus and the card scrolls into view. No switch is changed.
+  // group added with Add group; its Name field takes focus, which brings the card into view (the host scrolls the modal;
+  // the page scrolls nothing itself). No switch is changed.
   const duplicate = linkButton(DUPLICATE.group, () => {
     const copy = duplicateGroup(g, app.config.groups);
     app.config.groups.splice(index + 1, 0, copy);
     app.addFresh(copy);
     app.rerender('groups', true);
-    const nameInput = document.querySelector<HTMLInputElement>(`[data-path="groups[${index + 1}].name"] input`);
-    nameInput?.closest('.card')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    nameInput?.focus({ preventScroll: true });
+    document.querySelector<HTMLInputElement>(`[data-path="groups[${index + 1}].name"] input`)?.focus();
   }, 'ns-duplicate');
   card.appendChild(header);
   card.appendChild(body);

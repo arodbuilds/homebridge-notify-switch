@@ -33,6 +33,8 @@ const HOST_THEME_CSS = `
 .modal-content{border-radius:.7rem!important;border:none;line-height:1.5rem;font-size:.9rem;font-weight:300}
 .config-ui-x-purple.modal-content{background-color:#fff!important;color:#000!important}
 .config-ui-x-purple .alert{color:#000;background-color:#eee;border-color:#ccc}
+.config-ui-x-purple .alert-warning{border-color:#ffa000}
+.btn.disabled,.btn:disabled{background-color:#333;color:#eee;border-color:#333}
 .config-ui-x-purple .btn-primary,.config-ui-x-purple .btn-default{background-color:#9c27b0!important;border-color:#9c27b0!important}
 .config-ui-x-purple .form-control::placeholder{color:#cdcdcd!important;opacity:1!important}
 .config-ui-x-dark-mode-purple{background-color:#000}

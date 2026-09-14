@@ -776,7 +776,7 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
   const path = `providers[${index}]`;
   const others = (): string[] => app.config.providers.filter((other) => other !== p).map((other) => other.id);
   const card = el('div', { class: 'card mb-3', 'data-path': path, 'data-type': p.type });
-  const title = el('span', { class: 'fw-semibold' }, providerTitle(p));
+  const title = el('span', { class: 'fw-bold ns-card-name' }, providerTitle(p));
   const badge = headerBadge(PROVIDER_TYPE_LABEL[p.type], 'type');
   // The shared header strip (SPEC section 11.2, item 28): the "Default for {channel}" status badges sit after the type badge
   // in the left cluster, the "Make default for {channel}" links in the right cluster before the help toggle (item 25).
@@ -875,8 +875,8 @@ function providerCard(app: App, p: UiProvider, index: number): HTMLElement {
 function chooserTiles(app: App): HTMLElement {
   const tiles = PROVIDER_TYPES.map((type) => {
     const tile = el('button', { type: 'button', class: 'ns-chooser-tile', 'data-type': type },
-      el('span', { class: 'fw-semibold d-block' }, PROVIDER_CHOOSER[type].title),
-      el('span', { class: 'ns-secondary small d-block' }, PROVIDER_CHOOSER[type].help),
+      el('span', { class: 'fw-semibold d-block ns-tile-title' }, PROVIDER_CHOOSER[type].title),
+      el('span', { class: 'ns-secondary small d-block ns-tile-help' }, PROVIDER_CHOOSER[type].help),
     );
     tile.addEventListener('click', () => {
       const p = createProvider(type as ProviderType, PROVIDER_CHOOSER[type].name, app.config.providers);

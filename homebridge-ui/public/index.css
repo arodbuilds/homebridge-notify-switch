@@ -39,6 +39,9 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui {
   --bs-link-color-rgb: 110, 168, 254;
   --bs-link-hover-color: #8bb9fe;
   --bs-link-hover-color-rgb: 139, 185, 254;
+  /* The warning box (the summary box, the upgrade notice) on the shell's dark warning colours. */
+  --bs-warning-bg-subtle: #3a3524;
+  --bs-warning-text-emphasis: #ffe69c;
 }
 
 /* The card's own variables are declared on `.card` by Bootstrap, so the dark values it needs are re-declared
@@ -63,13 +66,21 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .card {
   color: var(--bs-secondary-color, currentColor);
 }
 
-/* Disabled buttons keep full opacity and show the secondary colour on a plain background instead of a
-   dimmed copy of the enabled button, which is unreadable on a dark theme. */
+/* Disabled buttons (the gated Add buttons, a disabled Test send or Look up numbers, the Reset modal's Confirm until
+   RESET is typed): full opacity, a transparent fill, the border colour and the secondary text colour, never Bootstrap's
+   dimmed copy of the enabled button (`opacity: .65`, which is unreadable on a dark theme) and never the host's dark
+   fill. Bootstrap turns pointer events off on a disabled button, which would also hide the not-allowed cursor and the
+   button's tooltip; they are turned back on (a disabled button fires no click either way). */
 .notify-switch-ui .btn:disabled,
-.notify-switch-ui .btn.disabled {
+.notify-switch-ui .btn.disabled,
+.ns-modal .btn:disabled,
+.ns-modal .btn.disabled {
   opacity: 1;
+  color: var(--bs-secondary-color, currentColor);
   border-color: var(--bs-border-color, currentColor);
   background-color: transparent;
+  cursor: not-allowed;
+  pointer-events: auto;
 }
 
 /* Links inside help text and the footer: the theme's link colour (re-declared above for dark mode,
@@ -189,12 +200,6 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .card {
   text-transform: uppercase;
 }
 
-/* A gated section Add button: outlined, disabled, secondary text, and the cursor says so. */
-.notify-switch-ui .btn:disabled,
-.notify-switch-ui .btn.disabled {
-  cursor: not-allowed;
-}
-
 /* Form controls: 38px tall, 6px radius, 11px side padding, 16px text; checkboxes 16px. */
 .notify-switch-ui .form-control:not(.form-control-sm) {
   padding-left: 11px;
@@ -242,6 +247,11 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .card {
 
 .notify-switch-ui .ns-card-actions .ns-make-default {
   --ns-text-button-color: var(--bs-link-color, #0d6efd);
+}
+
+/* The card's name in the header: bold at weight 700, live from the Name field. */
+.notify-switch-ui .ns-card-name {
+  font-weight: 700;
 }
 
 /* Badges: 11.5px weight 600, 3px 7px padding, 4px radius; the type badge on the secondary fill, a status badge on the success fill. */
@@ -328,6 +338,18 @@ body[class*="config-ui-x-dark-mode"] .notify-switch-ui .card {
 /* Every alert box (the default provider prompt, the summary box, result messages) is left-aligned whatever the host's own alert styling. */
 .notify-switch-ui .alert {
   text-align: start;
+}
+
+/* The warning box (the summary box while it lists issues, the upgrade notice): the theme's warning colours, which the
+   host's own alert rule would otherwise replace with its grey box in both themes. Light: Bootstrap's warning tokens, or
+   their values when the host does not define them; dark: the values re-declared under the host's dark marker above.
+   The 1px border is the shell's warning border in both themes. Written with the body element so it outranks the host's
+   `.config-ui-x-{theme} .alert` rule, which the host loads after this file. */
+body .notify-switch-ui .alert-warning {
+  color: var(--bs-warning-text-emphasis, #664d03);
+  background-color: var(--bs-warning-bg-subtle, #fff3cd);
+  border: 1px solid #ffecb5;
+  box-shadow: none;
 }
 
 /* Text buttons keep their intent colours under the host's dark marker, which paints every `.btn-link` grey: one rule
@@ -647,14 +669,14 @@ mark.sms-bad {
   font-size: 0.9rem;
 }
 
-/* The Save status area (SPEC section 11.2, item 15): sticky at the bottom of the scroll area. Prefixed so it wins over
-   Bootstrap's `.alert { position: relative }`, which the host loads after this file. */
-.notify-switch-ui .issues {
-  position: sticky;
-  bottom: 0.5rem;
-  z-index: 5;
+/* The summary box (SPEC section 11.2, item 15): in the page flow after the Settings section and before the closing
+   paragraph, with no shadow. The host scrolls the modal body and sizes this iframe to its content, so the page has no
+   scroll container of its own to stick anything to; before 1.3.1 the box was sticky. Prefixed so it wins over Bootstrap's
+   `.alert { position: relative }`, which the host loads after this file. */
+.notify-switch-ui .ns-issues {
+  position: static;
   margin-top: 1rem;
-  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 /* Link-style buttons (Cancel, Dismiss, the issue list entries) and the red text buttons (Remove, Reset). */
@@ -689,8 +711,12 @@ mark.sms-bad {
   border: 0;
 }
 
-.ns-issue-link:hover,
-.ns-issue-link:focus {
+/* Hovered or focused, an entry underlines and keeps the box's colour; Bootstrap's `.btn-link:hover` (loaded after this
+   file by the host) would otherwise turn it link-blue in light mode. */
+.notify-switch-ui .ns-issue-link:hover,
+.notify-switch-ui .ns-issue-link:focus,
+.notify-switch-ui .ns-issue-link:focus-visible {
+  color: inherit;
   text-decoration: underline;
 }
 
@@ -818,6 +844,13 @@ mark.sms-bad {
 }
 
 .ns-chooser-tile {
+  /* A button centres its content vertically, and the grid stretches every tile of a row to the tallest one, which
+     would put a single-line title lower than a two-line one on the tile beside it. Laid out as a column from the top
+     instead, so every title starts at the same height (12px under the tile's top edge). */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   text-align: left;
   padding: 0.75rem;
   border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.35));
@@ -828,6 +861,10 @@ mark.sms-bad {
   color: inherit;
   cursor: pointer;
   min-width: 0;
+}
+
+.ns-chooser-tile .ns-tile-title {
+  margin-bottom: 4px;
 }
 
 /* Guided empty state (SPEC section 11.2, item 19): the Get started card holds the chooser tiles inline. */

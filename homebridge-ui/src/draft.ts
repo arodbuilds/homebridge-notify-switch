@@ -1,14 +1,17 @@
 /**
- * Unsaved draft recovery (SPEC section 11.2, item 23). The in-progress platform block is written to
- * localStorage on every change; on the next load, a draft that differs from the saved configuration
- * and is less than a day old is offered back through a banner. The key carries the plugin name so it
- * cannot collide with another plugin's settings page on the same origin. A draft over `MAX_BACKUP_BYTES`
- * is never written and is discarded on load, and so is one holding a `__proto__`, `constructor` or
- * `prototype` key at any level (SPEC section 12, item 12).
+ * Unsaved draft recovery (SPEC section 11.2, item 23). Once the user has changed something, the in-progress
+ * platform block is written to localStorage on every change, without its credentials (every secret field
+ * emptied, as in a backup without credentials); on the next load, a draft that differs from the saved
+ * configuration and is less than a day old is offered back through a banner, and a restored provider takes
+ * its credentials back from the saved configuration. The key carries the plugin name so it cannot collide
+ * with another plugin's settings page on the same origin. A draft over `MAX_BACKUP_BYTES` is never written
+ * and is discarded on load, and so is one holding a `__proto__`, `constructor` or `prototype` key at any
+ * level (SPEC section 12, item 12). Whatever the stored text holds, `readDraft` empties the secret fields
+ * again, so a draft never carries a credential into the page.
  */
 
 import { findForbiddenKey } from '../../src/safeKeys.js';
-import { MAX_BACKUP_BYTES } from './model.js';
+import { blockWithoutCredentials, MAX_BACKUP_BYTES } from './model.js';
 
 export const DRAFT_KEY = 'homebridge-notify-switch:draft';
 
@@ -28,9 +31,17 @@ function storage(): Storage | undefined {
   }
 }
 
+/** The block with every secret field emptied and without the `credentialsRemoved` marker, which is not a platform field. */
+function structureOnly(config: Record<string, unknown>): Record<string, unknown> {
+  const out = blockWithoutCredentials(config);
+  delete out.credentialsRemoved;
+  return out;
+}
+
+/** Writes the draft. `config` is the platform block without credentials (`exportConfigWithoutCredentials`); the secrets are emptied again here in any case. */
 export function saveDraft(config: Record<string, unknown>, now = Date.now()): void {
   try {
-    const text = JSON.stringify({ savedAt: now, config } satisfies Draft);
+    const text = JSON.stringify({ savedAt: now, config: structureOnly(config) } satisfies Draft);
     if (text.length > MAX_BACKUP_BYTES) {
       return;
     }
@@ -69,7 +80,7 @@ export function readDraft(now = Date.now()): Draft | undefined {
       clearDraft();
       return undefined;
     }
-    return { savedAt: parsed.savedAt as number, config: parsed.config as Record<string, unknown> };
+    return { savedAt: parsed.savedAt as number, config: structureOnly(parsed.config as Record<string, unknown>) };
   } catch {
     clearDraft();
     return undefined;

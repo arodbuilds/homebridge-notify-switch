@@ -10,8 +10,9 @@ import { SMTP, TWILIO } from './helpers.mjs';
  * The shared settings shell (SPEC section 11.2, item 28): the page banner served from the plugin's own folder, the
  * 31px and 38px buttons, the card header clusters and badges, the body padding and the Advanced disclosure line,
  * the result bar between the body and the footer strip, the "Remove {title}?" confirmation, the gated Add buttons
- * and the chooser tiles, the sticky summary box, and the dark-mode colours of text buttons, alerts and variable
- * tokens. Everything is measured on the built page the way the Homebridge UI shows it.
+ * and the chooser tiles (with their titles top-aligned), the summary box in the page flow with the warning colours
+ * of each theme, and the dark-mode colours of text buttons, alerts and variable tokens. Everything is measured on
+ * the built page the way the Homebridge UI shows it.
  */
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -114,7 +115,7 @@ test('shell: the banner is the first element, served from the plugin folder at 4
     });
     assert.equal(banner.tag, 'IMG');
     assert.equal(banner.src, 'notify-switch-banner.png', 'a relative path into the plugin folder, never a URL');
-    assert.equal(banner.alt, 'Notify Switch, Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.');
+    assert.equal(banner.alt, 'Notify Switch: Homebridge switches that send SMS, email, Telegram, or ntfy messages when turned on.');
     assert.equal(banner.aspectRatio, '4 / 1');
     assert.equal(banner.radius, '6px');
     assert.equal(banner.marginTop, '16px');
@@ -237,9 +238,11 @@ test('shell: card header clusters and badges, body padding and grid, the Advance
     const smtp = '.card[data-path="providers[1]"]';
     const twilio = '.card[data-path="providers[0]"]';
     // Left cluster: bold title, type badge, status badge. Right cluster: Make default link, then the help toggle.
-    const title = await metrics(page, '.ns-card-title > .fw-semibold', smtp);
+    const title = await metrics(page, '.ns-card-title > .ns-card-name', smtp);
     assert.equal(title.text, LONG_NAME);
-    assert.ok(Number(title.fontWeight) >= 600, 'the title is bold');
+    assert.equal(title.fontWeight, '700', 'the title is bold at weight 700');
+    assert.equal((await metrics(page, '.ns-card-title > .ns-card-name', '.card[data-path="groups[0]"]')).fontWeight, '700');
+    assert.equal((await metrics(page, '.ns-card-title > .ns-card-name', '.card[data-path="switches[0]"]')).fontWeight, '700');
     const type = await metrics(page, '.ns-card-title .ns-type-badge', smtp);
     assert.equal(type.text, 'SMTP');
     assert.equal(type.fontSize, '11.5px');
@@ -292,7 +295,7 @@ test('shell: card header clusters and badges, body padding and grid, the Advance
     await page.setViewportSize({ width: 400, height: 900 });
     const wrapped = await page.locator(`${smtp} .ns-card-header`).evaluate((node) => {
       const range = document.createRange();
-      range.selectNodeContents(node.querySelector('.ns-card-title > .fw-semibold'));
+      range.selectNodeContents(node.querySelector('.ns-card-title > .ns-card-name'));
       const firstLine = range.getClientRects()[0];
       const badge = node.querySelector('.ns-status-badge').getBoundingClientRect();
       const actions = node.querySelector('.ns-card-actions').getBoundingClientRect();
@@ -373,7 +376,19 @@ test('shell: the result bar sits between the body and the footer strip, Remove c
   }
 });
 
-test('shell: gated Add buttons, inline chooser tiles, the sticky summary box in both themes, and dark-mode intent colours', async (t) => {
+/** The top of every chooser tile title relative to its tile, and the tile heights, for the tiles inside `scope`. */
+async function tileTitles(page, scope) {
+  return page.locator(`${scope} .ns-chooser-tile`).evaluateAll((nodes) => nodes.map((tile) => {
+    const title = tile.querySelector('.ns-tile-title').getBoundingClientRect();
+    const box = tile.getBoundingClientRect();
+    return {
+      title: tile.querySelector('.ns-tile-title').textContent, titleTop: Math.round((title.top - box.top) * 10) / 10,
+      height: Math.round(box.height), top: Math.round(box.top),
+    };
+  }));
+}
+
+test('shell: disabled buttons, chooser tiles with top-aligned titles, the summary box in the page flow in both themes, and dark-mode colours', async (t) => {
   const browser = await launchOrSkip(t);
   if (!browser) {
     return;
@@ -385,11 +400,17 @@ test('shell: gated Add buttons, inline chooser tiles, the sticky summary box in 
       assert.equal(await add.isDisabled(), true);
       const style = await add.evaluate((node) => ({
         cls: node.className, cursor: getComputedStyle(node).cursor, background: getComputedStyle(node).backgroundColor,
-        height: node.getBoundingClientRect().height,
+        height: node.getBoundingClientRect().height, opacity: getComputedStyle(node).opacity, color: getComputedStyle(node).color,
+        border: getComputedStyle(node).borderTopColor, pointerEvents: getComputedStyle(node).pointerEvents,
+        secondary: getComputedStyle(node.parentElement.querySelector('.ns-add-hint')).color,
       }));
       assert.match(style.cls, /\bbtn-outline-secondary\b/);
       assert.equal(style.cursor, 'not-allowed');
+      assert.equal(style.pointerEvents, 'auto', 'pointer events stay on, so the cursor and the tooltip show');
       assert.equal(style.background, 'rgba(0, 0, 0, 0)', 'outlined, no fill');
+      assert.equal(style.opacity, '1', 'full opacity, never Bootstrap\'s dimmed copy');
+      assert.equal(style.color, style.secondary, 'the secondary text colour, the same as the hint beside it');
+      assert.equal(style.border, 'rgb(222, 226, 230)', 'the border colour');
       assert.ok(Math.abs(style.height - 38) <= 0.5);
       assert.equal(await page.locator(`#section-${section} .ns-add-hint`).textContent(), 'Add a provider first.');
     }
@@ -402,30 +423,92 @@ test('shell: gated Add buttons, inline chooser tiles, the sticky summary box in 
     const rows = await started.locator('.ns-chooser-tile')
       .evaluateAll((nodes) => new Set(nodes.map((node) => Math.round(node.getBoundingClientRect().top))).size);
     assert.equal(rows, 1);
+    // Tile titles start at the same height, 12px under the tile's top edge, whatever the tile holds: the tiles of a row
+    // are stretched to the tallest, so a tile whose description takes fewer lines, or whose title takes one line where
+    // another's takes two, must not centre its content. Checked at 800px (the host's modal) and at 720px, the narrowest
+    // width that keeps four tiles on one row, with the descriptions wrapping to different line counts, then again with
+    // one title lengthened to two lines.
+    const lineCounts = (selector) => page.locator(selector).evaluateAll((nodes) => nodes.map((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+    }));
+    const checkTiles = async (width, label) => {
+      const tiles = await tileTitles(page, '.ns-get-started');
+      assert.equal(tiles.length, 4);
+      assert.equal(new Set(tiles.map((tile) => tile.top)).size, 1, `one row at ${width}px`);
+      assert.equal(new Set(tiles.map((tile) => tile.height)).size, 1, `equal tile heights at ${width}px: ${tiles.map((tile) => tile.height).join(', ')}`);
+      assert.equal(new Set(tiles.map((tile) => tile.titleTop)).size, 1,
+        `${label}: titles start at the same height at ${width}px: ${tiles.map((tile) => `${tile.title} ${tile.titleTop}`).join(', ')}`);
+      assert.ok(Math.abs(tiles[0].titleTop - 13) <= 1, `12px padding plus the 1px border above the title (${tiles[0].titleTop})`);
+    };
+    for (const width of [800, 720]) {
+      await page.setViewportSize({ width, height: 800 });
+      const helpLines = await lineCounts('.ns-get-started .ns-tile-help');
+      assert.ok(new Set(helpLines).size > 1, `the descriptions wrap to different line counts at ${width}px (${helpLines.join(', ')})`);
+      await checkTiles(width, 'one-line titles');
+      await page.locator('.ns-get-started .ns-chooser-tile[data-type="smtp"] .ns-tile-title').evaluate((node) => {
+        node.dataset.original = node.textContent;
+        node.textContent = 'Email (SMTP) from a mailbox you already have';
+      });
+      const titleLines = await lineCounts('.ns-get-started .ns-tile-title');
+      assert.ok(titleLines.some((n) => n > 1) && titleLines.some((n) => n === 1), `a one-line and a two-line title at ${width}px (${titleLines.join(', ')})`);
+      await checkTiles(width, 'one-line and two-line titles');
+      await page.locator('.ns-get-started .ns-chooser-tile[data-type="smtp"] .ns-tile-title').evaluate((node) => {
+        node.textContent = node.dataset.original;
+      });
+    }
     await page.setViewportSize({ width: 400, height: 800 });
     assert.equal(await columns(), 1, 'one column on a phone');
     await page.close();
 
     for (const dark of [true, false]) {
-      const themed = await openSettings(browser, CONFIG, { dark, viewport: { width: 700, height: 600 } });
-      // An issue keeps the summary box on screen: sticky at the bottom of the scroll area.
+      const theme = dark ? 'dark' : 'light';
+      const themed = await openSettings(browser, CONFIG, { dark, viewport: { width: 800, height: 600 } });
+      // An issue shows the summary box in the page flow: after the Settings section, before the closing paragraph, not
+      // sticky and without a shadow, at the host's modal width and at a phone width (SPEC section 11.2, item 15).
       await themed.locator('[data-path="switches[0].name"] input').fill('Bad-Name!');
       await themed.locator('[data-path="switches[0].name"] input').blur();
-      await themed.evaluate(() => window.scrollTo(0, 0));
-      const box = await metrics(themed, '.issues');
-      assert.equal(box.position, 'sticky', `${dark ? 'dark' : 'light'}: the summary box is sticky`);
-      assert.ok(box.bottom <= 600 && box.top >= 0, `${dark ? 'dark' : 'light'}: the box is inside the viewport at the bottom (${box.top}..${box.bottom})`);
-      assert.equal(box.textAlign, 'start', 'alerts are left-aligned');
+      for (const width of [800, 400]) {
+        await themed.setViewportSize({ width, height: 600 });
+        await themed.evaluate(() => window.scrollTo(0, 0));
+        const box = await metrics(themed, '.ns-issues');
+        assert.equal(box.position, 'static', `${theme} at ${width}px: the summary box is in the page flow, not sticky`);
+        assert.equal(await themed.locator('.ns-issues').evaluate((node) => getComputedStyle(node).boxShadow), 'none', `${theme} at ${width}px: no shadow`);
+        const settings = await metrics(themed, '#section-settings');
+        assert.ok(box.top >= settings.bottom - 1, `${theme} at ${width}px: the box follows the Settings section (${box.top} vs ${settings.bottom})`);
+        assert.ok(box.bottom > 600, `${theme} at ${width}px: the box is down the page, where the host's scrolling reaches it (${box.bottom})`);
+        assert.deepEqual(await themed.evaluate(() => {
+          const box = document.querySelector('.ns-issues');
+          return [box.previousElementSibling.id, box.nextElementSibling.tagName, box.nextElementSibling.className];
+        }), ['section-settings', 'P', 'lead-copy mt-3'], `${theme} at ${width}px: between Settings and the closing paragraph`);
+        // The warning colours of the theme: Bootstrap's light values, or the shell's dark values.
+        assert.equal(box.background, dark ? 'rgb(58, 53, 36)' : 'rgb(255, 243, 205)', `${theme} at ${width}px: warning background`);
+        assert.equal(box.color, dark ? 'rgb(255, 230, 156)' : 'rgb(102, 77, 3)', `${theme} at ${width}px: warning text`);
+        assert.equal(box.borderColor, 'rgb(255, 236, 181)', `${theme} at ${width}px: the warning border`);
+        assert.equal(box.textAlign, 'start', 'alerts are left-aligned');
+      }
+      await themed.setViewportSize({ width: 800, height: 600 });
       assert.equal((await metrics(themed, '.ns-draft-banner, .ns-default-prompt, .alert')).textAlign, 'start');
+      // Clicking an entry focuses the field it names; the page scrolls nothing itself, the browser brings the focused control into view.
+      await themed.locator('.ns-issues .ns-issue-link').first().click();
+      assert.equal(await themed.evaluate(() => document.activeElement?.closest('[data-path]')?.dataset.path), 'switches[0].name');
 
       // Text buttons keep their intent colours: danger stays red, links stay link-coloured, the help toggle secondary, issue entries inherit.
       const link = dark ? 'rgb(110, 168, 254)' : 'rgb(13, 110, 253)';
       assert.equal((await metrics(themed, '.ns-danger-link')).color, 'rgb(220, 53, 69)');
       assert.equal((await metrics(themed, '.ns-duplicate')).color, link);
       assert.equal((await metrics(themed, '.ns-make-default')).color, link);
-      const issue = await themed.locator('.issues .ns-issue-link').first()
+      await themed.mouse.move(0, 0);
+      const entryColors = () => themed.locator('.issues .ns-issue-link').first()
         .evaluate((node) => [getComputedStyle(node).color, getComputedStyle(node.parentElement).color]);
+      let issue = await entryColors();
       assert.equal(issue[0], issue[1], 'summary box entries take the surrounding colour');
+      await themed.locator('.issues .ns-issue-link').first().hover();
+      issue = await entryColors();
+      assert.equal(issue[0], issue[1], `${theme}: a hovered entry keeps the surrounding colour`);
+      assert.equal(await themed.locator('.issues .ns-issue-link').first().evaluate((node) => getComputedStyle(node).textDecorationLine), 'underline');
+      await themed.mouse.move(0, 0);
       assert.notEqual((await metrics(themed, '.ns-help-toggle')).color, link, 'the help toggle is secondary, not a link');
       // Variable tokens are drawn in the link colour so they read as clickable.
       await themed.locator('[data-path="switches[0].body"] .ns-variables-toggle').click();

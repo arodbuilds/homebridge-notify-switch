@@ -39,7 +39,7 @@ test('provider names: the SMTP name follows the preset until hand-edited, and th
     const card = page.locator('.card[data-path="providers[1]"]');
     const name = card.locator('[data-path="providers[1].name"] input');
     const id = card.locator('[data-path="providers[1].id"] input');
-    const title = card.locator('.card-header .fw-semibold');
+    const title = card.locator('.card-header .ns-card-name');
     assert.equal(await name.inputValue(), 'Email');
     await card.locator('.ns-preset-segments label', { hasText: 'Gmail' }).click();
     assert.equal(await name.inputValue(), 'Gmail', 'the chooser\'s name follows the preset');
