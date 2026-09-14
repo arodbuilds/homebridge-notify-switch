@@ -52,6 +52,49 @@ const REQUESTS = `async (path) => path === '/test-send'
 /** Everything on the page that loads a resource (links to other pages are navigation, not loading). */
 const RESOURCE_TAGS = 'img, script, link[rel="stylesheet"], iframe, source, video, audio, object, embed';
 
+/**
+ * Sizes the page the way the host does (SPEC section 11.2, item 28): the client posts `document.body.scrollHeight` on
+ * every resize of the body and homebridge-config-ui-x 5.29.0 sets the iframe to that plus 10px. Asserts that the
+ * document is not a scroll container (html and body clip their overflow and take no height from the viewport, so the
+ * host's stylesheet's `html, body { height: 100% }`, rendered by the harness, does not apply), that the posted height
+ * does not change once the iframe has that height (the host's resize would otherwise post a new, larger height every
+ * tick), that the document's scroll height equals the viewport, and that nothing is clipped: the content and the
+ * footer end inside the measured height.
+ */
+async function assertHostSizing(page, width, label) {
+  await page.setViewportSize({ width, height: 600 });
+  const before = await page.evaluate(() => ({
+    posted: document.body.scrollHeight,
+    htmlOverflow: getComputedStyle(document.documentElement).overflowY,
+    bodyOverflow: getComputedStyle(document.body).overflowY,
+    bodyHeight: document.body.getBoundingClientRect().height,
+  }));
+  assert.equal(before.htmlOverflow, 'hidden', `${label} at ${width}px: html clips its overflow`);
+  assert.equal(before.bodyOverflow, 'hidden', `${label} at ${width}px: body clips its overflow`);
+  assert.ok(before.posted > 600, `${label} at ${width}px: the page is taller than the viewport (${before.posted})`);
+  assert.ok(before.bodyHeight > 600, `${label} at ${width}px: the body is as tall as its content, not the viewport (${before.bodyHeight})`);
+  await page.setViewportSize({ width, height: before.posted + 10 });
+  const after = await page.evaluate(() => {
+    const footer = document.querySelector('.ns-footer');
+    const content = document.querySelector('.notify-switch-ui');
+    return {
+      posted: document.body.scrollHeight,
+      scrollHeight: document.scrollingElement.scrollHeight,
+      innerHeight: window.innerHeight,
+      footerBottom: footer.getBoundingClientRect().bottom + parseFloat(getComputedStyle(footer).marginBottom),
+      contentBottom: content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(content).marginBottom),
+    };
+  });
+  assert.equal(after.posted, before.posted,
+    `${label} at ${width}px: the body's height does not follow the iframe's, so the host's resize posts nothing new`);
+  assert.equal(after.scrollHeight, after.innerHeight,
+    `${label} at ${width}px: scrollingElement.scrollHeight ${after.scrollHeight} equals innerHeight ${after.innerHeight}`);
+  assert.ok(after.footerBottom <= after.innerHeight,
+    `${label} at ${width}px: the footer ends inside the iframe (${after.footerBottom} of ${after.innerHeight})`);
+  assert.ok(after.contentBottom <= before.posted + 0.5,
+    `${label} at ${width}px: the content ends inside the posted height (${after.contentBottom} of ${before.posted})`);
+}
+
 /** Computed box metrics of the first visible match of `selector` inside `scope`. */
 async function metrics(page, selector, scope = 'body') {
   return page.evaluate(([scopeSelector, target]) => {
@@ -465,11 +508,17 @@ test('shell: disabled buttons, chooser tiles with top-aligned titles, the summar
     for (const dark of [true, false]) {
       const theme = dark ? 'dark' : 'light';
       const themed = await openSettings(browser, CONFIG, { dark, viewport: { width: 800, height: 600 } });
+      // The iframe document is never a scroll container (SPEC section 11.2, item 28): sized the way the host sizes it,
+      // the document's scroll height equals the viewport, with the summary box hidden and, below, showing.
+      for (const width of [800, 400]) {
+        await assertHostSizing(themed, width, `${theme}, summary box hidden`);
+      }
       // An issue shows the summary box in the page flow: after the Settings section, before the closing paragraph, not
       // sticky and without a shadow, at the host's modal width and at a phone width (SPEC section 11.2, item 15).
       await themed.locator('[data-path="switches[0].name"] input').fill('Bad-Name!');
       await themed.locator('[data-path="switches[0].name"] input').blur();
       for (const width of [800, 400]) {
+        await assertHostSizing(themed, width, `${theme}, summary box showing`);
         await themed.setViewportSize({ width, height: 600 });
         await themed.evaluate(() => window.scrollTo(0, 0));
         const box = await metrics(themed, '.ns-issues');
@@ -490,9 +539,21 @@ test('shell: disabled buttons, chooser tiles with top-aligned titles, the summar
       }
       await themed.setViewportSize({ width: 800, height: 600 });
       assert.equal((await metrics(themed, '.ns-draft-banner, .ns-default-prompt, .alert')).textAlign, 'start');
-      // Clicking an entry focuses the field it names; the page scrolls nothing itself, the browser brings the focused control into view.
-      await themed.locator('.ns-issues .ns-issue-link').first().click();
-      assert.equal(await themed.evaluate(() => document.activeElement?.closest('[data-path]')?.dataset.path), 'switches[0].name');
+      // Clicking an entry moves focus to the control the entry names, the input itself, and nothing on the page is rebuilt
+      // by the click: the input that takes focus is the one that was already on the page, and the entry stays too. The
+      // page scrolls nothing itself; the browser brings the focused control into view. Tab then moves on inside the card,
+      // not to the top of the page.
+      const entry = await themed.locator('.ns-issues .ns-issue-link').first().elementHandle();
+      const nameInput = await themed.locator('[data-path="switches[0].name"] input').elementHandle();
+      await entry.click();
+      assert.equal(await nameInput.evaluate((node) => node === document.activeElement && node.isConnected), true,
+        `${theme}: the named control itself has focus`);
+      assert.equal(await themed.evaluate(() => document.activeElement.matches('input, select, textarea')), true);
+      assert.equal(await themed.evaluate(() => document.activeElement.closest('[data-path]').dataset.path), 'switches[0].name');
+      assert.equal(await entry.evaluate((node) => node.isConnected), true, `${theme}: the clicked entry is not rebuilt`);
+      await themed.keyboard.press('Tab');
+      assert.equal(await themed.evaluate(() => document.activeElement.closest('.card')?.dataset.path), 'switches[0]',
+        `${theme}: Tab moves on within the switch card`);
 
       // Text buttons keep their intent colours: danger stays red, links stay link-coloured, the help toggle secondary, issue entries inherit.
       const link = dark ? 'rgb(110, 168, 254)' : 'rgb(13, 110, 253)';

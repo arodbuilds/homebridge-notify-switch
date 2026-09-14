@@ -28,7 +28,8 @@ const CONFIG = {
 /** A saved configuration with errors in several fields, as a hand-edited config.json could leave it. */
 const BROKEN = {
   ...CONFIG,
-  providers: [{ ...TWILIO, accountSid: 'AC12', apiKeySid: 'nope' }, { ...SMTP, host: '', from: { address: 'not-an-address' } }],
+  // The Messaging Service SID sits under the Twilio card's Advanced disclosure (SPEC section 11.2, item 9).
+  providers: [{ ...TWILIO, accountSid: 'AC12', apiKeySid: 'nope', messagingServiceSid: 'MG-bad' }, { ...SMTP, host: '', from: { address: 'not-an-address' } }],
   switches: [{ ...CONFIG.switches[0], name: 'Bad-Name!' }, { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', name: 'Empty', actions: [] }],
 };
 
@@ -189,11 +190,41 @@ test('issue list: entries link to their fields, mark them touched and focus them
     });
     assert.equal(await page.locator('.invalid-feedback:visible').count(), 1, 'the other fields stay quiet');
 
+    // A field inside a collapsed Advanced: the entry opens the disclosure first and focuses the control itself, without
+    // rebuilding anything on the page (the entry and the input are the same nodes before and after the click).
+    const advanced = page.locator('.card[data-path="providers[0]"] details.ns-advanced');
+    await advanced.evaluate((node) => {
+      node.open = false;
+    });
+    const sidField = page.locator('[data-path="providers[0].messagingServiceSid"]');
+    const sidInput = await sidField.locator('input').elementHandle();
+    const sidEntry = await links.filter({ hasText: 'Messaging Service SID' }).elementHandle();
+    await sidEntry.click();
+    assert.equal(await advanced.evaluate((node) => node.open), true, 'the disclosure is opened first');
+    assert.equal(await sidInput.evaluate((node) => node === document.activeElement && node.isConnected), true, 'the control itself has focus');
+    assert.equal(await sidEntry.evaluate((node) => node.isConnected), true, 'the entry list is not rebuilt by the click');
+    assert.equal(await sidField.locator('.invalid-feedback').textContent(),
+      'That does not look like a Messaging Service SID. It starts with MG and is 34 characters; copy it from the Twilio Console.');
+    await page.waitForFunction(() => {
+      const rect = document.querySelector('[data-path="providers[0].messagingServiceSid"] input').getBoundingClientRect();
+      return rect.top >= 0 && rect.bottom <= window.innerHeight;
+    });
+
+    // An empty required field names itself, inline and in the summary box entry (SPEC section 11.3).
+    const master = page.locator('[data-path="masterSwitch.name"]');
+    await master.locator('input').fill('');
+    await master.locator('input').blur();
+    assert.equal(await master.locator('.invalid-feedback').textContent(), 'Master switch name is required.');
+    assert.equal(await links.filter({ hasText: 'Master switch name' }).textContent(), 'Settings: Master switch name is required.');
+    await master.locator('input').fill('Notifications Enabled');
+    await page.waitForFunction(() => ![...document.querySelectorAll('.issues .ns-issue-link')].some((node) => /Master switch/.test(node.textContent)));
+
     // Fixing fields shrinks the list; at three or fewer it shows the plain list without a toggle.
     await host.locator('input').fill('smtp.example.com');
     await page.locator('[data-path="providers[1].from.address"] input').fill('alex@example.com');
     await page.locator('[data-path="providers[0].accountSid"] input').fill(TWILIO.accountSid);
     await page.locator('[data-path="providers[0].apiKeySid"] input').fill(TWILIO.apiKeySid);
+    await sidField.locator('input').fill('');
     await page.waitForFunction(() => document.querySelectorAll('.issues .ns-issue-link').length <= 3);
     assert.equal(await toggle.isVisible(), false);
     assert.equal(await issues.locator('.fw-semibold').textContent(), 'Fix these before saving:');

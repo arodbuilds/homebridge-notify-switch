@@ -1,7 +1,7 @@
 import { addressList } from '../addressList.js';
 import type { App } from '../app.js';
 import { cardHeader, idField } from '../card.js';
-import { DUPLICATE, GROUP_NAME_HELP, GROUP_SMS_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
+import { DUPLICATE, FIELD_LABELS, GROUP_NAME_HELP, GROUP_SMS_HELP, GROUPS_SECTION, ID_FIELD, NTFY_HELP, REMOVE, TELEGRAM_HELP } from '../copy.js';
 import {
   addButton, cardFooter, dangerLinkButton, disclosure, el, grid, gridCell, helpText, inlineConfirm, linkButton, paragraph, textField,
 } from '../dom.js';
@@ -38,7 +38,7 @@ function groupCard(app: App, g: UiGroup, index: number): HTMLElement {
   });
   const idInput = id.querySelector('input') as HTMLInputElement;
 
-  body.appendChild(textField('Name', g.name, (value) => {
+  body.appendChild(textField(FIELD_LABELS.name, g.name, (value) => {
     g.name = value;
     title.textContent = groupTitle(g);
     if (idFollowsName) {

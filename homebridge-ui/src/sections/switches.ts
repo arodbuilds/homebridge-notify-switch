@@ -6,7 +6,9 @@ import { callServer } from '../api.js';
 import type { App, ValidationListener } from '../app.js';
 import { cardHeader, idField, variablesToggle, variableValues } from '../card.js';
 import type { VariablesToggle, VariableValue } from '../card.js';
-import { CHANNEL_TITLE, DUPLICATE, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND } from '../copy.js';
+import {
+  CHANNEL_TITLE, DUPLICATE, FIELD_LABELS, LEGACY, NTFY_HELP, PROVIDER_TYPE_LABEL, REMOVE, SWITCH_EDITOR, SWITCHES_SECTION, SWITCH_HELP, TEST_SEND,
+} from '../copy.js';
 import {
   addButton, cardFooter, checkboxField, clear, dangerLinkButton, disclosure, el, footerAction, grid, gridCell, helpText, inlineConfirm, linkButton, numberField,
   paragraph, resultBar, selectField, statusBox, textField, textareaField,
@@ -505,7 +507,7 @@ function switchCard(app: App, s: UiSwitch, index: number, host: HTMLElement): HT
 
   // The card's fields in shell order (SPEC section 11.2, item 8): Name, Enabled, Cooldown and Failure Mode on one row,
   // Failure Sensor (with its reset field while it is on), then the editor. The id sits under Advanced.
-  body.appendChild(textField('Name', s.name, (value) => {
+  body.appendChild(textField(FIELD_LABELS.name, s.name, (value) => {
     s.name = value;
     title.textContent = switchTitle(s);
     app.changed();

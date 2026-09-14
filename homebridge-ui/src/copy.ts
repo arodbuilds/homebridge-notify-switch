@@ -52,6 +52,30 @@ export const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = { twilio: 'Twil
 /** Provider Name field help, with examples (SPEC section 11.3). */
 export const PROVIDER_NAME_HELP = 'How this provider is listed when you set up a switch. For example: Twilio, Home Gmail, Family bot.';
 
+/**
+ * The labels of the fields that must not be left empty (SPEC section 11.3). Each section renders its field with the
+ * label here and the validator builds the field's "{Label} is required." message from the same entry, so the message
+ * always carries the field's own label verbatim ("Master switch name is required.", "Account SID is required."; a
+ * field labelled Name reads "Name is required."), and so does the summary box entry, which repeats the message after
+ * the card's name. The per-channel messages under a switch's Advanced take their labels from `SWITCH_EDITOR`.
+ */
+export const FIELD_LABELS = {
+  name: 'Name',
+  masterSwitchName: 'Master switch name',
+  id: 'ID',
+  accountSid: 'Account SID',
+  apiKeySid: 'API Key SID',
+  apiKeySecret: 'API Key Secret',
+  host: 'Host',
+  username: 'Username',
+  password: 'Password',
+  fromAddress: 'From address',
+  botToken: 'Bot Token',
+  server: 'Server',
+  accessToken: 'Access token',
+  message: 'Message',
+} as const;
+
 /** Guided empty state (SPEC section 11.2, item 19): the Get started card and the disabled Add buttons. */
 export const GET_STARTED = {
   title: 'Get started',
@@ -206,7 +230,7 @@ export const SWITCH_EDITOR = {
   sendByEmpty: 'Pick a group or add an extra recipient to choose how to send.',
   /** "SMS (3 numbers)". */
   channelOption: (channel: Channel, count: number): string => `${CHANNEL_TITLE[channel]} (${countRecipients(channel, count)})`,
-  messageLabel: 'Message',
+  messageLabel: FIELD_LABELS.message,
   subjectLabel: 'Subject',
   subjectHelp: 'Used as the email subject and the ntfy title. Defaults to the switch name.',
   customizedNote: 'Each channel has its own message under Advanced.',
@@ -315,11 +339,15 @@ export const HELP_TOGGLE = {
 
 /** Validation messages (SPEC section 11.3): what the value looks like and where to get it. */
 export const VALIDATION = {
+  /** An empty required field: "{Label} is required." with the field's own label verbatim (`FIELD_LABELS`). */
+  required: (label: string): string => `${label} is required.`,
   accountSid: 'That does not look like an Account SID. It starts with AC and is 34 characters; copy it from the Twilio Console.',
   apiKeySid: 'That does not look like an API Key SID. It starts with SK and is 34 characters; copy it from the Twilio Console.',
   messagingServiceSid: 'That does not look like a Messaging Service SID. It starts with MG and is 34 characters; copy it from the Twilio Console.',
   botToken: 'That does not look like a bot token. BotFather sends it as numbers, a colon, then letters. Paste the whole thing.',
   port: 'Port is usually 465 or 587.',
+  /** A filled-in SMTP from address that is not one; an empty one reads "From address is required." */
+  fromAddress: 'From address is not a valid email address.',
   switchName: 'Use letters, numbers, spaces, and apostrophes, starting and ending with a letter or number.',
   /** Provider, group and platform names (SPEC section 5). */
   name: 'Use letters, numbers, spaces, and punctuation, up to 64 characters.',

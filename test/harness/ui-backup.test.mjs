@@ -147,7 +147,7 @@ test('settings advanced: Restore from a backup without credentials loads everyth
     assert.equal(await password.locator('.invalid-feedback').textContent(), 'Password is required.');
     assert.equal(await password.locator('input').evaluate((node) => node.classList.contains('is-invalid')), true);
     const token = page.locator('[data-path="providers[1].botToken"]');
-    assert.match(await token.locator('.invalid-feedback').textContent(), /does not look like a bot token/);
+    assert.equal(await token.locator('.invalid-feedback').textContent(), 'Bot Token is required.', 'an empty required field names itself');
     assert.deepEqual(await page.locator('.issues .ns-issue-link').evaluateAll((nodes) => nodes.map((node) => node.dataset.issuePath)),
       ['providers[0].password', 'providers[1].botToken']);
     assert.equal(await page.locator('.issues .fw-semibold').textContent(), 'Fix these before saving:');

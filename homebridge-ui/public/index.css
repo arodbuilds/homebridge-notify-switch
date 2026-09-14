@@ -3,6 +3,24 @@
    theme variable with a fallback that follows the surrounding text colour, never a fixed grey, so
    secondary text stays readable in light and dark mode (SPEC section 11.2, item 18). */
 
+/* The iframe document is never a scroll container (SPEC section 11.2, item 28). The host sizes the iframe to the
+   page's `document.body.scrollHeight` plus 10px (what @homebridge/plugin-ui-utils posts on every resize of the body,
+   and what homebridge-config-ui-x 5.29.0's `setiFrameHeight` does with it) and scrolls its modal body around it; the
+   document itself scrolls nothing, so a wheel gesture over the page always goes to the modal and never latches on a
+   scroll range of the iframe's own. No fixed or percentage height on either element: the height is the content's.
+   The host links its own stylesheet into the iframe after this one, and that stylesheet carries
+   `html, body { height: 100% }`; a percentage height would make the body as tall as the iframe, so every resize the
+   host makes would post a new, larger height and the iframe would grow by 10px per tick without end. The rule is
+   written on `:root` (a pseudo-class, so it outranks the host's element selectors whatever the order of the sheets)
+   and means exactly `html, body { overflow: hidden; height: auto }`. `overflow: hidden` on the body also keeps the
+   banner's top margin and the footer's bottom edge inside the measured height (a body that clips its overflow is a
+   formatting root, so child margins do not collapse through it). */
+:root,
+:root > body {
+  overflow: hidden;
+  height: auto;
+}
+
 /* The Homebridge UI shows this page in an iframe inside its settings modal with no padding of its own.
    The container supplies it, so nothing (headings, labels, help text, the grid below) starts off-screen.
    Every element on the page keeps its box inside the viewport: no negative margins, no width over 100%. */
