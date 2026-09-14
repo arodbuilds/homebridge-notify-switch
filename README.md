@@ -617,7 +617,7 @@ Say which Homebridge, Node.js and plugin versions you run (the settings page foo
 
 ## Development
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development loop, the test harness, and the release process. The full behavior specification is in [SPEC.md](./SPEC.md). Continuous integration runs the lint, build and test steps on Node 22 and 24 with read-only repository permissions and every GitHub Action pinned to a commit.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development loop, the test harness, and the release process. The full behavior specification is in [SPEC.md](./SPEC.md); the settings page's shell contract, the rules it shares with the author's other plugins and how the shipped page meets each, is `design/HANDOFF.md`. Continuous integration runs the lint, build and test steps on Node 22 and 24 with read-only repository permissions and every GitHub Action pinned to a commit.
 
 ## Changelog
 
