@@ -6,7 +6,9 @@ Do not claim it. Once the plugin is verified, replace this comment with the badg
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 -->
 
-[![npm](https://img.shields.io/npm/v/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
+[![npm version](https://img.shields.io/npm/v/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
+[![npm downloads](https://img.shields.io/npm/dt/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
+[![License](https://img.shields.io/github/license/arodbuilds/homebridge-notify-switch)](LICENSE)
 [![Build and Lint](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml/badge.svg)](https://github.com/arodbuilds/homebridge-notify-switch/actions/workflows/build.yml)
 
 A [Homebridge](https://homebridge.io) plugin that exposes HomeKit switches which send a message when turned on. Turn a switch on from a HomeKit automation or scene, it sends one or more preset messages by SMS, email, Telegram, or ntfy push notification, and it turns itself back off. Any HomeKit event can notify people.
