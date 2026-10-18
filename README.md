@@ -1,11 +1,6 @@
 <img src="assets/notify-switch-banner.png" alt="Notify Switch" width="100%">
 
-<!--
-verified-by-homebridge: this plugin has not been through Homebridge verification yet.
-Do not claim it. Once the plugin is verified, replace this comment with the badge:
-[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
--->
-
+[![verified-by-homebridge](https://img.shields.io/badge/_-verified-blueviolet?color=%23491F59&style=flat&logoColor=%23FFFFFF&logo=homebridge)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![npm version](https://img.shields.io/npm/v/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
 [![npm downloads](https://img.shields.io/npm/dt/homebridge-notify-switch)](https://www.npmjs.com/package/homebridge-notify-switch)
 [![License](https://img.shields.io/github/license/arodbuilds/homebridge-notify-switch)](LICENSE)
