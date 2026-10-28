@@ -13,7 +13,7 @@ Adds Node 26 to the supported Node versions. Nothing changes in the configuratio
 ### Changed
 
 - **Node 26.** `engines.node` is `^22.12.0 || ^24.0.0 || ^26.0.0`, matching Homebridge core, so the Homebridge UI no longer reports the plugin as incompatible on Node 26. The Build and Lint workflow runs lint, build and the full harness on Node 22, 24 and 26; the release workflow stays on Node 22 (SPEC section 13, items 2 and 4, and section 14, item 4).
-- **Dependencies.** Updated since 1.3.2 (PRs #33 and #37): `nodemailer` 10.2.0 (the one runtime dependency in the set), `@types/node` 26.6.5, `eslint` 10.13.0, `libphonenumber-js` 1.13.15, `playwright-core` 1.64.1 and `typescript-eslint` 8.72.0. Both workflows pin `actions/setup-node` 7.1.0 (PR #36).
+- **Dependencies.** Updated since 1.3.2 (PRs #33 and #37): `nodemailer` 10.2.0 (the one runtime dependency in the set), `@types/node` 26.6.5, `eslint` 10.13.0, `libphonenumber-js` 1.13.15, `playwright-core` 1.64.1 and `typescript-eslint` 8.72.0. Both workflows pin `actions/setup-node` 7.1.0 (PR #36). `brace-expansion`, which `eslint` pulls in through `minimatch`, is 5.0.12 in the lockfile, closing Dependabot alert 4 (GHSA-q2hr-2g5m-vwhr); it is a development dependency and is not in the published package.
 
 ### Removed
 
