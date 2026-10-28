@@ -23,7 +23,7 @@ The Homebridge config UI (custom UI under `homebridge-ui/`) for **homebridge-not
 
 ## About the design file
 
-`notify-switch-settings.html` is a **design reference built in HTML**: a single self-contained interactive prototype. It is not production code. Recreate it inside the plugin's custom UI (`homebridge-ui/public/index.html` + the `homebridge-plugin-ui-utils` API) using the host's Bootstrap variables, not by shipping this file. The review chrome above the modal (theme / width / fresh install toggles) is design tooling only.
+`notify-switch-settings.html` was a **design reference built in HTML**: a single self-contained interactive prototype, removed from the repository in 1.3.3 (it remains at tag v1.3.2). It is not production code. Recreate it inside the plugin's custom UI (`homebridge-ui/public/index.html` + the `homebridge-plugin-ui-utils` API) using the host's Bootstrap variables, not by shipping this file. The review chrome above the modal (theme / width / fresh install toggles) is design tooling only.
 
 Open the prototype in a browser and use the toolbar:
 - **Dark theme**: host dark theme.
@@ -358,6 +358,6 @@ Advanced (collapsed; M2, M3):
 
 ## Files
 
-- `notify-switch-settings.html` self-contained interactive prototype (open directly in a browser).
+- `notify-switch-settings.html` self-contained interactive prototype, removed in 1.3.3; see tag v1.3.2.
 - `BUILD-CONTRACT.md` the shell's 40 rules as exported; `BUILD-CONTRACT-DEFINITIONS.md` what the Template and Notify Switch tabs render for each item the contract references; `CONTRACT-AUDIT.md` the rule-by-rule comparison with the shipped page.
 - Source of truth in the design project: `Plugin Settings Standard.dc.html` (Notify Switch tab). The Build contract tab is retired; this file is what the design system syncs from.

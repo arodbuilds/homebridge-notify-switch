@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-28
+
+Adds Node 26 to the supported Node versions. Nothing changes in the configuration format, the settings page, or what the plugin sends.
+
+### Changed
+
+- **Node 26.** `engines.node` is `^22.12.0 || ^24.0.0 || ^26.0.0`, matching Homebridge core, so the Homebridge UI no longer reports the plugin as incompatible on Node 26. The Build and Lint workflow runs lint, build and the full harness on Node 22, 24 and 26; the release workflow stays on Node 22 (SPEC section 13, items 2 and 4, and section 14, item 4).
+- **Dependencies.** Updated since 1.3.2 (PRs #33 and #37): `nodemailer` 10.2.0 (the one runtime dependency in the set), `@types/node` 26.6.5, `eslint` 10.13.0, `libphonenumber-js` 1.13.15, `playwright-core` 1.64.1 and `typescript-eslint` 8.72.0. Both workflows pin `actions/setup-node` 7.1.0 (PR #36).
+
+### Removed
+
+- **`design/notify-switch-settings.html`.** The Claude Design prototype is removed now that the Design to Claude Code hand-off has been used; `design/HANDOFF.md` and the contract files stay, and the prototype remains at tag v1.3.2. `design/README.md` and the CodeQL configuration comment say so.
+
 ## [1.3.2] - 2026-09-14
 
 Three fixes to the settings page's shell: the page no longer catches the first wheel gesture inside its iframe, a summary box entry moves focus to the field it names, and every "is required." message names its field. Nothing changes in the configuration format or in what the plugin sends.
