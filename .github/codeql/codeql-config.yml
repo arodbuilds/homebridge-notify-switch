@@ -5,7 +5,7 @@
 # (an advanced-setup workflow would pass it to codeql-action/init as `config-file` instead). Either
 # way the settings here are merged with the built-in defaults; nothing else is changed.
 #
-# design/ holds the committed Claude Design prototype, which is reference only and never shipped
-# (see design/README.md), so it is left out of the scan.
+# design/ holds the committed Claude Design reference, which is never shipped (see design/README.md),
+# so it is left out of the scan.
 paths-ignore:
   - design/**

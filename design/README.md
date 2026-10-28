@@ -1,6 +1,6 @@
 # Design reference
 
-This folder is the committed copy of the Claude Design master for the settings page (`HANDOFF.md` and the `notify-switch-settings.html` prototype), overwritten by each export so git shows what changed. It is reference only and is not shipped: the npm package, lint and formatting checks all leave it out.
+This folder is the committed copy of the Claude Design master for the settings page (`HANDOFF.md`), overwritten by each export so git shows what changed. The interactive prototype `notify-switch-settings.html` was removed in 1.3.3, once the Design to Claude Code hand-off had been used; it remains in the history at tag v1.3.2. It is reference only and is not shipped: the npm package, lint and formatting checks all leave it out.
 
 `BUILD-CONTRACT.md` and `BUILD-CONTRACT-DEFINITIONS.md` are the shell's build contract (40 rules with stable ids) and the definitions its rules refer to, exported September 13, 2026; `CONTRACT-AUDIT.md` records, rule by rule, how the shipped settings UI compares.
 
